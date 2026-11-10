@@ -2,36 +2,49 @@
 <html lang="pt-PT">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
   <title>UAT Studio</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-  <aside class="lateral">
-    <div class="marca">
-      <span class="marca-logo">U</span>
-      <span class="marca-nome">UAT Studio</span>
-    </div>
+<body data-vista="a-carregar">
+  <!-- Vista 1: escolher ou criar projeto -->
+  <section id="vista-boas-vindas" class="boas-vindas" hidden></section>
 
-    <nav class="menu" id="menu" aria-label="Ecrãs"></nav>
+  <!-- Vista 2: a aplicação, com um projeto aberto -->
+  <div id="vista-app" class="app" hidden>
+    <aside class="lateral">
+      <div class="marca">
+        <span class="marca-logo">U</span>
+        <div class="marca-textos">
+          <span class="marca-nome">UAT Studio</span>
+          <span id="nome-projeto" class="marca-projeto"></span>
+        </div>
+      </div>
 
-    <div class="lateral-fundo">
-      <button id="btn-abrir-poc" class="botao botao-primario" type="button">Abrir Edge na app POC</button>
-      <p id="estado-browser" class="estado" role="status"></p>
-    </div>
-  </aside>
+      <nav class="menu" id="menu" aria-label="Ecrãs"></nav>
 
-  <main class="conteudo">
-    <header class="cabecalho">
-      <h1 id="titulo-ecra"></h1>
-      <p id="descricao-ecra"></p>
-    </header>
-    <section class="vazio">
-      <p class="vazio-titulo">Ainda não há nada aqui</p>
-      <p id="vazio-texto"></p>
-    </section>
-  </main>
+      <div class="lateral-fundo">
+        <label class="rotulo-lateral" for="escolha-ambiente">Ambiente</label>
+        <div class="linha-ambiente">
+          <select id="escolha-ambiente" class="campo campo-escuro"></select>
+          <span id="tipo-ambiente" class="etiqueta-ambiente"></span>
+        </div>
+        <button id="btn-fechar-projeto" class="botao botao-discreto" type="button">Mudar de projeto</button>
+      </div>
+    </aside>
 
-  <script src="../../dist/renderer/renderer.js"></script>
+    <main class="conteudo">
+      <header class="cabecalho">
+        <div>
+          <h1 id="titulo-ecra"></h1>
+          <p id="descricao-ecra"></p>
+        </div>
+        <div id="acoes-ecra" class="acoes"></div>
+      </header>
+      <div id="corpo-ecra" class="corpo"></div>
+    </main>
+  </div>
+
+  <script type="module" src="../../dist/web/renderer/app.js"></script>
 </body>
 </html>

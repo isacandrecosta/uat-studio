@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/diagnostico/**/*.js",
+    "dist/web/diagnostico/**/*.js",
     "src/diagnostico/ui/*.html",
     "src/diagnostico/ui/*.css",
     "package.json"

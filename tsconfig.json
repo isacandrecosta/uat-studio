@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "Node16",
-    "moduleDetection": "legacy",
     "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/diagnostico/*.ts", "src/shared/**/*.ts", "src/tests/**/*.ts"]
 }

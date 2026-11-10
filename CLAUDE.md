@@ -61,4 +61,8 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
   - Testado neste PC: tudo verde em desenvolvimento e com o .exe copiado para outra pasta; um site com certificado inválido dá vermelho com a explicação certa.
   - Notas: o .exe não está assinado (`signAndEditExecutable: false`, que também evita o download do winCodeSign); o SmartScreen pode avisar. Os scripts do renderer do diagnóstico estão dentro de uma função (IIFE) para não chocarem com os nomes globais de `src/renderer/renderer.ts`.
   - **Pendente do utilizador:** correr o .exe no PC da empresa (respeitando as regras de lá; se for bloqueado, pedir a IT um ambiente aprovado) e trazer o resultado copiado.
-  - Próximo passo: Fase 1, passo 3 do `docs/ROADMAP.md` (modelo de dados em JSON e ecrã "escolher/criar projeto").
+- 2026-11-10: **Fase 1, passo 3 feito.** Modelo de dados em JSON e ecrã "escolher/criar projeto".
+  - Tipos em `src/shared/modelo.ts` (só tipos, usados pelos dois lados). Pasta do projeto: `projeto.json` (nome, ambientes DEV/QA/PRD, ambiente ativo) + `aplicacoes/`, `epicos/`, `jornadas/`, `blocos/`, `casos/` (um ficheiro por item; os casos de uma jornada ficam em `casos/<idDaJornada>.json`). Ids = slug do nome.
+  - `src/main/projeto/`: `repositorio.ts` (ler/gravar, sem Electron, testável), `ipc.ts` (projeto aberto, recentes em userData), `exemplo.ts` (projeto de exemplo do Simulador POC: 1 bloco de UI com 11 passos, 1 jornada, 6 casos com valores esperados calculados).
+  - Interface agora em **módulos ES** (`<script type="module">`, imports com `.js`): `src/renderer/app.ts` (vistas e menu), `dom.ts` (ajudas `h()`, diálogos), `ecras/*.ts`. Dois tsconfig: `tsconfig.json` (main, CommonJS → `dist/`) e `tsconfig.renderer.json` (interface, ES → `dist/web/`).
+  - Testes: `npm.cmd test` (node:test sobre `dist/tests`) e `npm.cmd run smoke` (usa a janela como um utilizador; passos em `src/main/smoke.ts`).
