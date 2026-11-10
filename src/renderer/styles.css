@@ -422,3 +422,10 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .mini-total[data-tipo="OK"] { color: var(--ok); }
 .mini-total[data-tipo="KO"] { color: var(--erro); }
 .mini-total[data-tipo="ERRO"] { color: var(--aviso); }
+/* Ver código (.ts) */
+.dialogo-codigo { width: min(900px, calc(100vw - 48px)); }
+.codigo { max-height: 60vh; margin: 0; padding: 12px 14px; overflow: auto; border: 1px solid var(--borda); border-radius: 8px; background: #1b2130; color: #e6e9f0; font-family: Consolas, monospace; font-size: 12.5px; line-height: 1.5; white-space: pre; }
+.codigo code { padding: 0; background: transparent; color: inherit; font-size: inherit; }
+.codigo:focus-visible { outline: 2px solid var(--primario); outline-offset: 1px; }.cartao-topo { flex-wrap: wrap; }
+.cartao-topo > div:first-child { flex: 1; min-width: 200px; }
+.cartao-topo .acoes { flex-wrap: wrap; justify-content: flex-end; }

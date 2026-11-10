@@ -2,7 +2,8 @@
 import type { Aplicacao, Bloco, BlocoDaJornada, Caso, ConjuntoCasos, Jornada, Valor } from '../../shared/modelo.js';
 import { variaveisDaJornada, variaveisDoBloco } from '../../shared/variaveis.js';
 import type { Contexto } from '../app.js';
-import { confirmar, h, mensagemDeErro, pedirTexto, plural } from '../dom.js';
+import { codigoDaJornada } from '../../shared/codigo.js';
+import { confirmar, h, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -60,6 +61,20 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
   });
   acoes.append(
     escolha,
+    h(
+      'button',
+      {
+        id: 'btn-ver-codigo',
+        type: 'button',
+        class: 'botao',
+        onclick: () =>
+          mostrarCodigo(
+            `Código da jornada "${jornada.nome}"`,
+            codigoDaJornada(jornada, blocos, aplicacoes, conjunto, contexto.estado.projeto.ambienteAtivo),
+          ),
+      },
+      'Ver código (.ts)',
+    ),
     h(
       'button',
       {

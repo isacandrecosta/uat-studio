@@ -10,8 +10,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] 5. Editor de jornada v1: compor uma jornada com blocos da biblioteca (reutilizáveis), com parâmetros.
 - [x] 6. Executor v1: correr um caso, uma jornada ou um épico com dados do Excel; visível ou em background; Edge ou Chrome; paralelo. Inclui esperar pelo carregamento do OutSystems, comparação financeira (formato pt-PT, tolerância) e verificar todos os valores antes de dar KO.
 - [x] 7. Pasta da execução com prints, trace, logs (`run.log`, `caso.log`) e relatório Excel/HTML (reaproveitar o reporter do POC).
-- [ ] 8. "Ver código (.ts)" de um bloco ou jornada.
-- [ ] 9. Na app POC (via Mentor): mini-backoffice de aprovação de pedidos, para testar jornadas entre 2 portais.
+- [x] 8. "Ver código (.ts)" de um bloco ou jornada.
+- [ ] 9. Na app POC (via Mentor): mini-backoffice de aprovação de pedidos, para testar jornadas entre 2 portais. *Bloqueado: falta autorizar o conector OutSystems.*
 
 ## Fase 2: dados e API
 - [ ] Motor de fórmulas (decimal exato, arredondamento selecionável), marcadores, contadores persistentes e geradores.

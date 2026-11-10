@@ -81,6 +81,45 @@ export function pedirTexto(titulo: string, rotulo: string, inicial = ''): Promis
   });
 }
 
+/** Janela "Ver código (.ts)": mostra o código só para leitura, com botão para copiar. */
+export function mostrarCodigo(titulo: string, codigo: string): void {
+  const fechar = (): void => {
+    dialogo.close();
+    dialogo.remove();
+  };
+  const copiar = h(
+    'button',
+    {
+      type: 'button',
+      class: 'botao',
+      onclick: async () => {
+        try {
+          await navigator.clipboard.writeText(codigo);
+          copiar.textContent = 'Copiado';
+        } catch {
+          copiar.textContent = 'Não foi possível copiar';
+        }
+        setTimeout(() => (copiar.textContent = 'Copiar'), 2000);
+      },
+    },
+    'Copiar',
+  );
+  const dialogo = h(
+    'dialog',
+    { class: 'dialogo dialogo-codigo', oncancel: fechar },
+    h(
+      'div',
+      { class: 'dialogo-corpo' },
+      h('h2', {}, titulo),
+      h('p', { class: 'suave' }, 'Playwright (TypeScript) equivalente. É só para consulta: a ferramenta não precisa deste código para correr.'),
+      h('pre', { class: 'codigo', tabindex: 0 }, h('code', {}, codigo)),
+      h('div', { class: 'dialogo-botoes' }, copiar, h('button', { type: 'button', class: 'botao botao-primario', autofocus: true, onclick: fechar }, 'Fechar')),
+    ),
+  );
+  document.body.append(dialogo);
+  dialogo.showModal();
+}
+
 /** Janela pequena de confirmação (por exemplo, antes de apagar). */
 export function confirmar(titulo: string, texto: string, botao = 'Apagar'): Promise<boolean> {
   return new Promise((resolve) => {

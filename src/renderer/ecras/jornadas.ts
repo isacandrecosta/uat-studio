@@ -1,6 +1,7 @@
 // Ecrã Jornadas: épicos com as suas jornadas, blocos partilhados e aplicações.
 import type { Contexto } from '../app.js';
-import { confirmar, h, pedirTexto, plural } from '../dom.js';
+import { codigoDoBloco } from '../../shared/codigo.js';
+import { confirmar, h, mostrarCodigo, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -150,6 +151,18 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                   { class: 'item-meta' },
                   aplicacao && h('span', {}, aplicacao.nome),
                   h('span', {}, plural(bloco.passos.length, 'passo')),
+                  bloco.tipo === 'UI' &&
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        class: 'botao botao-pequeno-livre',
+                        'data-codigo': bloco.id,
+                        'aria-label': `Ver código do bloco ${bloco.nome}`,
+                        onclick: () => mostrarCodigo(`Código do bloco "${bloco.nome}"`, codigoDoBloco(bloco, aplicacoes, estado.projeto.ambienteAtivo)),
+                      },
+                      'Ver código (.ts)',
+                    ),
                 ),
               );
             }),

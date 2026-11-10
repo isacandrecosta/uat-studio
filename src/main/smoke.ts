@@ -221,6 +221,16 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(casos.casos[0].nome === 'Descrição alterada', 'A descrição do caso não foi gravada.');
         confirmar(casos.casos[6].id === 'TC0007', `O caso novo ficou com o id ${casos.casos[6]?.id}.`);
         await tirarPrint(j, raiz, 'editor');
+
+        // Ver código (.ts) da jornada.
+        await naPagina(j, "document.getElementById('btn-ver-codigo').click()");
+        await esperar(j, "document.querySelector('dialog[open] pre.codigo')");
+        const codigo = await naPagina<string>(j, "document.querySelector('dialog[open] pre.codigo').textContent");
+        confirmar(codigo.includes("page.getByTestId('ddVariante').locator('select').selectOption({ label: 'CP24' })"), 'O código não reflete o parâmetro fixo do 2.º bloco.');
+        confirmar(codigo.includes('"ID":"TC0001"'), 'O código não inclui os casos.');
+        await tirarPrint(j, raiz, 'codigo');
+        await naPagina(j, "document.querySelector('dialog[open] .botao-primario').click()");
+        await esperar(j, "!document.querySelector('dialog[open]')");
         const larguras = await naPagina<{ conteudo: number; visivel: number }>(
           j,
           "(() => { const c = document.querySelector('.corpo'); return { conteudo: c.scrollWidth, visivel: c.clientWidth }; })()",

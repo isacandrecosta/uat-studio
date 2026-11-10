@@ -80,3 +80,7 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
   - Ecrã Runs (`src/renderer/ecras/runs.ts`): nova execução, progresso ao vivo, detalhes do caso (diferenças, erro explicado, passos, prints), botões para abrir pasta/relatórios, histórico.
   - Testado: os 6 casos do exemplo dão OK (~5 s cada, 2 em paralelo, em background). A 1.ª execução depois de a app POC estar parada pode falhar por lentidão (o ODC "acorda"): repetir.
   - Ambiguidade conhecida: um número só com ponto e 3 casas ("1.234") é lido como milhares pt-PT.
+- 2026-11-10: **Fase 1, passo 8 feito.** "Ver código (.ts)": `src/shared/codigo.ts` gera o teste Playwright equivalente a um bloco (botão na lista de blocos do ecrã Jornadas) ou a uma jornada (botão no editor), com os parâmetros aplicados e os casos incluídos. Janela só de leitura com "Copiar". **Dentro de `src/shared/`, os imports de código têm de acabar em `.js`** (a interface corre no browser).
+- **Notas que substituem as dos passos 1 e 2:** `browser.ts`, `renderer.ts` e `moduleDetection: legacy` já não existem; o botão "Abrir Edge na app POC" foi substituído pelo gravador.
+- **Bloqueado: Fase 1, passo 9** (mini-backoffice na app POC via Mentor). O conector OutSystems do Claude precisa de ser autorizado pelo utilizador (`/mcp` num terminal `claude`). Sem isso, não é possível alterar a app POC.
+- **Próximo passo:** passo 9 quando o conector estiver autorizado; senão, Fase 2 (começar pelo motor de fórmulas e geradores, que não depende de nada externo).
