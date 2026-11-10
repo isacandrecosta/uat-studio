@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <title>UAT Studio: diagnóstico</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topo">
+    <h1>Diagnóstico do UAT Studio</h1>
+    <p>Verifica se este PC consegue correr a ferramenta. Não instala nada e só comunica com o site de teste.</p>
+  </header>
+
+  <main>
+    <section class="painel">
+      <label for="campo-url">Site para testar (opcional)</label>
+      <div class="linha-url">
+        <input id="campo-url" type="text" spellcheck="false" autocomplete="off">
+        <button id="btn-correr" class="botao botao-primario" type="button">Correr diagnóstico</button>
+      </div>
+      <p class="ajuda">Podes escrever aqui o endereço de uma aplicação de QA. O endereço não é guardado nem aparece no resultado copiado.</p>
+    </section>
+
+    <p id="resumo" class="resumo" role="status" data-estado="pendente">Carrega em "Correr diagnóstico" para começar.</p>
+
+    <ul id="lista" class="lista"></ul>
+
+    <div class="rodape">
+      <button id="btn-copiar" class="botao" type="button" disabled>Copiar resultado</button>
+    </div>
+  </main>
+
+  <script src="../../../dist/diagnostico/ui/renderer.js"></script>
+</body>
+</html>

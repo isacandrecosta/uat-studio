@@ -7,7 +7,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "npm run build && electron .",
-    "smoke": "npm run build && electron . --smoke"
+    "smoke": "npm run build && electron . --smoke",
+    "diagnostico": "npm run build && electron dist/diagnostico/main.js",
+    "diagnostico:smoke": "npm run build && electron dist/diagnostico/main.js --smoke",
+    "diagnostico:exe": "npm run build && electron-builder --config electron-builder.diagnostico.json"
   },
   "author": "isacandrecosta",
   "license": "UNLICENSED",
@@ -17,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "typescript": "^7.0.2"
   },
   "allowScripts": {
