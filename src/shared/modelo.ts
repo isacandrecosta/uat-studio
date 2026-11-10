@@ -107,6 +107,17 @@ export interface EstadoGravador {
   mensagem?: string;
 }
 
+/**
+ * Variável calculada por fórmula, disponível em todas as jornadas como {nome}.
+ * É calculada uma vez por caso (na primeira vez que é usada) e mantém o valor até ao fim do caso.
+ * Ficam todas em `variaveis.json`, na pasta do projeto.
+ */
+export interface VariavelCalculada {
+  nome: string;
+  formula: string;
+  descricao?: string;
+}
+
 // ---------- Execuções (runs) ----------
 
 /** OK: tudo coincide. KO: chegou ao fim mas há valores diferentes. ERRO: não chegou ao fim. */

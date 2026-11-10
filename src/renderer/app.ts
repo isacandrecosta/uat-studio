@@ -3,6 +3,7 @@
 import type { EstadoProjeto } from '../shared/modelo.js';
 import { h, mensagemDeErro, obter } from './dom.js';
 import { mostrarBoasVindas } from './ecras/boasVindas.js';
+import { ecraDados } from './ecras/dados.js';
 import { ecraEditor } from './ecras/editor.js';
 import { ecraGravar } from './ecras/gravar.js';
 import { ecraJornadas } from './ecras/jornadas.js';
@@ -39,7 +40,7 @@ const ECRAS: Ecra[] = [
   { id: 'editor', nome: 'Editor de jornada', descricao: 'Compor uma jornada com blocos, variáveis e casos.', desenhar: ecraEditor },
   { id: 'api', nome: 'Blocos de API', descricao: 'Construir pedidos, perfis de autenticação e teste individual.' },
   { id: 'gravar', nome: 'Gravar', descricao: 'Gravar ações no browser para criar blocos de UI.', desenhar: ecraGravar },
-  { id: 'dados', nome: 'Dados de teste', descricao: 'Variáveis, fórmulas, geradores e contadores.' },
+  { id: 'dados', nome: 'Dados de teste', descricao: 'Variáveis, fórmulas, geradores e contadores.', desenhar: ecraDados },
   { id: 'runs', nome: 'Runs e resultados', descricao: 'Correr testes e ver o histórico, os logs e as evidências.', desenhar: ecraRuns },
   { id: 'mapa', nome: 'Mapa de execução', descricao: 'Grafo ao vivo da execução e controlos.' },
 ];

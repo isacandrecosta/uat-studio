@@ -35,6 +35,27 @@ test('variaveisDaJornada respeita a ordem, os parâmetros e os blocos em falta',
   assert.deepEqual(variaveisDaJornada(jornada, blocos), {
     necessarias: ['Nome', 'PerfilBO'],
     produzidas: ['ClienteId'],
+    calculadas: [],
     blocosEmFalta: ['apagado'],
+  });
+});
+
+test('variáveis calculadas e fórmulas contam para o que a jornada precisa', () => {
+  const blocos = [
+    bloco('b', [
+      usar('p1', 'Referencia'),
+      { id: 'p2', acao: 'escrever', descricao: '', valor: { tipo: 'formula', expressao: '{Valor} * 2 & {TESTE} & {DATA:yyyy}' } },
+    ]),
+  ];
+  const jornada: Jornada = { id: 'j', nome: 'J', epicoId: 'e', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'b' }] };
+  const calculadas = [
+    { nome: 'Referencia', formula: '"x_" & {Nome} & {Sufixo}' },
+    { nome: 'Sufixo', formula: '{CONTADOR:s}' },
+  ];
+  assert.deepEqual(variaveisDaJornada(jornada, blocos, calculadas), {
+    necessarias: ['Nome', 'Valor'],
+    produzidas: [],
+    calculadas: ['Referencia', 'Sufixo'],
+    blocosEmFalta: [],
   });
 });

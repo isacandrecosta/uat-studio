@@ -9,6 +9,7 @@ import {
   NomeColecao,
   NOMES_COLECOES,
   Projeto,
+  VariavelCalculada,
 } from '../../shared/modelo';
 
 const FICHEIRO_PROJETO = 'projeto.json';
@@ -173,6 +174,62 @@ export function guardar<C extends NomeColecao>(
 
 export function apagar(pasta: string, colecao: NomeColecao, id: string): void {
   fs.rmSync(caminhoItem(pasta, colecao, id), { force: true });
+}
+
+// ---------- Variáveis calculadas e contadores ----------
+const FICHEIRO_VARIAVEIS = 'variaveis.json';
+const FICHEIRO_CONTADORES = 'contadores.json';
+const NOME_VARIAVEL = /^[\p{L}_][\p{L}\p{N}_]{0,59}$/u;
+
+export function lerVariaveis(pasta: string): VariavelCalculada[] {
+  const ficheiro = path.join(pasta, FICHEIRO_VARIAVEIS);
+  if (!fs.existsSync(ficheiro)) return [];
+  const dados = lerJson<{ variaveis?: VariavelCalculada[] }>(ficheiro);
+  return Array.isArray(dados.variaveis) ? dados.variaveis : [];
+}
+
+export function gravarVariaveis(pasta: string, variaveis: VariavelCalculada[]): VariavelCalculada[] {
+  const nomes = new Set<string>();
+  const limpas = variaveis.map((v) => {
+    const nome = String(v.nome ?? '').trim();
+    if (!NOME_VARIAVEL.test(nome)) throw new ErroProjeto(`"${nome}" não serve como nome de variável (usa letras, números e _; sem espaços).`);
+    if (nomes.has(nome.toLowerCase())) throw new ErroProjeto(`Há duas variáveis com o nome "${nome}".`);
+    nomes.add(nome.toLowerCase());
+    const descricao = String(v.descricao ?? '').trim();
+    return { nome, formula: String(v.formula ?? ''), ...(descricao ? { descricao } : {}) };
+  });
+  gravarJson(path.join(pasta, FICHEIRO_VARIAVEIS), { variaveis: limpas });
+  return limpas;
+}
+
+export function lerContadores(pasta: string): Record<string, number> {
+  const ficheiro = path.join(pasta, FICHEIRO_CONTADORES);
+  if (!fs.existsSync(ficheiro)) return {};
+  const dados = lerJson<Record<string, unknown>>(ficheiro);
+  const contadores: Record<string, number> = {};
+  for (const [nome, valor] of Object.entries(dados)) if (Number.isInteger(valor)) contadores[nome] = valor as number;
+  return contadores;
+}
+
+/** Define o valor atual de um contador (o próximo {CONTADOR:nome} dá este valor + 1). null apaga-o. */
+export function definirContador(pasta: string, nome: string, valor: number | null): Record<string, number> {
+  const contadores = lerContadores(pasta);
+  const limpo = nome.trim();
+  if (!limpo) throw new ErroProjeto('O contador precisa de um nome.');
+  if (valor === null) delete contadores[limpo];
+  else if (Number.isInteger(valor) && valor >= 0) contadores[limpo] = valor;
+  else throw new ErroProjeto('O valor do contador tem de ser um número inteiro, zero ou maior.');
+  gravarJson(path.join(pasta, FICHEIRO_CONTADORES), contadores);
+  return contadores;
+}
+
+/** Aumenta o contador em 1, guarda e devolve o novo valor. */
+export function proximoContador(pasta: string, nome: string): number {
+  const contadores = lerContadores(pasta);
+  const valor = (contadores[nome.trim()] ?? 0) + 1;
+  contadores[nome.trim()] = valor;
+  gravarJson(path.join(pasta, FICHEIRO_CONTADORES), contadores);
+  return valor;
 }
 
 export function obterEstado(pasta: string): EstadoProjeto {

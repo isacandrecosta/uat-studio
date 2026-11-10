@@ -16,7 +16,9 @@ import {
   RegistoPasso,
   ResultadoCaso,
   Valor,
+  VariavelCalculada,
 } from '../../shared/modelo';
+import { avaliarFormula, ErroFormula } from '../../shared/formulas';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, ErroElemento } from '../motor/localizar';
 import { criarSlug } from '../projeto/repositorio';
@@ -35,6 +37,10 @@ export interface PedidoCaso {
   /** Tempo máximo de cada passo. */
   limiteMs: number;
   trace: boolean;
+  /** Variáveis calculadas por fórmula (do projeto). */
+  calculadas: VariavelCalculada[];
+  /** Próximo valor de um contador persistente ({CONTADOR:nome}). */
+  proximoContador(nome: string): number;
   /** Chamado sempre que há novidades, para a interface acompanhar. */
   aoProgredir(resultado: ResultadoCaso): void;
   devePararAgora(): boolean;
@@ -144,17 +150,63 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   };
 
   /** Resolve o valor de um passo, tendo em conta os parâmetros do bloco nesta jornada. */
-  const resolver = (valor: Valor | undefined, item: BlocoDaJornada): { texto: string; deVariavel: boolean } => {
+  const formulas = new Map(pedido.calculadas.map((v) => [v.nome, v.formula]));
+  const emCalculo: string[] = [];
+
+  /** Valor de uma variável do caso; as variáveis calculadas são avaliadas na 1.ª vez e ficam guardadas. */
+  const procurar = (nome: string): string | undefined => {
+    if (nome in variaveis) return variaveis[nome];
+    const formula = formulas.get(nome);
+    if (formula === undefined) return undefined;
+    if (emCalculo.includes(nome)) throw new ErroDados(`A variável calculada {${nome}} depende de si própria.`);
+    emCalculo.push(nome);
+    try {
+      variaveis[nome] = calcular(formula, procurar, `variável {${nome}}`);
+    } finally {
+      emCalculo.pop();
+    }
+    resultado.variaveis[nome] = variaveis[nome];
+    return variaveis[nome];
+  };
+
+  const calcular = (formula: string, variavel: (nome: string) => string | undefined, onde: string): string => {
+    try {
+      return avaliarFormula(formula, {
+        variavel,
+        teste: caso.id,
+        run: pedido.runId,
+        agora: new Date(),
+        contador: pedido.proximoContador,
+        aleatorio: Math.random,
+      });
+    } catch (erro) {
+      if (erro instanceof ErroFormula) throw new ErroDados(`Erro na fórmula (${onde}): ${erro.message}`);
+      throw erro;
+    }
+  };
+
+  /** Resolve o valor de um passo, tendo em conta os parâmetros do bloco nesta jornada. */
+  const resolver = (valor: Valor | undefined, item: BlocoDaJornada, onde = 'passo'): { texto: string; deVariavel: boolean } => {
     if (!valor) return { texto: '', deVariavel: false };
     if (valor.tipo === 'fixo') return { texto: valor.valor, deVariavel: false };
+    // Dentro do bloco, cada variável pode ter sido trocada por um parâmetro da jornada.
+    const noBloco = (nome: string): string | undefined => {
+      const troca = item.parametros?.[nome];
+      if (!troca) return procurar(nome);
+      if (troca.tipo === 'variavel') return procurar(troca.nome);
+      return resolver(troca, { ...item, parametros: undefined }, `parâmetro {${nome}}`).texto;
+    };
     if (valor.tipo === 'variavel') {
       const troca = item.parametros?.[valor.nome];
-      if (troca?.tipo === 'fixo') return { texto: troca.valor, deVariavel: false };
-      const nome = troca?.tipo === 'variavel' ? troca.nome : valor.nome;
-      if (!(nome in variaveis)) throw new ErroDados(`Falta a coluna "${nome}" nos dados do caso.`);
-      return { texto: variaveis[nome], deVariavel: true };
+      const texto = noBloco(valor.nome);
+      if (texto === undefined) {
+        const nome = troca?.tipo === 'variavel' ? troca.nome : valor.nome;
+        throw new ErroDados(`Falta a coluna "${nome}" nos dados do caso.`);
+      }
+      return { texto, deVariavel: !troca || troca.tipo === 'variavel' };
     }
-    throw new ErroDados('As fórmulas e os geradores ainda não são suportados (chegam na Fase 2).');
+    const formula = valor.tipo === 'formula' ? valor.expressao : valor.gerador;
+    return { texto: calcular(formula, noBloco, onde), deVariavel: false };
   };
 
   let contexto: BrowserContext | null = null;

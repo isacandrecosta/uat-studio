@@ -1,6 +1,8 @@
 // Que variáveis um bloco ou uma jornada usam e produzem.
 // Usado pela interface (para mostrar o que falta) e pelo executor (para verificar antes de correr).
-import type { Bloco, Jornada, Valor } from './modelo';
+// Nota: dentro de src/shared, os imports de código têm de acabar em ".js" (a interface corre no browser).
+import { variaveisDaFormula } from './formulas.js';
+import type { Bloco, Jornada, Valor, VariavelCalculada } from './modelo';
 
 export interface VariaveisDoBloco {
   /** Variáveis que o bloco precisa de receber (por ordem de aparecimento). */
@@ -13,12 +15,21 @@ function juntar(lista: string[], nome: string): void {
   if (nome && !lista.includes(nome)) lista.push(nome);
 }
 
+/** Variáveis de que um valor precisa (uma coluna, ou as variáveis dentro de uma fórmula). */
+export function variaveisDoValor(valor: Valor | undefined): string[] {
+  if (!valor) return [];
+  if (valor.tipo === 'variavel') return [valor.nome];
+  if (valor.tipo === 'formula') return variaveisDaFormula(valor.expressao);
+  if (valor.tipo === 'gerador') return variaveisDaFormula(valor.gerador);
+  return [];
+}
+
 export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
   const usa: string[] = [];
   const produz: string[] = [];
   for (const passo of bloco.passos) {
     // Uma variável guardada num passo anterior do mesmo bloco não precisa de vir de fora.
-    if (passo.valor?.tipo === 'variavel' && !produz.includes(passo.valor.nome)) juntar(usa, passo.valor.nome);
+    for (const nome of variaveisDoValor(passo.valor)) if (!produz.includes(nome)) juntar(usa, nome);
     if (passo.acao === 'guardar' && passo.variavel) juntar(produz, passo.variavel);
   }
   return { usa, produz };
@@ -29,15 +40,32 @@ export interface VariaveisDaJornada {
   necessarias: string[];
   /** Variáveis guardadas ao longo da jornada. */
   produzidas: string[];
+  /** Variáveis calculadas por fórmula (do ecrã Dados de teste) que a jornada usa. */
+  calculadas: string[];
   /** Ids de blocos usados na jornada que já não existem. */
   blocosEmFalta: string[];
 }
 
-export function variaveisDaJornada(jornada: Jornada, blocos: Bloco[]): VariaveisDaJornada {
+export function variaveisDaJornada(jornada: Jornada, blocos: Bloco[], calculadas: VariavelCalculada[] = []): VariaveisDaJornada {
   const porId = new Map(blocos.map((b) => [b.id, b]));
+  const formulas = new Map(calculadas.map((v) => [v.nome, v.formula]));
   const necessarias: string[] = [];
   const produzidas: string[] = [];
+  const usadasCalculadas: string[] = [];
   const blocosEmFalta: string[] = [];
+
+  /** Regista que a jornada precisa de `nome`: de uma coluna, ou do que a sua fórmula precisar. */
+  const precisar = (nome: string, emCurso: string[] = []): void => {
+    if (produzidas.includes(nome)) return;
+    const formula = formulas.get(nome);
+    if (formula === undefined || emCurso.includes(nome)) {
+      juntar(necessarias, nome);
+      return;
+    }
+    juntar(usadasCalculadas, nome);
+    for (const dentro of variaveisDaFormula(formula)) precisar(dentro, [...emCurso, nome]);
+  };
+
   for (const item of jornada.blocos) {
     const bloco = porId.get(item.blocoId);
     if (!bloco) {
@@ -47,11 +75,10 @@ export function variaveisDaJornada(jornada: Jornada, blocos: Bloco[]): Variaveis
     const { usa, produz } = variaveisDoBloco(bloco);
     for (const nome of usa) {
       const troca: Valor | undefined = item.parametros?.[nome];
-      if (troca?.tipo === 'fixo') continue;
-      const origem = troca?.tipo === 'variavel' ? troca.nome : nome;
-      if (!produzidas.includes(origem)) juntar(necessarias, origem);
+      if (!troca) precisar(nome);
+      else for (const origem of variaveisDoValor(troca)) precisar(origem);
     }
     for (const nome of produz) juntar(produzidas, nome);
   }
-  return { necessarias, produzidas, blocosEmFalta };
+  return { necessarias, produzidas, calculadas: usadasCalculadas, blocosEmFalta };
 }

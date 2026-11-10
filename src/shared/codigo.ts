@@ -41,7 +41,9 @@ function codigoValor(valor: Valor | undefined, parametros: BlocoDaJornada['param
     if (troca?.tipo === 'fixo') return lit(troca.valor);
     return acesso(troca?.tipo === 'variavel' ? troca.nome : valor.nome);
   }
-  return `'' /* ${valor.tipo}: ainda não suportado */`;
+  // As fórmulas são calculadas pela ferramenta; no código fica a indicação do que era.
+  const formula = valor.tipo === 'formula' ? valor.expressao : valor.gerador;
+  return `'' /* fórmula do UAT Studio: ${formula.replace(/\*\//g, '* /')} */`;
 }
 
 function linhasDoPasso(passo: Passo, parametros: BlocoDaJornada['parametros'], urlBase: string): string[] {

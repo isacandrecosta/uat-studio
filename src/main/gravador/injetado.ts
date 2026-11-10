@@ -9,7 +9,7 @@ export function scriptGravador(): void {
   if (w.__uatGravadorInstalado || window.top !== window) return;
   w.__uatGravadorInstalado = true;
 
-  type Origem = 'fixo' | 'variavel';
+  type Origem = 'fixo' | 'variavel' | 'formula';
   interface Loc {
     tipo: string;
     valor: string;
@@ -278,10 +278,11 @@ export function scriptGravador(): void {
       let origem: Origem = soVariavel ? 'variavel' : 'fixo';
       const nomeColuna = el('input', { type: 'text', list: idLista, placeholder: 'Por exemplo: Valor', 'aria-label': 'Nome da coluna' });
       const zonaFixo = el('div', {}, campoFixo);
+      const rotuloNome = el('label', {}, 'Nome da coluna');
       const zonaVariavel = el(
         'div',
         {},
-        el('label', {}, 'Nome da coluna'),
+        rotuloNome,
         nomeColuna,
         el('label', {}, 'Valor de exemplo (usado agora, na gravação)'),
         campoExemplo,
@@ -292,19 +293,30 @@ export function scriptGravador(): void {
       };
       const atualizar = (): void => {
         zonaFixo.style.display = origem === 'fixo' ? 'block' : 'none';
-        zonaVariavel.style.display = origem === 'variavel' ? 'block' : 'none';
+        zonaVariavel.style.display = origem === 'fixo' ? 'none' : 'block';
+        const formula = origem === 'formula';
+        rotuloNome.textContent = formula ? 'Fórmula' : 'Nome da coluna';
+        nomeColuna.setAttribute('aria-label', formula ? 'Fórmula' : 'Nome da coluna');
+        nomeColuna.placeholder = formula ? 'Por exemplo: "cliente_" & {TESTE}' : 'Por exemplo: Valor';
+        if (formula) nomeColuna.removeAttribute('list');
+        else nomeColuna.setAttribute('list', idLista);
       };
       atualizar();
       const no = el(
         'div',
         {},
-        !soVariavel && el('div', { class: 'escolha', role: 'radiogroup', 'aria-label': 'Origem do valor' }, radio('fixo', 'Valor fixo'), radio('variavel', 'Coluna dos dados')),
+        !soVariavel && el('div', { class: 'escolha', role: 'radiogroup', 'aria-label': 'Origem do valor' }, radio('fixo', 'Valor fixo'), radio('variavel', 'Coluna dos dados'), radio('formula', 'Fórmula')),
         zonaFixo,
         zonaVariavel,
         soVariavel && el('p', { class: 'nota' }, 'É uma password: o valor nunca fica gravado no bloco, vem sempre dos dados do caso.'),
       );
       const obter = (): { valor: unknown; exemplo: string } | string => {
         if (origem === 'fixo') return { valor: { tipo: 'fixo', valor: lerFixo() }, exemplo: lerFixo() };
+        if (origem === 'formula') {
+          const expressao = nomeColuna.value.trim();
+          if (!expressao) return 'Escreve a fórmula.';
+          return { valor: { tipo: 'formula', expressao }, exemplo: lerExemplo() };
+        }
         const nome = nomeColuna.value.trim().replace(/^\{|\}$/g, '');
         if (!nome) return 'Escreve o nome da coluna.';
         return { valor: { tipo: 'variavel', nome }, exemplo: lerExemplo() };

@@ -14,7 +14,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [ ] 9. Na app POC (via Mentor): mini-backoffice de aprovação de pedidos, para testar jornadas entre 2 portais. *Bloqueado: falta autorizar o conector OutSystems.*
 
 ## Fase 2: dados e API
-- [ ] Motor de fórmulas (decimal exato, arredondamento selecionável), marcadores, contadores persistentes e geradores.
+- [x] Motor de fórmulas (decimal exato, arredondamento selecionável), marcadores, contadores persistentes e geradores.
 - [ ] Blocos de API: construtor de pedidos, perfis OAuth 2.0 / API Key / Basic / mTLS, verificações, guardar da resposta, teste individual, importar cURL/OpenAPI.
 - [ ] Cofre local de segredos; segredos fora do trace (desligado ou limpo no login e nos pedidos de token).
 - [ ] Passos e blocos condicionais ("só se `{Produto}` = X").

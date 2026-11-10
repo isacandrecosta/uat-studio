@@ -10,6 +10,7 @@ import type {
   NomeColecao,
   PedidoGravacao,
   ProjetoRecente,
+  VariavelCalculada,
 } from '../shared/modelo';
 
 declare global {
@@ -53,6 +54,16 @@ declare global {
         /** Um print em formato "data:", ou null se não existir. */
         imagem(...partes: string[]): Promise<string | null>;
         aoAtualizar(callback: (estado: EstadoRun) => void): () => void;
+      };
+      variaveis: {
+        ler(): Promise<VariavelCalculada[]>;
+        /** Substitui a lista toda. Dá erro se algum nome ou fórmula estiver mal. */
+        gravar(variaveis: VariavelCalculada[]): Promise<VariavelCalculada[]>;
+      };
+      contadores: {
+        ler(): Promise<Record<string, number>>;
+        /** `null` apaga o contador. */
+        definir(nome: string, valor: number | null): Promise<Record<string, number>>;
       };
       casos: {
         /** Pede um Excel e substitui os casos da jornada. null se o utilizador cancelar. */

@@ -2,7 +2,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EstadoProjeto, NomeColecao, ProjetoRecente } from '../../shared/modelo';
+import { validarFormula } from '../../shared/formulas';
+import { EstadoProjeto, NomeColecao, ProjetoRecente, VariavelCalculada } from '../../shared/modelo';
 import { criarExemplo } from './exemplo';
 import * as repo from './repositorio';
 
@@ -78,6 +79,20 @@ export function registarIpcProjeto(): void {
     repo.definirAmbienteAtivo(pastaDoProjeto(), String(ambienteId));
     return repo.obterEstado(pastaDoProjeto());
   });
+
+  ipcMain.handle('variaveis:ler', () => repo.lerVariaveis(pastaDoProjeto()));
+  ipcMain.handle('variaveis:gravar', (_e, variaveis: unknown) => {
+    if (!Array.isArray(variaveis)) throw new repo.ErroProjeto('Dados inválidos.');
+    for (const v of variaveis as VariavelCalculada[]) {
+      const erro = validarFormula(String(v?.formula ?? ''));
+      if (erro) throw new repo.ErroProjeto(`A fórmula de {${String(v?.nome ?? '')}} tem um erro: ${erro}`);
+    }
+    return repo.gravarVariaveis(pastaDoProjeto(), variaveis as VariavelCalculada[]);
+  });
+  ipcMain.handle('contadores:ler', () => repo.lerContadores(pastaDoProjeto()));
+  ipcMain.handle('contadores:definir', (_e, nome: string, valor: number | null) =>
+    repo.definirContador(pastaDoProjeto(), String(nome), valor === null ? null : Number(valor)),
+  );
 
   ipcMain.handle('dados:listar', (_e, colecao: NomeColecao) => repo.listar(pastaDoProjeto(), colecao));
   ipcMain.handle('dados:guardar', (_e, colecao: NomeColecao, item: unknown) => {

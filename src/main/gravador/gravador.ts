@@ -10,6 +10,7 @@ import {
   PedidoGravacao,
   Valor,
 } from '../../shared/modelo';
+import { validarFormula } from '../../shared/formulas';
 import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, paraLocator } from '../motor/localizar';
 import * as repo from '../projeto/repositorio';
@@ -147,6 +148,10 @@ async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; 
     ...(m.variavel ? { variavel: m.variavel } : {}),
     ...(m.secreto ? { secreto: true } : {}),
   };
+  if (passo.valor?.tipo === 'formula') {
+    const erroFormula = validarFormula(passo.valor.expressao);
+    if (erroFormula) return { ok: false, mensagem: `A fórmula tem um erro: ${erroFormula}` };
+  }
   // Um segredo nunca pode ficar escrito no bloco.
   if (passo.secreto && passo.valor?.tipo !== 'variavel') {
     return { ok: false, mensagem: 'Uma password tem de vir de uma coluna dos dados.' };

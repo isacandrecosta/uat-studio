@@ -46,6 +46,14 @@ contextBridge.exposeInMainWorld('uatStudio', {
     imagem: chamar('run:imagem'),
     aoAtualizar: ouvir('run:atualizado'),
   },
+  variaveis: {
+    ler: chamar('variaveis:ler'),
+    gravar: chamar('variaveis:gravar'),
+  },
+  contadores: {
+    ler: chamar('contadores:ler'),
+    definir: chamar('contadores:definir'),
+  },
   casos: {
     importar: chamar('casos:importar'),
     exportar: chamar('casos:exportar'),

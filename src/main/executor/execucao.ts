@@ -161,6 +161,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
 
   const aplicacoes = new Map(repo.listar(pasta, 'aplicacoes').map((a) => [a.id, a]));
   const blocos = new Map<string, Bloco>(repo.listar(pasta, 'blocos').map((b) => [b.id, b]));
+  const calculadas = repo.lerVariaveis(pasta);
 
   void (async () => {
     let browser: Browser | null = null;
@@ -192,6 +193,8 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             pasta: path.join(pastaRun, relativa),
             limiteMs: 15_000,
             trace: true,
+            calculadas,
+            proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
             aoProgredir: (parcial) => {
               run.casos[indice] = { ...parcial, pasta: relativa };
               avisar();

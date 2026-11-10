@@ -3,6 +3,7 @@ import type { Aplicacao, Bloco, BlocoDaJornada, Caso, ConjuntoCasos, Jornada, Va
 import { variaveisDaJornada, variaveisDoBloco } from '../../shared/variaveis.js';
 import type { Contexto } from '../app.js';
 import { codigoDaJornada } from '../../shared/codigo.js';
+import { validarFormula } from '../../shared/formulas.js';
 import { confirmar, h, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
@@ -33,6 +34,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
   const jornada: Jornada = jornadas.find((j) => j.id === selecao.jornadaId) ?? jornadas[0];
   selecao.jornadaId = jornada.id;
   const conjuntos = await dados.listar('casos');
+  const calculadas = await window.uatStudio.variaveis.ler();
   const conjunto: ConjuntoCasos = conjuntos.find((c) => c.id === jornada.id) ?? { id: jornada.id, colunas: [], casos: [] };
   const blocoPorId = new Map<string, Bloco>(blocos.map((b) => [b.id, b]));
   const aplicacaoPorId = new Map<string, Aplicacao>(aplicacoes.map((a) => [a.id, a]));
@@ -97,12 +99,12 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
   await desenhar();
 
   async function desenhar(): Promise<void> {
-    const variaveis = variaveisDaJornada(jornada, blocos);
+    const variaveis = variaveisDaJornada(jornada, blocos, calculadas);
     // Colunas dos casos: as que já existem e as que a jornada precisa.
     for (const nome of variaveis.necessarias) if (!conjunto.colunas.includes(nome)) conjunto.colunas.push(nome);
     zona.replaceChildren(
       h('div', { class: 'editor-principal' }, cartaoPropriedades(), cartaoPercurso(variaveis.blocosEmFalta), cartaoCasos(variaveis.necessarias)),
-      h('aside', { class: 'editor-lateral' }, cartaoBiblioteca(), cartaoVariaveis(variaveis.necessarias, variaveis.produzidas)),
+      h('aside', { class: 'editor-lateral' }, cartaoBiblioteca(), cartaoVariaveis(variaveis.necessarias, variaveis.produzidas, variaveis.calculadas)),
     );
   }
 
@@ -148,25 +150,39 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
 
   function linhaParametro(item: BlocoDaJornada, nome: string): HTMLElement {
     const atual: Valor | undefined = item.parametros?.[nome];
-    const modo = atual?.tipo === 'fixo' ? 'fixo' : atual?.tipo === 'variavel' ? 'coluna' : 'igual';
+    const modo = atual?.tipo === 'fixo' ? 'fixo' : atual?.tipo === 'variavel' ? 'coluna' : atual?.tipo === 'formula' ? 'formula' : 'igual';
+    const ajudas: Record<string, string> = { coluna: 'Nome da coluna', fixo: 'Valor', formula: 'Por exemplo: "cliente_" & {TESTE}' };
     const escolhaModo = h(
       'select',
       { class: 'campo', 'aria-label': `De onde vem ${nome}` },
       h('option', { value: 'igual', selected: modo === 'igual' }, `Coluna "${nome}" dos casos`),
       h('option', { value: 'coluna', selected: modo === 'coluna' }, 'Outra coluna'),
       h('option', { value: 'fixo', selected: modo === 'fixo' }, 'Valor fixo'),
+      h('option', { value: 'formula', selected: modo === 'formula' }, 'Fórmula'),
     );
     const valor = h('input', {
       type: 'text',
       class: 'campo',
       'aria-label': `Valor para ${nome}`,
-      value: atual?.tipo === 'fixo' ? atual.valor : atual?.tipo === 'variavel' ? atual.nome : '',
+      value: atual?.tipo === 'fixo' ? atual.valor : atual?.tipo === 'variavel' ? atual.nome : atual?.tipo === 'formula' ? atual.expressao : '',
+      placeholder: ajudas[modo] ?? '',
       hidden: modo === 'igual',
     });
+    const erroFormula = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
     const aplicar = async (): Promise<void> => {
       const parametros = { ...(item.parametros ?? {}) };
       const texto = valor.value.trim();
-      if (escolhaModo.value === 'fixo') parametros[nome] = { tipo: 'fixo', valor: valor.value };
+      erroFormula.hidden = true;
+      if (escolhaModo.value === 'formula') {
+        if (!texto) return;
+        const erro = validarFormula(texto);
+        if (erro) {
+          erroFormula.textContent = erro;
+          erroFormula.hidden = false;
+          return;
+        }
+        parametros[nome] = { tipo: 'formula', expressao: texto };
+      } else if (escolhaModo.value === 'fixo') parametros[nome] = { tipo: 'fixo', valor: valor.value };
       else if (escolhaModo.value === 'coluna' && texto) parametros[nome] = { tipo: 'variavel', nome: texto.replace(/^\{|\}$/g, '') };
       else delete parametros[nome];
       item.parametros = Object.keys(parametros).length > 0 ? parametros : undefined;
@@ -174,12 +190,12 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
     };
     escolhaModo.addEventListener('change', () => {
       valor.hidden = escolhaModo.value === 'igual';
-      valor.placeholder = escolhaModo.value === 'coluna' ? 'Nome da coluna' : 'Valor';
+      valor.placeholder = ajudas[escolhaModo.value] ?? '';
       if (escolhaModo.value === 'igual') void aplicar();
       else valor.focus();
     });
     valor.addEventListener('change', () => void aplicar());
-    return h('div', { class: 'parametro' }, h('code', {}, `{${nome}}`), escolhaModo, valor);
+    return h('div', { class: 'parametro' }, h('code', {}, `{${nome}}`), escolhaModo, valor, erroFormula);
   }
 
   function cartaoPercurso(emFalta: string[]): HTMLElement {
@@ -287,7 +303,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
     );
   }
 
-  function cartaoVariaveis(necessarias: string[], produzidas: string[]): HTMLElement {
+  function cartaoVariaveis(necessarias: string[], produzidas: string[], porFormula: string[]): HTMLElement {
     return h(
       'section',
       { class: 'cartao' },
@@ -296,6 +312,8 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       necessarias.length === 0 ? h('p', { class: 'suave' }, 'Nenhuma.') : h('p', { class: 'lista-codigo' }, necessarias.map((n) => h('code', {}, `{${n}}`))),
       h('h3', {}, 'Guardadas durante a jornada'),
       produzidas.length === 0 ? h('p', { class: 'suave' }, 'Nenhuma.') : h('p', { class: 'lista-codigo' }, produzidas.map((n) => h('code', {}, `{${n}}`))),
+      porFormula.length > 0 && h('h3', {}, 'Calculadas por fórmula (Dados de teste)'),
+      porFormula.length > 0 && h('p', { class: 'lista-codigo' }, porFormula.map((n) => h('code', {}, `{${n}}`))),
     );
   }
 

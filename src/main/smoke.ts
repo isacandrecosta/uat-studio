@@ -246,6 +246,51 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'dados de teste: variável calculada por fórmula, usada como parâmetro da jornada',
+      async (j) => {
+        const mudar = (seletor: string, valor: string, evento = 'change'): Promise<void> =>
+          naPagina(
+            j,
+            `(() => { const e = document.querySelector(${JSON.stringify(seletor)}); e.value = ${JSON.stringify(valor)}; e.dispatchEvent(new Event('input', { bubbles: true })); if (${JSON.stringify(evento)} === 'change') e.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+          );
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"dados\"]').click()");
+        await esperar(j, "document.getElementById('btn-nova-variavel')");
+
+        // Experimentar: arredondamento ao par (o achado real do OutSystems) e um erro explicado.
+        await mudar('#formula-experimentar', 'TEXTO(ARRED.PAR(86,405; 2); 2) & " / " & ARRED(86,405; 2)', 'input');
+        await esperar(j, "document.getElementById('resultado-experimentar').textContent === '= 86,40 / 86,41'");
+        await mudar('#formula-experimentar', '{NaoExiste} + 1', 'input');
+        await esperar(j, "document.getElementById('resultado-experimentar').dataset.estado === 'erro'");
+
+        // Nova variável calculada.
+        await naPagina(j, "document.getElementById('btn-nova-variavel').click()");
+        await esperar(j, "document.querySelector('dialog[open] input')");
+        await naPagina(j, "(() => { const d = document.querySelector('dialog[open]'); d.querySelector('input').value = 'ComissaoCalculada'; d.querySelector('button[type=submit]').click(); })()");
+        await esperar(j, "document.querySelector('[data-variavel=\"ComissaoCalculada\"] input')");
+        const formula = 'SE({EstadoEsperado} = "Rejeitado"; 0; ARRED({Valor} * SE({Variante} = "CP12"; 1; SE({Variante} = "CA48"; 2; 3)) / 100; 2))';
+        await mudar('[data-variavel="ComissaoCalculada"] input', formula);
+        await esperar(j, "document.querySelector('[data-variavel=\"ComissaoCalculada\"] .previsao').textContent === '= 5'");
+        await tirarPrint(j, raiz, 'dados');
+        const ficheiro = path.join(pastaProjeto, 'exemplo', 'variaveis.json');
+        const fim = Date.now() + 5_000;
+        while (!(fs.existsSync(ficheiro) && fs.readFileSync(ficheiro, 'utf8').includes('ARRED')) && Date.now() < fim) await new Promise((r) => setTimeout(r, 100));
+        confirmar(fs.readFileSync(ficheiro, 'utf8').includes('ARRED'), 'A fórmula não foi guardada em variaveis.json.');
+
+        // No editor: {ComissaoEsperada} passa a vir da variável calculada.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"editor\"]').click()");
+        await esperar(j, "document.querySelectorAll('#percurso > li').length === 1");
+        const indice = await naPagina<number>(
+          j,
+          "[...document.querySelectorAll('#percurso > li:first-child .parametro')].findIndex((p) => p.querySelector('code').textContent === '{ComissaoEsperada}')",
+        );
+        confirmar(indice >= 0, 'Não encontrei o parâmetro {ComissaoEsperada}.');
+        const linha = `#percurso > li:first-child .parametro:nth-of-type(${indice + 1})`;
+        await mudar(`${linha} select`, 'coluna');
+        await mudar(`${linha} input`, 'ComissaoCalculada');
+        await esperar(j, "[...document.querySelectorAll('.editor-lateral code')].some((c) => c.textContent === '{ComissaoCalculada}')");
+      },
+    ],
+    [
       'correr a jornada de exemplo (6 casos, 2 em paralelo, em background) com evidências e relatórios',
       async (j) => {
         await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
@@ -267,6 +312,8 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(erros.length === 0, `Há casos que não chegaram ao fim: ${erros.map((c) => `${c.casoId} ${c.estado}`).join(', ')}`);
         confirmar(run.casos.filter((c) => c.estado === 'OK').length >= 4, 'Esperava pelo menos 4 casos OK.');
         confirmar(run.casos.every((c) => c.variaveis.PedidoId), 'Todos os casos deviam ter guardado {PedidoId}.');
+        const calculadas = run.casos.map((c) => c.variaveis.ComissaoCalculada).join(' | ');
+        confirmar(calculadas === '5 | 102,5 | 0 | 650 | 25,91 | 0', `As comissões calculadas por fórmula não são as esperadas: ${calculadas}`);
 
         const pastaRun = path.join(pastaProjeto, 'exemplo', 'execucoes', run.pasta);
         for (const ficheiro of ['run.json', 'run.log', 'relatorio.xlsx', 'relatorio.html']) {
