@@ -1,4 +1,4 @@
-# Roadmap
+﻿# Roadmap
 
 Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sessão, atualizar "Estado atual" no `CLAUDE.md` e assinalar aqui o que ficou feito.
 
@@ -8,8 +8,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] 3. Modelo de dados em JSON na pasta do projeto: aplicações, épicos, jornadas, blocos, casos. Um ficheiro por item, etiquetas nos casos e tipo de ambiente (DEV/QA/PRD). Ecrã "escolher/criar projeto".
 - [x] 4. Gravador v1: realçar o elemento sob o rato, popup de ação (escrever, escolher, marcar, clicar, verificar, guardar variável), vários localizadores, passos gravados num bloco.
 - [x] 5. Editor de jornada v1: compor uma jornada com blocos da biblioteca (reutilizáveis), com parâmetros.
-- [ ] 6. Executor v1: correr um caso, uma jornada ou um épico com dados do Excel; visível ou em background; Edge ou Chrome; paralelo. Inclui esperar pelo carregamento do OutSystems, comparação financeira (formato pt-PT, tolerância) e verificar todos os valores antes de dar KO.
-- [ ] 7. Pasta da execução com prints, trace, logs (`run.log`, `caso.log`) e relatório Excel/HTML (reaproveitar o reporter do POC).
+- [x] 6. Executor v1: correr um caso, uma jornada ou um épico com dados do Excel; visível ou em background; Edge ou Chrome; paralelo. Inclui esperar pelo carregamento do OutSystems, comparação financeira (formato pt-PT, tolerância) e verificar todos os valores antes de dar KO.
+- [x] 7. Pasta da execução com prints, trace, logs (`run.log`, `caso.log`) e relatório Excel/HTML (reaproveitar o reporter do POC).
 - [ ] 8. "Ver código (.ts)" de um bloco ou jornada.
 - [ ] 9. Na app POC (via Mentor): mini-backoffice de aprovação de pedidos, para testar jornadas entre 2 portais.
 

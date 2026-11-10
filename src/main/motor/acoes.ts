@@ -2,6 +2,7 @@
 // É usado pelo gravador (para a página avançar enquanto se grava) e pelo executor.
 import { Locator, Page } from 'playwright-core';
 import { Passo } from '../../shared/modelo';
+import { formatarComPonto, lerNumero } from '../executor/numeros';
 import { controloDe, Encontrado, encontrar } from './localizar';
 
 const CAMPO_TEXTO = 'input, textarea, [contenteditable="true"], [contenteditable=""]';
@@ -66,7 +67,13 @@ export async function executarAcao(
   switch (passo.acao) {
     case 'escrever': {
       const campo = await controloDe(locator, CAMPO_TEXTO);
-      await campo.fill(valor, { timeout: limiteMs });
+      // Um campo numérico do browser só aceita ponto decimal: "863,61" passa a "863.61".
+      let texto = valor;
+      if (valor.includes(',') && (await campo.evaluate((el) => el instanceof HTMLInputElement && el.type === 'number'))) {
+        const numero = lerNumero(valor);
+        if (numero) texto = formatarComPonto(numero);
+      }
+      await campo.fill(texto, { timeout: limiteMs });
       // O OutSystems só valida e formata o campo quando se sai dele.
       await campo.blur().catch(() => undefined);
       return { encontrado };

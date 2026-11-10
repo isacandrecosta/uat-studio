@@ -1,5 +1,8 @@
 // O que o preload expõe à interface (ver src/main/preload.ts).
 import type {
+  AmbitoRun,
+  EstadoRun,
+  OpcoesRun,
   Bloco,
   Colecoes,
   EstadoGravador,
@@ -37,6 +40,25 @@ declare global {
         terminar(guardar: boolean): Promise<Bloco | null>;
         /** Devolve a função para deixar de ouvir. */
         aoAtualizar(callback: (estado: EstadoGravador) => void): () => void;
+      };
+      runs: {
+        /** A execução em curso ou a última desta sessão. */
+        estado(): Promise<EstadoRun | null>;
+        iniciar(ambito: AmbitoRun, opcoes: OpcoesRun): Promise<EstadoRun>;
+        parar(): Promise<EstadoRun | null>;
+        historico(): Promise<EstadoRun[]>;
+        /** Abre no Windows uma pasta ou ficheiro dentro de `execucoes/`. */
+        abrir(...partes: string[]): Promise<void>;
+        lerTexto(...partes: string[]): Promise<string>;
+        /** Um print em formato "data:", ou null se não existir. */
+        imagem(...partes: string[]): Promise<string | null>;
+        aoAtualizar(callback: (estado: EstadoRun) => void): () => void;
+      };
+      casos: {
+        /** Pede um Excel e substitui os casos da jornada. null se o utilizador cancelar. */
+        importar(jornadaId: string): Promise<{ casos: number; ignorados: number } | null>;
+        /** Devolve o caminho do ficheiro gravado, ou null se o utilizador cancelar. */
+        exportar(jornadaId: string): Promise<string | null>;
       };
     };
   }

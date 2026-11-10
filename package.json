@@ -16,6 +16,7 @@
   "author": "isacandrecosta",
   "license": "UNLICENSED",
   "dependencies": {
+    "exceljs": "^4.4.0",
     "playwright-core": "^1.65.0"
   },
   "devDependencies": {

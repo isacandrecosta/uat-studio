@@ -107,6 +107,97 @@ export interface EstadoGravador {
   mensagem?: string;
 }
 
+// ---------- Execuções (runs) ----------
+
+/** OK: tudo coincide. KO: chegou ao fim mas há valores diferentes. ERRO: não chegou ao fim. */
+export type EstadoCaso = 'por-correr' | 'a-correr' | 'OK' | 'KO' | 'ERRO' | 'PARADO';
+
+/** Um valor que não coincidiu numa verificação. */
+export interface Diferenca {
+  bloco: string;
+  passo: string;
+  esperado: string;
+  obtido: string;
+  /** Só para números: a diferença entre os dois. */
+  diferenca?: string;
+}
+
+export type EstadoPasso = 'ok' | 'ko' | 'erro' | 'ignorado';
+
+/** Uma linha do log de um caso. */
+export interface RegistoPasso {
+  bloco: string;
+  descricao: string;
+  estado: EstadoPasso;
+  detalhe?: string;
+  duracaoMs: number;
+}
+
+export interface ResultadoCaso {
+  /** `idDaJornada/idDoCaso` */
+  chave: string;
+  jornadaId: string;
+  jornadaNome: string;
+  casoId: string;
+  casoNome?: string;
+  estado: EstadoCaso;
+  /** Enquanto corre: o que está a fazer. */
+  passoAtual?: string;
+  diferencas: Diferenca[];
+  erro?: {
+    /** Frase simples sobre o que aconteceu. */
+    mensagem: string;
+    bloco: string;
+    passo: string;
+    /** Blocos que ficaram por executar. */
+    porExecutar: string[];
+  };
+  passos: RegistoPasso[];
+  /** Variáveis guardadas durante a jornada. */
+  variaveis: Record<string, string>;
+  duracaoMs: number;
+  /** Pasta com as evidências deste caso (relativa à pasta da execução). */
+  pasta?: string;
+  /** Ficheiros de evidência (prints, trace), relativos à pasta do caso. */
+  evidencias?: string[];
+}
+
+export interface OpcoesRun {
+  canal: 'msedge' | 'chrome';
+  /** true: vê-se o browser; false: corre em background. */
+  visivel: boolean;
+  /** Quantos casos correm ao mesmo tempo (1, 2, 4 ou 8). */
+  paralelo: number;
+  /** O utilizador confirmou que quer mesmo correr num ambiente de produção. */
+  confirmouProducao?: boolean;
+}
+
+/** O que correr: tudo, épicos, jornadas ou casos escolhidos (`idDaJornada/idDoCaso`). */
+export interface AmbitoRun {
+  epicoIds?: string[];
+  jornadaIds?: string[];
+  chavesCasos?: string[];
+  /** Só os casos (ou jornadas) com alguma destas etiquetas. */
+  etiquetas?: string[];
+}
+
+export interface EstadoRun {
+  id: string;
+  /** Descrição curta do âmbito (por exemplo, o nome da jornada). */
+  nome: string;
+  ativo: boolean;
+  /** Foi pedido para parar. */
+  aParar: boolean;
+  inicio: string;
+  fim?: string;
+  ambiente: string;
+  tipoAmbiente: TipoAmbiente;
+  opcoes: OpcoesRun;
+  casos: ResultadoCaso[];
+  /** Pasta da execução (dentro de `execucoes/`). */
+  pasta?: string;
+}
+
 export interface PedidoGravacao {
   aplicacaoId: string;
   /** Acrescentar passos a um bloco existente... */

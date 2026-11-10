@@ -8,6 +8,8 @@ import {
   removerPasso,
   terminarGravacao,
 } from './gravador/gravador';
+import { aoMudarRun, pararRun } from './executor/execucao';
+import { registarIpcExecucoes } from './executor/ipc';
 import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
 import { correrSmoke } from './smoke';
 import { PedidoGravacao } from '../shared/modelo';
@@ -44,6 +46,7 @@ function criarJanela(): BrowserWindow {
 }
 
 registarIpcProjeto();
+registarIpcExecucoes();
 
 ipcMain.handle('gravador:estado', () => estadoGravador());
 ipcMain.handle('gravador:iniciar', (_e, pedido: PedidoGravacao) => iniciarGravacao(pastaDoProjeto(), pedido));
@@ -55,9 +58,13 @@ void app.whenReady().then(() => {
   aoMudarGravador((estado) => {
     if (!janela.isDestroyed()) janela.webContents.send('gravador:atualizado', estado);
   });
+  aoMudarRun((estado) => {
+    if (!janela.isDestroyed()) janela.webContents.send('run:atualizado', estado);
+  });
   if (MODO_SMOKE) void correrSmoke(janela, RAIZ);
 });
 
 app.on('window-all-closed', () => {
+  pararRun();
   void terminarGravacao(false).finally(() => app.quit());
 });

@@ -2,7 +2,7 @@
 import type { Aplicacao, Bloco, BlocoDaJornada, Caso, ConjuntoCasos, Jornada, Valor } from '../../shared/modelo.js';
 import { variaveisDaJornada, variaveisDoBloco } from '../../shared/variaveis.js';
 import type { Contexto } from '../app.js';
-import { confirmar, h, pedirTexto, plural } from '../dom.js';
+import { confirmar, h, mensagemDeErro, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -365,7 +365,53 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
         h(
           'div',
           { class: 'acoes' },
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao',
+              title: '1.ª linha com os nomes das colunas. Substitui os casos atuais.',
+              onclick: async () => {
+                if (conjunto.casos.length > 0 && !(await confirmar('Importar Excel', `Os ${conjunto.casos.length} casos atuais são substituídos pelos do Excel.`, 'Substituir'))) return;
+                try {
+                  const feito = await window.uatStudio.casos.importar(jornada.id);
+                  if (!feito) return;
+                  irPara('editor');
+                } catch (e) {
+                  await confirmar('Não foi possível importar', mensagemDeErro(e), 'Fechar');
+                }
+              },
+            },
+            'Importar Excel',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao',
+              disabled: conjunto.casos.length === 0,
+              onclick: async () => {
+                try {
+                  await window.uatStudio.casos.exportar(jornada.id);
+                } catch (e) {
+                  await confirmar('Não foi possível exportar', mensagemDeErro(e), 'Fechar');
+                }
+              },
+            },
+            'Exportar Excel',
+          ),
           h('button', { type: 'button', class: 'botao', onclick: () => void novaColuna() }, 'Nova coluna'),
+          h(
+            'button',
+            {
+              id: 'btn-correr-jornada',
+              type: 'button',
+              class: 'botao botao-primario',
+              disabled: conjunto.casos.length === 0 || jornada.blocos.length === 0,
+              onclick: () => irPara('runs'),
+            },
+            'Correr…',
+          ),
           h('button', { id: 'btn-novo-caso', type: 'button', class: 'botao', onclick: () => void novoCaso() }, 'Novo caso'),
         ),
       ),

@@ -36,4 +36,18 @@ contextBridge.exposeInMainWorld('uatStudio', {
     terminar: chamar('gravador:terminar'),
     aoAtualizar: ouvir('gravador:atualizado'),
   },
+  runs: {
+    estado: chamar('run:estado'),
+    iniciar: chamar('run:iniciar'),
+    parar: chamar('run:parar'),
+    historico: chamar('run:historico'),
+    abrir: chamar('run:abrir'),
+    lerTexto: chamar('run:ler-texto'),
+    imagem: chamar('run:imagem'),
+    aoAtualizar: ouvir('run:atualizado'),
+  },
+  casos: {
+    importar: chamar('casos:importar'),
+    exportar: chamar('casos:exportar'),
+  },
 });

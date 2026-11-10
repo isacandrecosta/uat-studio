@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
+import { estadoRun } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { criarProjeto } from './projeto/ipc';
 
@@ -232,6 +233,48 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await naPagina(j, "document.querySelector('#percurso > li:nth-child(2) .acoes button:last-child').click()");
         await esperar(j, "document.querySelectorAll('#percurso > li').length === 1");
         confirmar(lerJornada().blocos.length === 1 && lerCasos().casos.length === 6, 'O exemplo não voltou ao estado inicial.');
+      },
+    ],
+    [
+      'correr a jornada de exemplo (6 casos, 2 em paralelo, em background) com evidências e relatórios',
+      async (j) => {
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-correr')");
+        await naPagina(j, "(() => { document.getElementById('run-paralelo').value = '2'; document.getElementById('btn-correr').click(); })()");
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"true\"]')", 60_000);
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"false\"]')", 400_000);
+        const run = estadoRun();
+        if (!run?.pasta) throw new Error('Não há execução.');
+        for (const caso of run.casos) {
+          const detalhe =
+            caso.estado === 'ERRO'
+              ? caso.erro?.mensagem
+              : caso.diferencas.map((d) => `${d.passo}: esperado ${d.esperado}, obtido ${d.obtido}`).join(' | ');
+          console.log(`[smoke]   ${caso.casoId} ${caso.estado} (${(caso.duracaoMs / 1000).toFixed(1)} s) ${detalhe ?? ''}`);
+        }
+        confirmar(run.casos.length === 6, `A execução tem ${run.casos.length} casos em vez de 6.`);
+        const erros = run.casos.filter((c) => c.estado !== 'OK' && c.estado !== 'KO');
+        confirmar(erros.length === 0, `Há casos que não chegaram ao fim: ${erros.map((c) => `${c.casoId} ${c.estado}`).join(', ')}`);
+        confirmar(run.casos.filter((c) => c.estado === 'OK').length >= 4, 'Esperava pelo menos 4 casos OK.');
+        confirmar(run.casos.every((c) => c.variaveis.PedidoId), 'Todos os casos deviam ter guardado {PedidoId}.');
+
+        const pastaRun = path.join(pastaProjeto, 'exemplo', 'execucoes', run.pasta);
+        for (const ficheiro of ['run.json', 'run.log', 'relatorio.xlsx', 'relatorio.html']) {
+          confirmar(fs.existsSync(path.join(pastaRun, ficheiro)), `Falta ${ficheiro} na pasta da execução.`);
+        }
+        const pastaCaso = path.join(pastaRun, 'casos', 'simular-credito', 'TC0001');
+        const ficheiros = fs.readdirSync(pastaCaso);
+        for (const esperado of ['caso.log', 'eventos.jsonl', '01_simular-credito.png', 'trace-1.zip']) {
+          confirmar(ficheiros.includes(esperado), `Falta ${esperado} no caso TC0001 (há: ${ficheiros.join(', ')}).`);
+        }
+
+        // Abrir os detalhes de um caso e ver o histórico.
+        await naPagina(j, "document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo').click()");
+        await esperar(j, "document.querySelector('.caso-detalhe .log-passos li') && document.querySelector('.galeria img')?.src.startsWith('data:image/png')");
+        await esperar(j, "document.querySelectorAll('#historico li').length === 1");
+        await tirarPrint(j, raiz, 'runs');
+        fs.copyFileSync(path.join(pastaCaso, 'caso.log'), path.join(raiz, 'out', 'smoke-caso.log'));
+        fs.copyFileSync(path.join(pastaRun, 'relatorio.html'), path.join(raiz, 'out', 'smoke-relatorio.html'));
       },
     ],
   ];

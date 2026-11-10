@@ -6,6 +6,7 @@ import { mostrarBoasVindas } from './ecras/boasVindas.js';
 import { ecraEditor } from './ecras/editor.js';
 import { ecraGravar } from './ecras/gravar.js';
 import { ecraJornadas } from './ecras/jornadas.js';
+import { ecraRuns } from './ecras/runs.js';
 
 /** O que cada ecrã recebe para se desenhar. */
 export interface Contexto {
@@ -39,7 +40,7 @@ const ECRAS: Ecra[] = [
   { id: 'api', nome: 'Blocos de API', descricao: 'Construir pedidos, perfis de autenticação e teste individual.' },
   { id: 'gravar', nome: 'Gravar', descricao: 'Gravar ações no browser para criar blocos de UI.', desenhar: ecraGravar },
   { id: 'dados', nome: 'Dados de teste', descricao: 'Variáveis, fórmulas, geradores e contadores.' },
-  { id: 'runs', nome: 'Runs e resultados', descricao: 'Correr testes e ver o histórico, os logs e as evidências.' },
+  { id: 'runs', nome: 'Runs e resultados', descricao: 'Correr testes e ver o histórico, os logs e as evidências.', desenhar: ecraRuns },
   { id: 'mapa', nome: 'Mapa de execução', descricao: 'Grafo ao vivo da execução e controlos.' },
 ];
 
