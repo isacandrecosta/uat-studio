@@ -47,27 +47,34 @@ export function plural(n: number, singular: string, pluralTexto = `${singular}s`
 export function pedirTexto(titulo: string, rotulo: string, inicial = ''): Promise<string | null> {
   return new Promise((resolve) => {
     const campo = h('input', { type: 'text', class: 'campo', value: inicial, required: true, maxlength: 80 });
+    // Nota: não se usa o evento "close" do <dialog>, que só dispara com a janela visível.
+    const terminar = (texto: string | null): void => {
+      dialogo.close();
+      dialogo.remove();
+      resolve(texto);
+    };
     const dialogo = h(
       'dialog',
-      { class: 'dialogo' },
+      { class: 'dialogo', oncancel: () => terminar(null) },
       h(
         'form',
-        { method: 'dialog' },
+        {
+          onsubmit: (evento: Event) => {
+            evento.preventDefault();
+            const texto = campo.value.trim();
+            if (texto) terminar(texto);
+          },
+        },
         h('h2', {}, titulo),
         h('label', {}, rotulo, campo),
         h(
           'div',
           { class: 'dialogo-botoes' },
-          h('button', { type: 'button', class: 'botao', onclick: () => dialogo.close('cancelar') }, 'Cancelar'),
-          h('button', { type: 'submit', class: 'botao botao-primario', value: 'ok' }, 'Guardar'),
+          h('button', { type: 'button', class: 'botao', onclick: () => terminar(null) }, 'Cancelar'),
+          h('button', { type: 'submit', class: 'botao botao-primario' }, 'Guardar'),
         ),
       ),
     );
-    dialogo.addEventListener('close', () => {
-      const texto = campo.value.trim();
-      dialogo.remove();
-      resolve(dialogo.returnValue === 'ok' && texto ? texto : null);
-    });
     document.body.append(dialogo);
     dialogo.showModal();
     campo.select();
@@ -77,26 +84,27 @@ export function pedirTexto(titulo: string, rotulo: string, inicial = ''): Promis
 /** Janela pequena de confirmação (por exemplo, antes de apagar). */
 export function confirmar(titulo: string, texto: string, botao = 'Apagar'): Promise<boolean> {
   return new Promise((resolve) => {
+    const terminar = (sim: boolean): void => {
+      dialogo.close();
+      dialogo.remove();
+      resolve(sim);
+    };
     const dialogo = h(
       'dialog',
-      { class: 'dialogo' },
+      { class: 'dialogo', oncancel: () => terminar(false) },
       h(
-        'form',
-        { method: 'dialog' },
+        'div',
+        { class: 'dialogo-corpo' },
         h('h2', {}, titulo),
         h('p', {}, texto),
         h(
           'div',
           { class: 'dialogo-botoes' },
-          h('button', { type: 'submit', class: 'botao', value: 'cancelar' }, 'Cancelar'),
-          h('button', { type: 'submit', class: 'botao botao-perigo', value: 'ok' }, botao),
+          h('button', { type: 'button', class: 'botao', autofocus: true, onclick: () => terminar(false) }, 'Cancelar'),
+          h('button', { type: 'button', class: 'botao botao-perigo', onclick: () => terminar(true) }, botao),
         ),
       ),
     );
-    dialogo.addEventListener('close', () => {
-      dialogo.remove();
-      resolve(dialogo.returnValue === 'ok');
-    });
     document.body.append(dialogo);
     dialogo.showModal();
   });

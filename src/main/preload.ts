@@ -7,8 +7,14 @@ const chamar =
   (...args: unknown[]) =>
     ipcRenderer.invoke(canal, ...args);
 
+/** Regista um ouvinte e devolve a função para o desligar. */
+const ouvir = (canal: string) => (callback: (dados: unknown) => void) => {
+  const ouvinte = (_evento: unknown, dados: unknown): void => callback(dados);
+  ipcRenderer.on(canal, ouvinte);
+  return () => ipcRenderer.removeListener(canal, ouvinte);
+};
+
 contextBridge.exposeInMainWorld('uatStudio', {
-  abrirAppPoc: chamar('browser:abrir-poc'),
   projeto: {
     atual: chamar('projeto:atual'),
     recentes: chamar('projeto:recentes'),
@@ -22,5 +28,12 @@ contextBridge.exposeInMainWorld('uatStudio', {
     listar: chamar('dados:listar'),
     guardar: chamar('dados:guardar'),
     apagar: chamar('dados:apagar'),
+  },
+  gravador: {
+    estado: chamar('gravador:estado'),
+    iniciar: chamar('gravador:iniciar'),
+    removerPasso: chamar('gravador:remover-passo'),
+    terminar: chamar('gravador:terminar'),
+    aoAtualizar: ouvir('gravador:atualizado'),
   },
 });

@@ -92,6 +92,32 @@ export interface Passo {
   };
   /** Para `guardar`: nome da variável onde fica o valor lido. */
   variavel?: string;
+  /** O valor é um segredo (por exemplo, uma password): nunca aparece em logs nem relatórios. */
+  secreto?: boolean;
+}
+
+/** O que a interface recebe sobre a gravação em curso. */
+export interface EstadoGravador {
+  ativo: boolean;
+  /** O browser ainda está aberto? (o utilizador pode tê-lo fechado) */
+  browserAberto: boolean;
+  aplicacaoNome: string;
+  bloco: Bloco | null;
+  /** Último aviso (por exemplo, um passo que não foi possível gravar). */
+  mensagem?: string;
+}
+
+export interface PedidoGravacao {
+  aplicacaoId: string;
+  /** Acrescentar passos a um bloco existente... */
+  blocoId?: string;
+  /** ...ou criar um bloco novo com este nome. */
+  nomeNovo?: string;
+  /** O bloco começa por abrir a aplicação. */
+  abrirAplicacao: boolean;
+  canal: 'msedge' | 'chrome';
+  /** O utilizador confirmou que quer mesmo gravar num ambiente de produção. */
+  confirmouProducao?: boolean;
 }
 
 export type TipoBloco = 'UI' | 'API' | 'EMAIL' | 'VERIFICACAO';

@@ -1,12 +1,27 @@
 // Processo principal do Electron: cria a janela e liga a interface ao resto.
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'node:path';
-import { abrirBrowser, fecharBrowser } from './browser';
-import { registarIpcProjeto } from './projeto/ipc';
+import {
+  aoMudarGravador,
+  estadoGravador,
+  iniciarGravacao,
+  removerPasso,
+  terminarGravacao,
+} from './gravador/gravador';
+import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
 import { correrSmoke } from './smoke';
+import { PedidoGravacao } from '../shared/modelo';
 
 const RAIZ = path.join(__dirname, '..', '..');
 const MODO_SMOKE = process.argv.includes('--smoke');
+
+if (MODO_SMOKE) {
+  // Nos testes automáticos a janela pode estar tapada ou o ecrã bloqueado:
+  // sem isto, o Chromium deixa de desenhar e os testes ficam à espera.
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+}
 
 function criarJanela(): BrowserWindow {
   const janela = new BrowserWindow({
@@ -28,14 +43,21 @@ function criarJanela(): BrowserWindow {
   return janela;
 }
 
-ipcMain.handle('browser:abrir-poc', () => abrirBrowser());
 registarIpcProjeto();
+
+ipcMain.handle('gravador:estado', () => estadoGravador());
+ipcMain.handle('gravador:iniciar', (_e, pedido: PedidoGravacao) => iniciarGravacao(pastaDoProjeto(), pedido));
+ipcMain.handle('gravador:remover-passo', (_e, passoId: string) => removerPasso(String(passoId)));
+ipcMain.handle('gravador:terminar', (_e, guardar: boolean) => terminarGravacao(Boolean(guardar)));
 
 void app.whenReady().then(() => {
   const janela = criarJanela();
+  aoMudarGravador((estado) => {
+    if (!janela.isDestroyed()) janela.webContents.send('gravador:atualizado', estado);
+  });
   if (MODO_SMOKE) void correrSmoke(janela, RAIZ);
 });
 
 app.on('window-all-closed', () => {
-  void fecharBrowser().finally(() => app.quit());
+  void terminarGravacao(false).finally(() => app.quit());
 });

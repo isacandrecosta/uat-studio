@@ -1,15 +1,17 @@
 // O que o preload expõe à interface (ver src/main/preload.ts).
-import type { Colecoes, EstadoProjeto, NomeColecao, ProjetoRecente } from '../shared/modelo';
+import type {
+  Bloco,
+  Colecoes,
+  EstadoGravador,
+  EstadoProjeto,
+  NomeColecao,
+  PedidoGravacao,
+  ProjetoRecente,
+} from '../shared/modelo';
 
 declare global {
-  interface ResultadoAbrirBrowser {
-    ok: boolean;
-    mensagem: string;
-  }
-
   interface Window {
     uatStudio: {
-      abrirAppPoc(): Promise<ResultadoAbrirBrowser>;
       projeto: {
         atual(): Promise<EstadoProjeto | null>;
         recentes(): Promise<ProjetoRecente[]>;
@@ -26,6 +28,15 @@ declare global {
           item: Omit<Colecoes[C], 'id'> & { id?: string },
         ): Promise<Colecoes[C]>;
         apagar(colecao: NomeColecao, id: string): Promise<void>;
+      };
+      gravador: {
+        estado(): Promise<EstadoGravador>;
+        iniciar(pedido: PedidoGravacao): Promise<EstadoGravador>;
+        removerPasso(passoId: string): Promise<EstadoGravador>;
+        /** Fecha o browser; com `guardar`, grava o bloco no projeto. */
+        terminar(guardar: boolean): Promise<Bloco | null>;
+        /** Devolve a função para deixar de ouvir. */
+        aoAtualizar(callback: (estado: EstadoGravador) => void): () => void;
       };
     };
   }
