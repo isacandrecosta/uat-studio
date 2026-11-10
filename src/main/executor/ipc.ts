@@ -2,7 +2,9 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { AmbitoRun, OpcoesRun } from '../../shared/modelo';
+import { AmbitoRun, Bloco, OpcoesRun } from '../../shared/modelo';
+import { testarBloco } from '../api/ambiente';
+import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from '../cofre';
 import { exportarCasos, importarCasos } from '../excel/casosExcel';
 import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
@@ -33,6 +35,12 @@ export function registarIpcExecucoes(): void {
     if (!destino.toLowerCase().endsWith('.png') || !fs.existsSync(destino)) return null;
     return `data:image/png;base64,${fs.readFileSync(destino).toString('base64')}`;
   });
+
+  // Blocos de API: teste individual e cofre de segredos (os valores nunca voltam para a interface).
+  ipcMain.handle('api:testar', (_e, bloco: Bloco, chaveCaso?: string) => testarBloco(pastaDoProjeto(), bloco, chaveCaso));
+  ipcMain.handle('cofre:definir', (_e, nome: string, valor: string) => definirSegredo(pastaDoProjeto(), String(nome), String(valor ?? '')));
+  ipcMain.handle('cofre:preenchidos', (_e, nomes: string[]) => segredosPreenchidos(pastaDoProjeto(), (nomes ?? []).map(String)));
+  ipcMain.handle('cofre:apagar-perfil', (_e, perfilId: string) => apagarSegredosDoPerfil(pastaDoProjeto(), String(perfilId)));
 
   ipcMain.handle('casos:importar', async (evento, jornadaId: string) => {
     const pasta = pastaDoProjeto();

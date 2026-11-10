@@ -4,12 +4,19 @@ import { app, BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { ChildProcess, spawn } from 'node:child_process';
 import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
+import { apagarSegredosDoPerfil, segredosPreenchidos } from './cofre';
+import * as repo from './projeto/repositorio';
 import { estadoRun } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { criarProjeto } from './projeto/ipc';
 
 type Passo = (janela: BrowserWindow) => Promise<void>;
+
+/** Servidor de teste (OAuth 2.0 + API), que vive FORA do projeto. Sem ele, o passo de API é saltado. */
+const SERVIDOR_TESTE = process.env.UAT_SERVIDOR_TESTE ?? path.resolve(__dirname, '..', '..', '..', 'uat-servidor-teste', 'servidor.mjs');
+let servidor: ChildProcess | null = null;
 
 /** Corre código na página e devolve o resultado. */
 export function naPagina<T>(janela: BrowserWindow, codigo: string): Promise<T> {
@@ -334,6 +341,152 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         fs.copyFileSync(path.join(pastaRun, 'relatorio.html'), path.join(raiz, 'out', 'smoke-relatorio.html'));
       },
     ],
+    [
+      'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
+      async (j) => {
+        if (!fs.existsSync(SERVIDOR_TESTE)) {
+          console.log('[smoke]   (saltado: o servidor de teste não está em ' + SERVIDOR_TESTE + ')');
+          return;
+        }
+        const porta = 4318;
+        const base = `http://localhost:${porta}`;
+        // O servidor de teste vive fora do projeto; aqui só é arrancado (o Electron também sabe correr scripts Node).
+        servidor = spawn(process.execPath, [SERVIDOR_TESTE, String(porta)], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: 'ignore' });
+        for (let i = 0; ; i++) {
+          if (await fetch(base).then((r) => r.ok, () => false)) break;
+          if (i > 60) throw new Error('O servidor de teste não arrancou.');
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const dialogo = (valores: Record<string, string>): Promise<void> =>
+          naPagina(
+            j,
+            `(() => { const d = document.querySelector('dialog[open]'); for (const [id, v] of Object.entries(${JSON.stringify(valores)})) d.querySelector('#form-' + CSS.escape(id)).value = v; d.querySelector('button[type=submit]').click(); })()`,
+          );
+        const escrever = (seletor: string, valor: string, evento = 'input'): Promise<void> =>
+          naPagina(
+            j,
+            `(() => { const e = document.querySelector(${JSON.stringify(seletor)}); e.value = ${JSON.stringify(valor)}; e.dispatchEvent(new Event(${JSON.stringify(evento)}, { bubbles: true })); })()`,
+          );
+
+        // 1. Aplicação do tipo API.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.getElementById('btn-nova-aplicacao')");
+        await naPagina(j, "document.getElementById('btn-nova-aplicacao').click()");
+        await esperar(j, "document.querySelector('dialog[open] #form-url')");
+        await dialogo({ nome: 'API de teste', tipo: 'API', url: base });
+        await esperar(j, "!document.querySelector('dialog[open]')");
+        confirmar(repo.existe(pasta, 'aplicacoes', 'api-de-teste'), 'A aplicação de API não foi criada.');
+
+        // 2. Perfil OAuth 2.0: o segredo vai para o cofre, nunca para o JSON do projeto.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"api\"]').click()");
+        await esperar(j, "document.getElementById('btn-novo-perfil')");
+        await naPagina(j, "document.getElementById('btn-novo-perfil').click()");
+        await esperar(j, "document.querySelector('dialog[open] #form-tipo')");
+        await dialogo({ nome: 'OAuth de teste', tipo: 'oauth2-cliente' });
+        await esperar(j, "document.querySelector('dialog[open] #form-urlToken')");
+        await dialogo({ urlToken: `${base}/oauth/token`, clientId: 'uat-cliente', 'segredo:clientSecret': 'segredo-de-teste' });
+        await esperar(j, "!document.querySelector('dialog[open]') && document.querySelector('.item-perfil')");
+        const perfilJson = fs.readFileSync(path.join(pasta, 'perfis', 'oauth-de-teste.json'), 'utf8');
+        confirmar(!perfilJson.includes('segredo-de-teste'), 'O segredo ficou escrito no JSON do perfil!');
+        confirmar(segredosPreenchidos(pasta, ['oauth-de-teste.clientSecret'])['oauth-de-teste.clientSecret'], 'O segredo não ficou no cofre.');
+        await esperar(j, "!document.querySelector('.item-perfil .aviso-pequeno')");
+
+        // 3. Bloco "Criar cliente": construir, testar e guardar.
+        repo.gravarVariaveis(pasta, [...repo.lerVariaveis(pasta), { nome: 'NifCliente', formula: 'NIF()' }]);
+        await naPagina(j, "document.getElementById('btn-novo-bloco-api').click()");
+        await esperar(j, "document.querySelector('dialog[open] input')");
+        await naPagina(j, "(() => { const d = document.querySelector('dialog[open]'); d.querySelector('input').value = 'Criar cliente'; d.querySelector('button[type=submit]').click(); })()");
+        await esperar(j, "document.getElementById('api-nome')?.value === 'Criar cliente'");
+        await escrever('#api-metodo', 'POST', 'change');
+        await escrever('#api-url', '/api/clientes');
+        await escrever('#api-perfil', 'oauth-de-teste', 'change');
+        await escrever('#api-tipo-corpo', 'json', 'change');
+        await escrever('#api-corpo', '{ "nome": "Cliente {TESTE}", "nif": "{NifCliente}", "email": "qa+{TESTE}@exemplo.pt" }');
+        await escrever('#v-esperado-0', '201');
+        await naPagina(j, "document.getElementById('btn-novo-guardar').click()");
+        await escrever('#g-variavel-0', 'ClienteId');
+        await escrever('#g-caminho-0', 'id');
+        await naPagina(j, "document.getElementById('btn-testar-api').click()");
+        await esperar(j, "document.getElementById('estado-http') || document.getElementById('erro-api')", 40_000);
+        const teste = await naPagina<string>(j, "document.getElementById('resultado-api').innerText");
+        confirmar(teste.includes('HTTP 201') && teste.includes('todas as verificações OK') && /\{ClienteId\} = \d+/.test(teste), `O teste do bloco não correu bem: ${teste.slice(0, 300)}`);
+        confirmar(teste.includes('Bearer ***') || !teste.includes('Bearer '), 'O token aparece no ecrã!');
+        await tirarPrint(j, raiz, 'api');
+        await naPagina(j, "document.getElementById('btn-guardar-api').click()");
+        const fimGuardar = Date.now() + 5_000;
+        while (repo.ler(pasta, 'blocos', 'criar-cliente').pedido?.metodo !== 'POST' && Date.now() < fimGuardar) await new Promise((r) => setTimeout(r, 100));
+        const guardado = repo.ler(pasta, 'blocos', 'criar-cliente');
+        confirmar(guardado.pedido?.metodo === 'POST' && guardado.pedido.guardar[0]?.variavel === 'ClienteId', 'O bloco de API não foi guardado como esperado.');
+
+        // 4. Jornada só de API (criar + consultar), com 2 casos; o 2.º tem um valor esperado errado de propósito.
+        repo.guardar(pasta, 'blocos', {
+          id: 'consultar-cliente',
+          nome: 'Consultar cliente',
+          tipo: 'API',
+          aplicacaoId: 'api-de-teste',
+          passos: [],
+          pedido: {
+            metodo: 'GET',
+            url: '/api/clientes/{ClienteId}',
+            parametros: [],
+            cabecalhos: [],
+            tipoCorpo: 'nenhum',
+            corpo: '',
+            perfilId: 'oauth-de-teste',
+            verificacoes: [
+              { id: 'v1', alvo: 'estado', operador: 'igual', esperado: '200' },
+              { id: 'v2', alvo: 'corpo', caminho: 'nif', operador: 'igual', esperado: '{NifCliente}' },
+              { id: 'v3', alvo: 'corpo', caminho: 'estado', operador: 'igual', esperado: '{EstadoEsperado}' },
+              { id: 'v4', alvo: 'corpo', caminho: 'saldo', operador: 'igual', esperado: '0,00' },
+            ],
+            guardar: [],
+          },
+        });
+        repo.guardar(pasta, 'jornadas', {
+          id: 'clientes-por-api',
+          nome: 'Clientes por API',
+          epicoId: 'simulacoes',
+          etiquetas: ['api'],
+          blocos: [
+            { id: 'b1', blocoId: 'criar-cliente' },
+            { id: 'b2', blocoId: 'consultar-cliente' },
+          ],
+        });
+        repo.guardar(pasta, 'casos', {
+          id: 'clientes-por-api',
+          colunas: ['EstadoEsperado'],
+          casos: [
+            { id: 'API001', nome: 'Cliente novo fica ativo', etiquetas: [], dados: { EstadoEsperado: 'Ativo' } },
+            { id: 'API002', nome: 'Valor esperado errado (tem de dar KO)', etiquetas: [], dados: { EstadoEsperado: 'Suspenso' } },
+          ],
+        });
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-correr') && document.querySelector('#run-ambito option[value=\"jornada:clientes-por-api\"]')");
+        await escrever('#run-ambito', 'jornada:clientes-por-api', 'change');
+        await naPagina(j, "document.getElementById('btn-correr').click()");
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"true\"]')", 60_000);
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"false\"]')", 120_000);
+        const run = estadoRun();
+        if (!run?.pasta) throw new Error('Não há execução.');
+        for (const caso of run.casos) {
+          console.log(`[smoke]   ${caso.casoId} ${caso.estado} ${caso.erro?.mensagem ?? caso.diferencas.map((d) => `${d.passo}: obtido ${d.obtido}`).join(' | ')}`);
+        }
+        confirmar(run.casos.map((c) => c.estado).join(',') === 'OK,KO', `Esperava OK,KO e obtive ${run.casos.map((c) => c.estado).join(',')}.`);
+        confirmar(run.casos[1].diferencas.length === 1 && run.casos[1].diferencas[0].obtido === 'Ativo', 'A diferença do caso API002 não é a esperada.');
+        const pastaApi = path.join(pasta, 'execucoes', run.pasta, 'casos', 'clientes-por-api', 'API001', 'api');
+        const pedidoGravado = fs.readFileSync(path.join(pastaApi, '01_criar-cliente.request.json'), 'utf8');
+        confirmar(pedidoGravado.includes('"Authorization": "Bearer ***"'), 'O pedido gravado devia ter o token mascarado.');
+        confirmar(fs.existsSync(path.join(pastaApi, '02_consultar-cliente.response.json')), 'Falta a resposta gravada do 2.º bloco.');
+        const tudo = fs.readdirSync(path.join(pasta, 'execucoes', run.pasta), { recursive: true, encoding: 'utf8' })
+          .filter((f) => /\.(json|log|jsonl|html)$/.test(f))
+          .map((f) => fs.readFileSync(path.join(pasta, 'execucoes', run.pasta ?? '', f), 'utf8'))
+          .join('\n');
+        confirmar(!tudo.includes('segredo-de-teste'), 'O client secret aparece nos ficheiros da execução!');
+        // Não deixar o segredo de teste no cofre deste PC.
+        apagarSegredosDoPerfil(pasta, 'oauth-de-teste');
+      },
+    ],
   ];
 
   try {
@@ -348,6 +501,7 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
     await tirarPrint(janela, raiz, 'erro');
   } finally {
     await terminarGravacao(false);
+    servidor?.kill();
     fs.rmSync(pastaProjeto, { recursive: true, force: true });
     app.exit(codigo);
   }

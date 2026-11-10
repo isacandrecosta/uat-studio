@@ -15,10 +15,12 @@ import {
   Passo,
   RegistoPasso,
   ResultadoCaso,
+  PerfilAutenticacao,
   Valor,
   VariavelCalculada,
 } from '../../shared/modelo';
-import { avaliarFormula, ErroFormula } from '../../shared/formulas';
+import { avaliarFormula, ErroFormula, preencherTexto } from '../../shared/formulas';
+import { AmbienteApi, ErroApi, escaparJson, executarBlocoApi } from '../api/pedidos';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, ErroElemento } from '../motor/localizar';
 import { criarSlug } from '../projeto/repositorio';
@@ -37,6 +39,10 @@ export interface PedidoCaso {
   /** Tempo máximo de cada passo. */
   limiteMs: number;
   trace: boolean;
+  /** Perfis de autenticação dos blocos de API. */
+  perfis: Map<string, PerfilAutenticacao>;
+  /** Como fazer pedidos HTTP e ler segredos (partilhado por todos os casos da execução, para reutilizar tokens). */
+  api: AmbienteApi;
   /** Variáveis calculadas por fórmula (do projeto). */
   calculadas: VariavelCalculada[];
   /** Próximo valor de um contador persistente ({CONTADOR:nome}). */
@@ -83,7 +89,7 @@ class MonitorDePedidos {
 
 /** Transforma um erro técnico numa frase simples. */
 export function explicarErro(erro: unknown, limiteMs: number): string {
-  if (erro instanceof ErroElemento || erro instanceof ErroAcao || erro instanceof ErroDados) return erro.message;
+  if (erro instanceof ErroElemento || erro instanceof ErroAcao || erro instanceof ErroDados || erro instanceof ErroApi) return erro.message;
   const texto = erro instanceof Error ? erro.message.split('\n')[0] : String(erro);
   const rede = /net::(ERR_[A-Z_]+)/.exec(texto)?.[1];
   if (rede) {
@@ -185,17 +191,37 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     }
   };
 
-  /** Resolve o valor de um passo, tendo em conta os parâmetros do bloco nesta jornada. */
-  const resolver = (valor: Valor | undefined, item: BlocoDaJornada, onde = 'passo'): { texto: string; deVariavel: boolean } => {
-    if (!valor) return { texto: '', deVariavel: false };
-    if (valor.tipo === 'fixo') return { texto: valor.valor, deVariavel: false };
-    // Dentro do bloco, cada variável pode ter sido trocada por um parâmetro da jornada.
-    const noBloco = (nome: string): string | undefined => {
+  /** Dentro de um bloco, cada variável pode ter sido trocada por um parâmetro da jornada. */
+  const procurarNoBloco =
+    (item: BlocoDaJornada) =>
+    (nome: string): string | undefined => {
       const troca = item.parametros?.[nome];
       if (!troca) return procurar(nome);
       if (troca.tipo === 'variavel') return procurar(troca.nome);
       return resolver(troca, { ...item, parametros: undefined }, `parâmetro {${nome}}`).texto;
     };
+
+  /** Troca as {variáveis} de um texto (endereços, cabeçalhos e corpos dos pedidos de API). */
+  const preencherNoBloco =
+    (item: BlocoDaJornada) =>
+    (texto: string, paraJson?: boolean): string => {
+      try {
+        return preencherTexto(
+          texto,
+          { variavel: procurarNoBloco(item), teste: caso.id, run: pedido.runId, agora: new Date(), contador: pedido.proximoContador, aleatorio: Math.random },
+          paraJson ? escaparJson : undefined,
+        );
+      } catch (erro) {
+        if (erro instanceof ErroFormula) throw new ErroDados(erro.message);
+        throw erro;
+      }
+    };
+
+  /** Resolve o valor de um passo, tendo em conta os parâmetros do bloco nesta jornada. */
+  const resolver = (valor: Valor | undefined, item: BlocoDaJornada, onde = 'passo'): { texto: string; deVariavel: boolean } => {
+    if (!valor) return { texto: '', deVariavel: false };
+    if (valor.tipo === 'fixo') return { texto: valor.valor, deVariavel: false };
+    const noBloco = procurarNoBloco(item);
     if (valor.tipo === 'variavel') {
       const troca = item.parametros?.[valor.nome];
       const texto = noBloco(valor.nome);
@@ -248,10 +274,47 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       const bloco = pedido.blocos.get(item.blocoId);
       if (!bloco) throw new ErroDados(`O bloco "${item.blocoId}" já não existe.`);
       blocoAtual = bloco.nome;
-      if (bloco.tipo !== 'UI') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
+      passoAtual = '';
+      if (bloco.tipo !== 'UI' && bloco.tipo !== 'API') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
       const aplicacao = bloco.aplicacaoId ? pedido.aplicacoes.get(bloco.aplicacaoId) : undefined;
       escrever(`Bloco ${indice + 1}: ${bloco.nome}`);
       evento({ tipo: 'bloco-inicio', bloco: bloco.nome });
+
+      if (bloco.tipo === 'API') {
+        if (pedido.devePararAgora()) throw new Parado();
+        const definicao = bloco.pedido;
+        if (!definicao) throw new ErroDados(`O bloco "${bloco.nome}" não tem um pedido definido.`);
+        passoAtual = `${definicao.metodo} ${definicao.url}`;
+        resultado.passoAtual = `${bloco.nome}: ${passoAtual}`;
+        pedido.aoProgredir(resultado);
+        const t0 = Date.now();
+        const feito = await executarBlocoApi(
+          {
+            bloco,
+            urlBase: aplicacao?.urls[pedido.ambiente.id],
+            perfil: definicao.perfilId ? pedido.perfis.get(definicao.perfilId) : undefined,
+            preencher: preencherNoBloco(item),
+          },
+          pedido.api,
+        );
+        // Evidências do pedido e da resposta (com os segredos já mascarados).
+        const base = `${String(indice + 1).padStart(2, '0')}_${criarSlug(bloco.nome)}`;
+        fs.mkdirSync(path.join(pedido.pasta, 'api'), { recursive: true });
+        fs.writeFileSync(path.join(pedido.pasta, 'api', `${base}.request.json`), `${JSON.stringify(feito.pedido, null, 2)}\n`, 'utf8');
+        fs.writeFileSync(path.join(pedido.pasta, 'api', `${base}.response.json`), `${JSON.stringify(feito.resposta, null, 2)}\n`, 'utf8');
+        resultado.evidencias?.push(`api/${base}.request.json`, `api/${base}.response.json`);
+        registar(bloco.nome, `${feito.pedido.metodo} ${feito.pedido.url}`, 'ok', Date.now() - t0, `HTTP ${feito.resposta.estado} em ${feito.resposta.tempoMs} ms`);
+        for (const v of feito.verificacoes) {
+          if (!v.ok) resultado.diferencas.push({ bloco: bloco.nome, passo: `Verificar: ${v.descricao}`, esperado: v.esperado, obtido: v.obtido });
+          registar(bloco.nome, `Verificar: ${v.descricao}`, v.ok ? 'ok' : 'ko', 0, v.ok ? undefined : `obtido "${v.obtido}"`);
+        }
+        for (const [nome, valor] of Object.entries(feito.guardadas)) {
+          variaveis[nome] = valor;
+          resultado.variaveis[nome] = valor;
+          registar(bloco.nome, `Guardar {${nome}}`, 'ok', 0, `"${valor}"`);
+        }
+        continue;
+      }
 
       // Blocos com segredos (por exemplo, login) correm sem trace, para a password não ficar gravada.
       const temSegredos = bloco.passos.some((p) => p.secreto);
@@ -416,7 +479,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       resultado.erro = { mensagem, bloco: blocoAtual, passo: passoAtual, porExecutar };
       registar(blocoAtual, passoAtual || 'Preparar o caso', 'erro', 0, mensagem);
       if (porExecutar.length > 0) escrever(`Blocos por executar: ${porExecutar.join(', ')}`);
-      if (!(erro instanceof ErroElemento || erro instanceof ErroAcao || erro instanceof ErroDados)) {
+      if (!(erro instanceof ErroElemento || erro instanceof ErroAcao || erro instanceof ErroDados || erro instanceof ErroApi)) {
         const tecnico = erro instanceof Error ? erro.message : String(erro);
         fs.appendFileSync(ficheiroLog, `  Detalhe técnico: ${tecnico.replace(/\n/g, '\n    ')}\n`, 'utf8');
       }

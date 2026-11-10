@@ -81,6 +81,71 @@ export function pedirTexto(titulo: string, rotulo: string, inicial = ''): Promis
   });
 }
 
+export interface CampoFormulario {
+  id: string;
+  rotulo: string;
+  /** `segredo` mostra pontos em vez do texto e nunca vem preenchido. */
+  tipo?: 'texto' | 'escolha' | 'segredo';
+  opcoes?: Array<{ valor: string; texto: string }>;
+  valor?: string;
+  ajuda?: string;
+  obrigatorio?: boolean;
+}
+
+/** Janela com vários campos. Devolve os valores por id, ou null se o utilizador cancelar. */
+export function pedirFormulario(titulo: string, campos: CampoFormulario[], botao = 'Guardar'): Promise<Record<string, string> | null> {
+  return new Promise((resolve) => {
+    const entradas = new Map<string, HTMLInputElement | HTMLSelectElement>();
+    const linhas = campos.map((campo) => {
+      const id = `form-${campo.id}`;
+      const entrada =
+        campo.tipo === 'escolha'
+          ? h('select', { id, class: 'campo' }, (campo.opcoes ?? []).map((o) => h('option', { value: o.valor, selected: o.valor === campo.valor }, o.texto)))
+          : h('input', {
+              id,
+              class: 'campo',
+              type: campo.tipo === 'segredo' ? 'password' : 'text',
+              value: campo.tipo === 'segredo' ? '' : (campo.valor ?? ''),
+              required: campo.obrigatorio,
+              autocomplete: 'off',
+              spellcheck: 'false',
+            });
+      entradas.set(campo.id, entrada);
+      return h('div', { class: 'campo-grupo' }, h('label', { for: id }, campo.rotulo), entrada, campo.ajuda && h('p', { class: 'ajuda-campo' }, campo.ajuda));
+    });
+    const terminar = (valores: Record<string, string> | null): void => {
+      dialogo.close();
+      dialogo.remove();
+      resolve(valores);
+    };
+    const dialogo = h(
+      'dialog',
+      { class: 'dialogo dialogo-formulario', oncancel: () => terminar(null) },
+      h(
+        'form',
+        {
+          onsubmit: (evento: Event) => {
+            evento.preventDefault();
+            const valores: Record<string, string> = {};
+            for (const [id, entrada] of entradas) valores[id] = entrada.value;
+            terminar(valores);
+          },
+        },
+        h('h2', {}, titulo),
+        linhas,
+        h(
+          'div',
+          { class: 'dialogo-botoes' },
+          h('button', { type: 'button', class: 'botao', onclick: () => terminar(null) }, 'Cancelar'),
+          h('button', { type: 'submit', class: 'botao botao-primario' }, botao),
+        ),
+      ),
+    );
+    document.body.append(dialogo);
+    dialogo.showModal();
+  });
+}
+
 /** Janela "Ver código (.ts)": mostra o código só para leitura, com botão para copiar. */
 export function mostrarCodigo(titulo: string, codigo: string): void {
   const fechar = (): void => {

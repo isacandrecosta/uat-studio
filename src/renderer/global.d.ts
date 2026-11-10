@@ -10,6 +10,7 @@ import type {
   NomeColecao,
   PedidoGravacao,
   ProjetoRecente,
+  ResultadoApi,
   VariavelCalculada,
 } from '../shared/modelo';
 
@@ -64,6 +65,17 @@ declare global {
         ler(): Promise<Record<string, number>>;
         /** `null` apaga o contador. */
         definir(nome: string, valor: number | null): Promise<Record<string, number>>;
+      };
+      api: {
+        /** Executa um bloco de API sozinho, com os dados de um caso de exemplo (`idDaJornada/idDoCaso`). */
+        testar(bloco: Bloco, chaveCaso?: string): Promise<ResultadoApi>;
+      };
+      /** Cofre de segredos: dá para guardar e saber se está preenchido, mas nunca para ler. */
+      cofre: {
+        /** Um valor vazio apaga o segredo. */
+        definir(nome: string, valor: string): Promise<void>;
+        preenchidos(nomes: string[]): Promise<Record<string, boolean>>;
+        apagarPerfil(perfilId: string): Promise<void>;
       };
       casos: {
         /** Pede um Excel e substitui os casos da jornada. null se o utilizador cancelar. */

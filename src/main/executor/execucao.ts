@@ -12,6 +12,7 @@ import {
   OpcoesRun,
   ResultadoCaso,
 } from '../../shared/modelo';
+import { criarAmbienteApi } from '../api/ambiente';
 import * as repo from '../projeto/repositorio';
 import { correrCaso } from './correrCaso';
 import { escreverRelatorios } from './relatorios';
@@ -162,6 +163,9 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   const aplicacoes = new Map(repo.listar(pasta, 'aplicacoes').map((a) => [a.id, a]));
   const blocos = new Map<string, Bloco>(repo.listar(pasta, 'blocos').map((b) => [b.id, b]));
   const calculadas = repo.lerVariaveis(pasta);
+  const perfis = new Map(repo.listar(pasta, 'perfis').map((p) => [p.id, p]));
+  // Um só ambiente de API por execução: os tokens OAuth são pedidos uma vez e reutilizados por todos os casos.
+  const api = criarAmbienteApi(pasta);
 
   void (async () => {
     let browser: Browser | null = null;
@@ -194,6 +198,8 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             limiteMs: 15_000,
             trace: true,
             calculadas,
+            perfis,
+            api,
             proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
             aoProgredir: (parcial) => {
               run.casos[indice] = { ...parcial, pasta: relativa };

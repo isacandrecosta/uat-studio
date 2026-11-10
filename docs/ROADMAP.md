@@ -1,4 +1,4 @@
-﻿# Roadmap
+# Roadmap
 
 Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sessão, atualizar "Estado atual" no `CLAUDE.md` e assinalar aqui o que ficou feito.
 
@@ -15,8 +15,9 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 
 ## Fase 2: dados e API
 - [x] Motor de fórmulas (decimal exato, arredondamento selecionável), marcadores, contadores persistentes e geradores.
-- [ ] Blocos de API: construtor de pedidos, perfis OAuth 2.0 / API Key / Basic / mTLS, verificações, guardar da resposta, teste individual, importar cURL/OpenAPI.
-- [ ] Cofre local de segredos; segredos fora do trace (desligado ou limpo no login e nos pedidos de token).
+- [x] Blocos de API: construtor de pedidos, perfis OAuth 2.0 (client credentials, password, renovação) / API Key / Basic / Bearer, verificações, guardar da resposta, teste individual.
+- [ ] Blocos de API, o que falta: certificado de cliente (mTLS), OAuth Authorization Code + PKCE, verificações em XML (XPath), SOAP, importar cURL/OpenAPI/Postman, código equivalente no "Ver código".
+- [x] Cofre local de segredos; segredos fora do trace (desligado ou limpo no login e nos pedidos de token).
 - [ ] Passos e blocos condicionais ("só se `{Produto}` = X").
 - [ ] Bloco "esperar até" e ação "encontrar linha na tabela".
 - [ ] Blocos de preparação e limpeza por API.

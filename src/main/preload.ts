@@ -54,6 +54,14 @@ contextBridge.exposeInMainWorld('uatStudio', {
     ler: chamar('contadores:ler'),
     definir: chamar('contadores:definir'),
   },
+  api: {
+    testar: chamar('api:testar'),
+  },
+  cofre: {
+    definir: chamar('cofre:definir'),
+    preenchidos: chamar('cofre:preenchidos'),
+    apagarPerfil: chamar('cofre:apagar-perfil'),
+  },
   casos: {
     importar: chamar('casos:importar'),
     exportar: chamar('casos:exportar'),

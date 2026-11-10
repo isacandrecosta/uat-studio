@@ -1,7 +1,7 @@
 // Ecrã Jornadas: épicos com as suas jornadas, blocos partilhados e aplicações.
 import type { Contexto } from '../app.js';
 import { codigoDoBloco } from '../../shared/codigo.js';
-import { confirmar, h, mostrarCodigo, pedirTexto, plural } from '../dom.js';
+import { confirmar, h, mostrarCodigo, pedirFormulario, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -172,11 +172,44 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
 
   // Aplicações
   const ambiente = estado.projeto.ambienteAtivo;
+  const nomeAmbiente = estado.projeto.ambientes.find((a) => a.id === ambiente)?.nome ?? ambiente;
+  const CORES: Record<string, string> = { FO: '#2f6bed', BO: '#e07b00', API: '#1a8f4c', EMAIL: '#7b4bd1' };
+  /** Criar ou alterar uma aplicação (o endereço é o do ambiente ativo). */
+  const editarAplicacao = async (existente?: (typeof aplicacoes)[number]): Promise<void> => {
+    const valores = await pedirFormulario(existente ? `Aplicação "${existente.nome}"` : 'Nova aplicação', [
+      { id: 'nome', rotulo: 'Nome', valor: existente?.nome, obrigatorio: true, ajuda: 'Por exemplo: Portal Front Office' },
+      {
+        id: 'tipo',
+        rotulo: 'Tipo',
+        tipo: 'escolha',
+        valor: existente?.tipo ?? 'FO',
+        opcoes: [
+          { valor: 'FO', texto: 'Front Office (browser)' },
+          { valor: 'BO', texto: 'Backoffice (browser)' },
+          { valor: 'API', texto: 'API' },
+          { valor: 'EMAIL', texto: 'Caixa de email' },
+        ],
+      },
+      { id: 'url', rotulo: `Endereço no ambiente ${nomeAmbiente}`, valor: existente?.urls[ambiente], ajuda: 'Por exemplo: https://qa.exemplo.pt/Portal. Cada ambiente tem o seu endereço.' },
+    ]);
+    if (!valores?.nome.trim()) return;
+    const tipo = valores.tipo as (typeof aplicacoes)[number]['tipo'];
+    const urls = { ...(existente?.urls ?? {}) };
+    if (valores.url.trim()) urls[ambiente] = valores.url.trim();
+    else delete urls[ambiente];
+    await dados.guardar('aplicacoes', { ...(existente ? { id: existente.id } : {}), nome: valores.nome.trim(), tipo, cor: CORES[tipo], urls });
+    await atualizar();
+  };
   corpo.append(
     h(
       'section',
       { class: 'cartao' },
-      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Aplicações')),
+      h(
+        'header',
+        { class: 'cartao-topo' },
+        h('h2', {}, 'Aplicações'),
+        h('button', { id: 'btn-nova-aplicacao', type: 'button', class: 'botao', onclick: () => void editarAplicacao() }, 'Nova aplicação'),
+      ),
       aplicacoes.length === 0
         ? h('p', { class: 'suave' }, 'Ainda não há aplicações (os sistemas a testar).')
         : h(
@@ -187,7 +220,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                 'li',
                 { class: 'item' },
                 h('span', { class: 'tipo-bloco', 'data-tipo': a.tipo }, a.tipo),
-                h('span', { class: 'item-nome' }, a.nome),
+                h('button', { type: 'button', class: 'ligacao item-nome', title: 'Alterar a aplicação', onclick: () => void editarAplicacao(a) }, a.nome),
                 h('span', { class: 'item-meta item-url' }, a.urls[ambiente] ?? 'Sem endereço neste ambiente'),
               ),
             ),

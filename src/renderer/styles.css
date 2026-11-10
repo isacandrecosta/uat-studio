@@ -445,3 +445,33 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .ajuda-formulas dt, .ajuda-formulas dd { margin: 0; }
 .ajuda-formulas dd { color: var(--texto-suave); }
 .erro-campo { grid-column: 1 / -1; margin: 0; color: var(--erro); font-size: 12px; }
+/* Blocos de API */
+.editor-api { display: flex !important; flex-direction: column; gap: 12px; align-items: stretch !important; }
+.grelha-api { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.grelha-api.duas { grid-template-columns: 1fr 1fr; }
+.linha-pedido { display: flex; gap: 8px; }
+.linha-pedido select { width: 120px; flex-shrink: 0; font-weight: 700; }
+.campo-codigo { font-family: Consolas, monospace; font-size: 13px; resize: vertical; }
+.ajuda-campo { margin: 0; color: var(--texto-suave); font-size: 12px; overflow-wrap: anywhere; }
+.titulo-linhas { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.titulo-linhas h3 { margin: 0; }
+.linhas-api { display: flex; flex-direction: column; gap: 6px; }
+.linha-api { display: grid; grid-template-columns: 170px 1fr 160px 1fr auto; gap: 8px; align-items: center; }
+.linha-api.linha-guardar { grid-template-columns: 1fr 1fr auto; }
+.linha-testar { display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--borda); }
+.linha-testar .campo { width: auto; max-width: 320px; }
+.resultado-api { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--borda); border-left: 4px solid var(--ok); border-radius: 8px; }
+.resultado-api[data-estado="ko"] { border-left-color: var(--erro); }
+.resultado-api .codigo { max-height: 260px; }
+.resultado-api summary { cursor: pointer; color: var(--texto-suave); }
+.log-passos.sem-numeros { padding-left: 0; list-style: none; }
+.metodo { min-width: 54px; padding: 2px 6px; border-radius: 5px; background: var(--neutro-fundo); color: var(--texto); font-size: 11px; font-weight: 700; text-align: center; }
+.metodo[data-metodo="GET"] { background: var(--ok-fundo); color: var(--ok); }
+.metodo[data-metodo="POST"] { background: #e7efff; color: var(--primario-escuro); }
+.metodo[data-metodo="DELETE"] { background: var(--erro-fundo); color: var(--erro); }
+.metodo[data-metodo="PUT"], .metodo[data-metodo="PATCH"] { background: var(--aviso-fundo); color: var(--aviso); }
+.ligacao.atual { color: var(--texto); text-decoration: underline; }
+.aviso-pequeno { color: var(--aviso); font-size: 12px; font-weight: 600; }
+.item-perfil { align-items: flex-start; }
+.dialogo-formulario { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.dialogo .campo-grupo label { display: block; }
