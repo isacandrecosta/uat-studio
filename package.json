@@ -1,0 +1,25 @@
+{
+  "name": "uat-studio",
+  "version": "0.1.0",
+  "description": "Aplicação desktop portátil, offline e sem IA, para criar e correr testes UAT de apps OutSystems.",
+  "private": true,
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "smoke": "npm run build && electron . --smoke"
+  },
+  "author": "isacandrecosta",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "playwright-core": "^1.65.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "electron": "^45.2.3",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "electron@45.2.3": true
+  }
+}

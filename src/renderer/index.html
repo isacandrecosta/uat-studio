@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <title>UAT Studio</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="lateral">
+    <div class="marca">
+      <span class="marca-logo">U</span>
+      <span class="marca-nome">UAT Studio</span>
+    </div>
+
+    <nav class="menu" id="menu" aria-label="Ecrãs"></nav>
+
+    <div class="lateral-fundo">
+      <button id="btn-abrir-poc" class="botao botao-primario" type="button">Abrir Edge na app POC</button>
+      <p id="estado-browser" class="estado" role="status"></p>
+    </div>
+  </aside>
+
+  <main class="conteudo">
+    <header class="cabecalho">
+      <h1 id="titulo-ecra"></h1>
+      <p id="descricao-ecra"></p>
+    </header>
+    <section class="vazio">
+      <p class="vazio-titulo">Ainda não há nada aqui</p>
+      <p id="vazio-texto"></p>
+    </section>
+  </main>
+
+  <script src="../../dist/renderer/renderer.js"></script>
+</body>
+</html>

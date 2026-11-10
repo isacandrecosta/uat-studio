@@ -3,7 +3,7 @@
 Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sessão, atualizar "Estado atual" no `CLAUDE.md` e assinalar aqui o que ficou feito.
 
 ## Fase 1: núcleo (gravar, compor, correr)
-- [ ] 1. Esqueleto Electron + TypeScript (janela com o menu lateral dos 7 ecrãs, vazios) e um botão que abre o Edge com Playwright na app POC.
+- [x] 1. Esqueleto Electron + TypeScript (janela com o menu lateral dos 7 ecrãs, vazios) e um botão que abre o Edge com Playwright na app POC.
 - [ ] 2. **Mini .exe de diagnóstico** para levar ao PC da empresa: abre o Edge e mostra verificações a verde/vermelho (arranque do .exe, controlo do Edge, proxy, certificados). Se bloquear, pedir a IT um ambiente aprovado (ver ESPECIFICACAO, secção 12).
 - [ ] 3. Modelo de dados em JSON na pasta do projeto: aplicações, épicos, jornadas, blocos, casos. Um ficheiro por item, etiquetas nos casos e tipo de ambiente (DEV/QA/PRD). Ecrã "escolher/criar projeto".
 - [ ] 4. Gravador v1: realçar o elemento sob o rato, popup de ação (escrever, escolher, marcar, clicar, verificar, guardar variável), vários localizadores, passos gravados num bloco.

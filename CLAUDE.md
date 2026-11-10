@@ -50,4 +50,9 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
 - Achado real: `Round()` do OutSystems arredonda "ao par" (86,405 → 86,40).
 
 ## Estado atual
-- 2026-11-10: Repositório criado com documentação (CLAUDE.md, docs/). Especificação alargada (secções 8 a 12: valores financeiros, variantes e roles, integrações, facilidade de uso, segurança e PC da empresa) e roadmap reordenado (novo passo 2: mini .exe de diagnóstico). **Ainda sem código.** Próximo passo: Fase 1, passo 1 do `docs/ROADMAP.md` (esqueleto Electron + abrir o Edge com Playwright).
+- 2026-11-10: Repositório criado com documentação (CLAUDE.md, docs/). Especificação alargada (secções 8 a 12) e roadmap reordenado (novo passo 2: mini .exe de diagnóstico).
+- 2026-11-10: **Fase 1, passo 1 feito.** Esqueleto Electron 45 + TypeScript 7 + `playwright-core`: janela com menu lateral dos 7 ecrãs (vazios) e botão "Abrir Edge na app POC" (testado: abre o Edge e carrega a app POC).
+  - Estrutura: `src/main/` (`main.ts` janela e IPC, `preload.ts` ponte segura, `browser.ts` Playwright) e `src/renderer/` (`index.html`, `styles.css`, `renderer.ts`, `global.d.ts`). O `tsc` compila para `dist/`; o HTML carrega `dist/renderer/renderer.js`.
+  - Comandos: `npm.cmd start` (compila e abre a app) e `npm.cmd run smoke` (teste automático: abre a janela, clica no botão, confirma o Edge e fecha; print em `out/smoke-janela.png`).
+  - Armadilhas: o npm 11 não corre o script de instalação do Electron sem aprovação (já aprovado em `allowScripts` no `package.json`; se faltar `node_modules\electron\dist\electron.exe`, correr `node node_modules\electron\install.js`). O `renderer.ts` tem de ficar sem `import`/`export` (é carregado como script simples; por isso `moduleDetection: legacy` no `tsconfig.json`).
+  - Próximo passo: Fase 1, passo 2 do `docs/ROADMAP.md` (mini .exe de diagnóstico com electron-builder).
