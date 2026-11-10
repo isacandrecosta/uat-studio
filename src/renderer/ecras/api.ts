@@ -13,7 +13,8 @@ import {
   type VerificacaoApi,
 } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
-import { confirmar, h, mensagemDeErro, pedirFormulario, pedirTexto, type CampoFormulario } from '../dom.js';
+import { codigoDoBloco } from '../../shared/codigo.js';
+import { confirmar, h, mensagemDeErro, mostrarCodigo, pedirFormulario, pedirTexto, type CampoFormulario } from '../dom.js';
 
 const NOMES_PERFIL: Record<TipoPerfil, string> = {
   'oauth2-cliente': 'OAuth 2.0 (client credentials)',
@@ -449,6 +450,16 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
               },
             },
             'Apagar bloco',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao',
+              id: 'btn-codigo-api',
+              onclick: () => mostrarCodigo(`Código do bloco "${bloco.nome}"`, codigoDoBloco(bloco, aplicacoes, estado.projeto.ambienteAtivo)),
+            },
+            'Ver código (.ts)',
           ),
           h(
             'button',

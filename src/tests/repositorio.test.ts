@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -55,7 +55,7 @@ test('projeto de exemplo fica completo e coerente', () => {
   criarExemplo(pasta);
   const estado = repo.obterEstado(pasta);
   assert.equal(estado.projeto.ambienteAtivo, 'dev');
-  assert.deepEqual(estado.contagens, { aplicacoes: 2, epicos: 1, jornadas: 1, blocos: 1, casos: 1, perfis: 0 });
+  assert.deepEqual(estado.contagens, { aplicacoes: 3, epicos: 1, jornadas: 2, blocos: 3, casos: 2, perfis: 0 });
 
   const jornada = repo.ler(pasta, 'jornadas', 'simular-credito');
   assert.ok(repo.existe(pasta, 'epicos', jornada.epicoId));

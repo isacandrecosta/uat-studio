@@ -45,8 +45,9 @@ test('planear escolhe os casos por jornada, ids e etiquetas', () => {
   const pasta = pastaTemporaria();
   repo.criarProjeto(pasta, 'P');
   criarExemplo(pasta);
-  assert.equal(planear(pasta, {}).itens.length, 6);
-  assert.equal(planear(pasta, {}).nome, 'Simular crédito');
+  assert.equal(planear(pasta, {}).itens.length, 8);
+  assert.equal(planear(pasta, {}).nome, 'Tudo');
+  assert.equal(planear(pasta, { jornadaIds: ['simular-credito'] }).nome, 'Simular crédito');
   assert.equal(planear(pasta, { epicoIds: ['outro'] }).itens.length, 0);
   assert.deepEqual(
     planear(pasta, { chavesCasos: ['simular-credito/TC0002', 'simular-credito/TC0005'] }).itens.map((i) => i.caso.id),

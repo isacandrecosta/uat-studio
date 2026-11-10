@@ -97,7 +97,7 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await esperar(j, "document.getElementById('btn-gravar')");
         await naPagina(
           j,
-          "(() => { document.getElementById('gravar-nome').value = 'Simulação gravada'; document.getElementById('btn-gravar').click(); })()",
+          "(() => { document.getElementById('gravar-aplicacao').value = 'simulador'; document.getElementById('gravar-nome').value = 'Simulação gravada'; document.getElementById('btn-gravar').click(); })()",
         );
         await esperar(j, "document.getElementById('gravacao-ativa')", 120_000);
         const p = paginaDoGravador();
@@ -342,6 +342,36 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'jornada entre 2 portais: simular no Front Office, validar no Backoffice e confirmar pela API',
+      async (j) => {
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('[data-jornada=\"simular-e-validar\"]')");
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-correr') && document.querySelector('#run-ambito option[value=\"jornada:simular-e-validar\"]')");
+        await naPagina(
+          j,
+          "(() => { const a = document.getElementById('run-ambito'); a.value = 'jornada:simular-e-validar'; a.dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('run-paralelo').value = '2'; document.getElementById('btn-correr').click(); })()",
+        );
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"true\"]')", 60_000);
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"false\"]')", 300_000);
+        const run = estadoRun();
+        if (!run?.pasta) throw new Error('Não há execução.');
+        for (const caso of run.casos) {
+          const detalhe = caso.erro
+            ? `${caso.erro.bloco} › ${caso.erro.passo}: ${caso.erro.mensagem}`
+            : caso.diferencas.map((d) => `${d.bloco} › ${d.passo}: esperado ${d.esperado}, obtido ${d.obtido}`).join(' | ');
+          console.log(`[smoke]   ${caso.casoId} ${caso.estado} (${(caso.duracaoMs / 1000).toFixed(1)} s) ${detalhe}`);
+        }
+        confirmar(run.casos.length === 2 && run.casos.every((c) => c.estado === 'OK'), 'Os 2 casos da jornada entre portais deviam dar OK.');
+        const pastaCaso = path.join(pastaProjeto, 'exemplo', 'execucoes', run.pasta, 'casos', 'simular-e-validar', 'BO0001');
+        for (const esperado of ['01_simular-credito.png', '02_validar-pedido-no-backoffice.png', path.join('api', '03_consultar-pedido-pela-api.response.json')]) {
+          confirmar(fs.existsSync(path.join(pastaCaso, esperado)), `Falta a evidência ${esperado}.`);
+        }
+        fs.copyFileSync(path.join(pastaCaso, '02_validar-pedido-no-backoffice.png'), path.join(raiz, 'out', 'smoke-backoffice.png'));
+        fs.copyFileSync(path.join(pastaCaso, 'caso.log'), path.join(raiz, 'out', 'smoke-caso-2-portais.log'));
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {
@@ -499,6 +529,13 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
   } catch (erro) {
     console.log(`[smoke] ERRO: ${erro instanceof Error ? erro.message : String(erro)}`);
     await tirarPrint(janela, raiz, 'erro');
+    // Se o erro foi durante a gravação, guarda também o que o browser estava a mostrar.
+    const pagina = paginaDoGravador();
+    if (pagina) {
+      await pagina.screenshot({ path: path.join(raiz, 'out', 'smoke-erro-browser.png') }).catch(() => undefined);
+      const texto = await pagina.evaluate(() => document.body.innerText.slice(0, 600)).catch(() => '');
+      console.log(`[smoke] O browser mostrava (${pagina.url()}): ${texto.replace(/\s+/g, ' ')}`);
+    }
   } finally {
     await terminarGravacao(false);
     servidor?.kill();

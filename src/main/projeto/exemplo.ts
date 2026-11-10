@@ -164,4 +164,91 @@ export function criarExemplo(pasta: string): void {
     colunas: Object.keys(casos[0].dados),
     casos,
   });
+
+  criarExemploDoisPortais(pasta, [cp12, ca48]);
+}
+
+/**
+ * Jornada que atravessa 3 aplicações: simular no Front Office → validar no Backoffice → confirmar pela API.
+ * O número do pedido é guardado no 1.º bloco ({PedidoId}) e usado nos seguintes.
+ */
+function criarExemploDoisPortais(pasta: string, variantes: Variante[]): void {
+  guardar(pasta, 'aplicacoes', {
+    id: 'backoffice',
+    nome: 'Backoffice de Pedidos',
+    tipo: 'BO',
+    cor: '#e07b00',
+    urls: { dev: `${URL_SIMULADOR}/Backoffice` },
+  });
+
+  const fixo = (valor: string): Passo['valor'] => ({ tipo: 'fixo', valor });
+  const verificarTexto = (id: string, testId: string, nome: string, esperado: Passo['valor']): Passo => ({
+    id,
+    acao: 'verificar',
+    descricao: `Verificar ${nome}`,
+    alvo: testid(testId, nome),
+    valor: esperado,
+    verificacao: { tipo: 'texto' },
+  });
+  guardar(pasta, 'blocos', {
+    id: 'validar-no-backoffice',
+    nome: 'Validar pedido no Backoffice',
+    tipo: 'UI',
+    aplicacaoId: 'backoffice',
+    descricao: 'Procura o pedido pelo número, confirma que está aprovado e valida-o.',
+    passos: [
+      { id: 'p1', acao: 'navegar', descricao: 'Abrir o Backoffice', valor: fixo('') },
+      { id: 'p2', acao: 'escrever', descricao: 'Preencher o número do pedido', alvo: testid('inpPedidoId', 'Campo Número do pedido'), valor: { tipo: 'variavel', nome: 'PedidoId' } },
+      { id: 'p3', acao: 'clicar', descricao: 'Procurar', alvo: testid('btnProcurar', 'Botão Procurar') },
+      verificarTexto('p4', 'boEstado', 'Estado no Backoffice', fixo('Aprovado')),
+      verificarTexto('p5', 'boDecisao', 'Decisão antes de validar', fixo('Pendente')),
+      { id: 'p6', acao: 'escrever', descricao: 'Preencher o motivo', alvo: testid('inpMotivo', 'Campo Motivo'), valor: { tipo: 'variavel', nome: 'MotivoBO' } },
+      { id: 'p7', acao: 'clicar', descricao: 'Validar', alvo: testid('btnValidar', 'Botão Validar') },
+      verificarTexto('p8', 'boMensagem', 'Mensagem do Backoffice', fixo('Pedido validado')),
+      verificarTexto('p9', 'boDecisao', 'Decisão depois de validar', fixo('Validado')),
+    ],
+  });
+
+  guardar(pasta, 'blocos', {
+    id: 'consultar-pedido-api',
+    nome: 'Consultar pedido pela API',
+    tipo: 'API',
+    aplicacaoId: 'api-pedidos',
+    descricao: 'Confirma pela API REST que o pedido ficou com os valores e a decisão certos.',
+    passos: [],
+    pedido: {
+      metodo: 'GET',
+      url: '/pedidos/{PedidoId}',
+      parametros: [],
+      cabecalhos: [],
+      tipoCorpo: 'nenhum',
+      corpo: '',
+      verificacoes: [
+        { id: 'v1', alvo: 'estado', operador: 'igual', esperado: '200' },
+        { id: 'v2', alvo: 'corpo', caminho: 'Estado', operador: 'igual', esperado: '{EstadoEsperado}' },
+        { id: 'v3', alvo: 'corpo', caminho: 'Prestacao', operador: 'igual', esperado: '{PrestacaoEsperada}' },
+        { id: 'v4', alvo: 'corpo', caminho: 'TotalPagar', operador: 'igual', esperado: '{TotalEsperado}' },
+        { id: 'v5', alvo: 'corpo', caminho: 'DecisaoBO', operador: 'igual', esperado: 'Validado' },
+        { id: 'v6', alvo: 'corpo', caminho: 'MotivoBO', operador: 'igual', esperado: '{MotivoBO}' },
+      ],
+      guardar: [],
+    },
+  });
+
+  guardar(pasta, 'jornadas', {
+    id: 'simular-e-validar',
+    nome: 'Simular e validar no Backoffice',
+    epicoId: 'simulacoes',
+    etiquetas: ['exemplo', '2 portais'],
+    blocos: [
+      { id: 'b1', blocoId: 'simular-credito' },
+      { id: 'b2', blocoId: 'validar-no-backoffice' },
+      { id: 'b3', blocoId: 'consultar-pedido-api' },
+    ],
+  });
+
+  const [cp12, ca48] = variantes;
+  const casos: Caso[] = [criarCaso('BO0001', cp12, 1000, 'CP12: simular, validar e confirmar'), criarCaso('BO0002', ca48, 32500, 'CA48: simular, validar e confirmar')];
+  for (const caso of casos) caso.dados.MotivoBO = `Validado no teste ${caso.id}`;
+  guardar(pasta, 'casos', { id: 'simular-e-validar', colunas: Object.keys(casos[0].dados), casos });
 }

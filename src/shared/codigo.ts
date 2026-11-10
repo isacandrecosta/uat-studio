@@ -98,6 +98,88 @@ function linhasDoPasso(passo: Passo, parametros: BlocoDaJornada['parametros'], u
   return linhas;
 }
 
+/** Texto com {variáveis} como "template literal" de TypeScript: `/clientes/${v.ClienteId}` */
+function modelo(texto: string): string {
+  const protegido = texto.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+  const comVariaveis = protegido.replace(/\{([^{}"'\s][^{}"'\n]*)\}/g, (tudo, conteudo: string) => {
+    const nome = conteudo.trim();
+    if (nome.toUpperCase() === 'TESTE') return '${v.ID}';
+    // Os outros marcadores ({DATA:...}, {CONTADOR:...}) são calculados pela ferramenta: ficam como estão.
+    if (/^(RUN|DATA|HOJE|CONTADOR|ALEATORIO)\b/i.test(nome)) return tudo;
+    return `\${${acesso(nome)}}`;
+  });
+  return `\`${comVariaveis}\``;
+}
+
+/** Caminho de um campo da resposta como código: corpo.cliente.moradas[0].rua */
+function codigoCaminho(caminho: string): string {
+  const partes = caminho.trim().replace(/^\$\.?/, '').replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
+  return `corpo${partes.map((p) => (/^\d+$/.test(p) ? `?.[${p}]` : /^[A-Za-z_$][\w$]*$/.test(p) ? `?.${p}` : `?.[${lit(p)}]`)).join('')}`;
+}
+
+/** Código de um bloco de API, usando o `request` do Playwright. */
+function corpoDoBlocoApi(bloco: Bloco, urlBase: string): string[] {
+  const pedido = bloco.pedido;
+  if (!pedido) return ['// Bloco de API sem pedido definido.'];
+  const caminho = pedido.url.trim();
+  const url = /^https?:\/\//i.test(caminho) ? caminho : caminho ? `${urlBase.replace(/\/+$/, '')}/${caminho.replace(/^\/+/, '')}` : urlBase;
+  const linhas: string[] = ['{'];
+  if (pedido.perfilId) {
+    linhas.push(
+      `  // Autenticação: perfil "${pedido.perfilId}". No UAT Studio o token é pedido e renovado sozinho, e os segredos ficam no cofre;`,
+      '  // aqui tens de fornecer o token (por exemplo, numa variável de ambiente).',
+    );
+  }
+  const opcoes: string[] = [`method: ${lit(pedido.metodo)}`];
+  const cabecalhos = pedido.cabecalhos.filter((c) => c.nome.trim()).map((c) => `${lit(c.nome.trim())}: ${modelo(c.valor)}`);
+  if (pedido.perfilId) cabecalhos.push("Authorization: `Bearer ${process.env.TOKEN ?? ''}`");
+  if (cabecalhos.length > 0) opcoes.push(`headers: { ${cabecalhos.join(', ')} }`);
+  const parametros = pedido.parametros.filter((p) => p.nome.trim()).map((p) => `${lit(p.nome.trim())}: ${modelo(p.valor)}`);
+  if (parametros.length > 0) opcoes.push(`params: { ${parametros.join(', ')} }`);
+  if (pedido.tipoCorpo !== 'nenhum' && pedido.metodo !== 'GET' && pedido.corpo.trim()) {
+    opcoes.push(pedido.tipoCorpo === 'json' ? `data: JSON.parse(${modelo(pedido.corpo)})` : `data: ${modelo(pedido.corpo)}`);
+  }
+  linhas.push(`  const resposta = await request.fetch(${modelo(url)}, { ${opcoes.join(', ')} });`);
+  const precisaCorpo = pedido.guardar.length > 0 || pedido.verificacoes.some((v) => v.alvo === 'corpo');
+  if (precisaCorpo) linhas.push('  const texto = await resposta.text();', '  const corpo = (() => { try { return JSON.parse(texto); } catch { return undefined; } })();');
+  for (const v of pedido.verificacoes) {
+    const esperado = modelo(v.esperado ?? '');
+    const obtido =
+      v.alvo === 'estado' ? 'String(resposta.status())' : v.alvo === 'cabecalho' ? `(resposta.headers()[${lit((v.caminho ?? '').toLowerCase())}] ?? '')` : v.alvo === 'tempo' ? null : v.caminho?.trim() ? `String(${codigoCaminho(v.caminho)} ?? '')` : 'texto';
+    if (obtido === null) {
+      linhas.push('  // Verificação do tempo de resposta: feita pela ferramenta.');
+      continue;
+    }
+    const nome = lit(`${v.alvo === 'estado' ? 'Código HTTP' : v.caminho || 'Resposta'}`);
+    switch (v.operador) {
+      case 'igual':
+        linhas.push(v.alvo === 'estado' && (v.esperado ?? '').includes(',') ? `  expect.soft(${esperado}.split(',').map((c) => c.trim()), ${nome}).toContain(${obtido});` : `  expect.soft(${obtido}, ${nome}).toBe(${esperado});`);
+        break;
+      case 'diferente':
+        linhas.push(`  expect.soft(${obtido}, ${nome}).not.toBe(${esperado});`);
+        break;
+      case 'contem':
+        linhas.push(`  expect.soft(${obtido}, ${nome}).toContain(${esperado});`);
+        break;
+      case 'maior':
+        linhas.push(`  expect.soft(Number(${obtido}), ${nome}).toBeGreaterThan(Number(${esperado}));`);
+        break;
+      case 'menor':
+        linhas.push(`  expect.soft(Number(${obtido}), ${nome}).toBeLessThan(Number(${esperado}));`);
+        break;
+      case 'regex':
+        linhas.push(`  expect.soft(${obtido}, ${nome}).toMatch(new RegExp(${esperado}));`);
+        break;
+      case 'existe':
+        linhas.push(`  expect.soft(${v.caminho?.trim() ? codigoCaminho(v.caminho) : 'texto'}, ${nome}).toBeDefined();`);
+        break;
+    }
+  }
+  for (const g of pedido.guardar) if (g.variavel.trim()) linhas.push(`  ${acesso(g.variavel.trim())} = String(${codigoCaminho(g.caminho)});`);
+  linhas.push('}');
+  return linhas;
+}
+
 function usaNumeros(blocos: Bloco[]): boolean {
   return blocos.some((b) => b.passos.some((p) => p.acao === 'verificar' && p.verificacao?.tipo === 'numero'));
 }
@@ -142,11 +224,11 @@ export function codigoDoBloco(bloco: Bloco, aplicacoes: Aplicacao[], ambienteId:
   const { usa } = variaveisDoBloco(bloco);
   const linhas = [
     ...cabecalho(`Bloco: ${bloco.nome}`, [bloco]),
-    `test(${lit(bloco.nome)}, async ({ page }) => {`,
+    `test(${lit(bloco.nome)}, async ({ ${bloco.tipo === 'API' ? 'request' : 'page'} }) => {`,
     '  // Dados do caso (na ferramenta vêm da tabela de casos ou do Excel).',
-    `  const v: Record<string, string> = {${usa.length ? ` ${usa.map((n) => `${/^[A-Za-z_$][\w$]*$/.test(n) ? n : lit(n)}: ''`).join(', ')} ` : ''}};`,
+    `  const v: Record<string, string> = {${usa.length ? ` ${[...(bloco.tipo === 'API' ? ['ID'] : []), ...usa].map((n) => `${/^[A-Za-z_$][\w$]*$/.test(n) ? n : lit(n)}: ''`).join(', ')} ` : ''}};`,
     '',
-    ...indentar(corpoDoBloco(bloco, undefined, urlDe(bloco, aplicacoes, ambienteId)), 2),
+    ...indentar(bloco.tipo === 'API' ? corpoDoBlocoApi(bloco, urlDe(bloco, aplicacoes, ambienteId)) : corpoDoBloco(bloco, undefined, urlDe(bloco, aplicacoes, ambienteId)), 2),
     '});',
     '',
   ];
@@ -172,13 +254,17 @@ export function codigoDaJornada(
     '];',
     '',
     'for (const caso of casos) {',
-    `  test(\`${jornada.nome.replace(/[`\\$]/g, '')} | \${caso.ID} \${caso.Descricao ?? ''}\`, async ({ page }) => {`,
+    `  test(\`${jornada.nome.replace(/[`\\$]/g, '')} | \${caso.ID} \${caso.Descricao ?? ''}\`, async ({ page${usados.some((b) => b.tipo === 'API') ? ', request' : ''} }) => {`,
     '    const v: Record<string, string> = { ...caso };',
   ];
   jornada.blocos.forEach((item, indice) => {
     const bloco = porId.get(item.blocoId);
     linhas.push('', `    // ===== Bloco ${indice + 1}: ${bloco?.nome ?? `${item.blocoId} (já não existe)`} =====`);
     if (!bloco) return;
+    if (bloco.tipo === 'API') {
+      linhas.push(...indentar(corpoDoBlocoApi(bloco, urlDe(bloco, aplicacoes, ambienteId)), 4));
+      return;
+    }
     if (bloco.tipo !== 'UI') {
       linhas.push(`    // Bloco de ${bloco.tipo}: ainda sem código equivalente.`);
       return;

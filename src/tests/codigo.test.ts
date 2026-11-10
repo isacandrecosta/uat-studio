@@ -28,8 +28,16 @@ test('o código gerado para o exemplo tem os passos certos', () => {
   assert.match(codigo, /"ID":"TC0001"/);
   assert.match(codigo, /function numero\(texto: string\): number/);
 
-  const doBloco = codigoDoBloco(blocos[0], aplicacoes, 'dev');
+  const doBloco = codigoDoBloco(blocos.find((b) => b.id === 'simular-credito')!, aplicacoes, 'dev');
   assert.match(doBloco, /test\('Simular crédito', async \(\{ page \}\) => \{/);
   assert.match(doBloco, /const v: Record<string, string> = \{ Variante: '', Valor: ''/);
+
+  // Jornada com um bloco de API: usa o "request" do Playwright.
+  const comApi = codigoDaJornada(repo.ler(pasta, 'jornadas', 'simular-e-validar'), blocos, aplicacoes, repo.ler(pasta, 'casos', 'simular-e-validar'), 'dev');
+  assert.match(comApi, /async \(\{ page, request \}\) => \{/);
+  assert.ok(comApi.includes("await request.fetch(`https://personal-e5m9c9gh-dev.outsystems.app/SimuladorFinanceiroPOC/rest/PedidosAPI/pedidos/${v.PedidoId}`, { method: 'GET' });"));
+  assert.ok(comApi.includes("expect.soft(String(resposta.status()), 'Código HTTP').toBe(`200`);"));
+  assert.ok(comApi.includes("expect.soft(String(corpo?.DecisaoBO ?? ''), 'DecisaoBO').toBe(`Validado`);"));
+  assert.ok(comApi.includes("await page.getByTestId('btnValidar').click();"));
   fs.rmSync(pasta, { recursive: true, force: true });
 });
