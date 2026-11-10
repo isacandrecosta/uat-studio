@@ -63,6 +63,11 @@ export interface Alvo {
   localizadores: Localizador[];
   /** Widget OutSystems reconhecido por regras (por exemplo, "dropdown"). */
   widget?: string;
+  /**
+   * "Encontrar linha na tabela": o elemento está na linha que tem este texto numa das células
+   * (por exemplo, o número do pedido). Os localizadores são então relativos a essa linha.
+   */
+  linha?: { valor: Valor };
 }
 
 export type AcaoPasso =

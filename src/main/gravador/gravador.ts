@@ -12,7 +12,7 @@ import {
 } from '../../shared/modelo';
 import { validarFormula } from '../../shared/formulas';
 import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
-import { descreverLocalizador, paraLocator } from '../motor/localizar';
+import { descreverLocalizador, linhasCom, paraLocator } from '../motor/localizar';
 import * as repo from '../projeto/repositorio';
 import { scriptGravador } from './injetado';
 
@@ -39,6 +39,8 @@ interface MensagemPasso {
   alvo: Alvo;
   valor?: Valor;
   exemplo?: string;
+  /** Para alvos "na linha da tabela que contém...": o texto que a linha tem agora. */
+  linhaExemplo?: string;
   verificacao?: Passo['verificacao'];
   variavel?: string;
   secreto?: boolean;
@@ -85,7 +87,7 @@ function descreverValor(valor: Valor | undefined): string {
 }
 
 function descreverPasso(m: MensagemPasso): string {
-  const nome = m.alvo.descricao;
+  const nome = m.alvo.linha ? `${m.alvo.descricao} da linha ${descreverValor(m.alvo.linha.valor)}` : m.alvo.descricao;
   switch (m.acao) {
     case 'escrever':
       return `Escrever ${m.secreto ? '(segredo)' : descreverValor(m.valor)} em ${nome}`;
@@ -111,9 +113,12 @@ function descreverPasso(m: MensagemPasso): string {
 async function filtrarLocalizadores(pagina: Page, m: MensagemPasso): Promise<Localizador[]> {
   const marca = String(m.marcador);
   const bons: Localizador[] = [];
-  for (const loc of m.alvo.localizadores) {
+  // Com "linha da tabela", os localizadores são relativos à linha que tem o texto de exemplo.
+  const raiz = m.alvo.linha ? linhasCom(pagina, m.linhaExemplo ?? '') : pagina;
+  const linhaUnica = !m.alvo.linha || (await linhasCom(pagina, m.linhaExemplo ?? '').count().catch(() => 0)) === 1;
+  for (const loc of linhaUnica ? m.alvo.localizadores : []) {
     try {
-      const locator = paraLocator(pagina, loc);
+      const locator = paraLocator(raiz, loc);
       if ((await locator.count()) !== 1) continue;
       const serve = await locator.evaluate(
         (el, [marcaEl, aceitaDentro]) =>
@@ -136,13 +141,23 @@ async function filtrarLocalizadores(pagina: Page, m: MensagemPasso): Promise<Loc
 async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; mensagem: string }> {
   const localizadores = await filtrarLocalizadores(s.pagina, m);
   if (localizadores.length === 0) {
-    return { ok: false, mensagem: 'Não encontrei uma forma fiável de localizar este elemento.' };
+    return {
+      ok: false,
+      mensagem: m.alvo.linha
+        ? `Não consegui identificar a linha pelo texto "${m.linhaExemplo ?? ''}": tem de existir exatamente uma linha com esse texto numa célula.`
+        : 'Não encontrei uma forma fiável de localizar este elemento.',
+    };
   }
   const passo: Passo = {
     id: proximoId(s.bloco),
     acao: m.acao,
     descricao: descreverPasso(m),
-    alvo: { descricao: m.alvo.descricao, localizadores, ...(m.alvo.widget ? { widget: m.alvo.widget } : {}) },
+    alvo: {
+      descricao: m.alvo.descricao,
+      localizadores,
+      ...(m.alvo.widget ? { widget: m.alvo.widget } : {}),
+      ...(m.alvo.linha ? { linha: m.alvo.linha } : {}),
+    },
     ...(m.valor ? { valor: m.valor } : {}),
     ...(m.verificacao ? { verificacao: m.verificacao } : {}),
     ...(m.variavel ? { variavel: m.variavel } : {}),
@@ -160,9 +175,9 @@ async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; 
   let resumo = 'Passo gravado.';
   try {
     if (m.acao === 'escrever' || m.acao === 'escolher' || m.acao === 'marcar' || m.acao === 'clicar') {
-      await executarAcao(s.pagina, passo, m.exemplo ?? '', { limiteMs: 10_000 });
+      await executarAcao(s.pagina, passo, m.exemplo ?? '', { limiteMs: 10_000, linha: m.linhaExemplo });
     } else {
-      const leitura = await lerElemento(s.pagina, passo, { limiteMs: 5_000 });
+      const leitura = await lerElemento(s.pagina, passo, { limiteMs: 5_000, linha: m.linhaExemplo });
       resumo = `Passo gravado (agora o ecrã mostra "${leitura.texto.slice(0, 60)}").`;
     }
   } catch (erro) {
@@ -173,6 +188,8 @@ async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; 
   s.bloco.passos.push(passo);
   if (m.valor?.tipo === 'variavel' && !s.colunas.includes(m.valor.nome)) s.colunas.push(m.valor.nome);
   if (m.variavel && !s.colunas.includes(m.variavel)) s.colunas.push(m.variavel);
+  const daLinha = m.alvo.linha?.valor;
+  if (daLinha?.tipo === 'variavel' && !s.colunas.includes(daLinha.nome)) s.colunas.push(daLinha.nome);
   avisar(undefined);
   return { ok: true, mensagem: `${resumo} Encontrado por ${descreverLocalizador(localizadores[0])}.` };
 }

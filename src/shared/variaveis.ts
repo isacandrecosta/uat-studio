@@ -29,7 +29,7 @@ export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
   const produz: string[] = [];
   for (const passo of bloco.passos) {
     // Uma variável guardada num passo anterior do mesmo bloco não precisa de vir de fora.
-    const doPasso = [...variaveisDoValor(passo.valor), ...variaveisDaFormula(passo.condicao ?? '')];
+    const doPasso = [...variaveisDoValor(passo.alvo?.linha?.valor), ...variaveisDoValor(passo.valor), ...variaveisDaFormula(passo.condicao ?? '')];
     for (const nome of doPasso) if (!produz.includes(nome)) juntar(usa, nome);
     if (passo.acao === 'guardar' && passo.variavel) juntar(produz, passo.variavel);
   }

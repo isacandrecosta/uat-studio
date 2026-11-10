@@ -50,6 +50,11 @@ function linhasDoPasso(passo: Passo, parametros: BlocoDaJornada['parametros'], u
   const linhas: string[] = [`// ${passo.descricao}`];
   const principal = passo.alvo?.localizadores[0];
   let alvo = principal ? codigoLocalizador(principal) : 'page.locator(\'body\')';
+  // "Encontrar linha na tabela": primeiro a linha que tem o texto, depois o elemento dentro dela.
+  if (passo.alvo?.linha) {
+    const linha = `page.locator('tr').filter({ has: page.getByText(${codigoValor(passo.alvo.linha.valor, parametros)}, { exact: true }) })`;
+    alvo = alvo.replace(/^page/, linha);
+  }
   // Widgets OutSystems: o data-testid está no DIV à volta; o controlo verdadeiro está lá dentro.
   if (passo.alvo?.widget === 'dropdown' || (passo.acao === 'escolher' && passo.alvo?.widget)) alvo += ".locator('select')";
   else if (passo.alvo?.widget === 'envolvido') alvo += ".locator('input, textarea').first()";

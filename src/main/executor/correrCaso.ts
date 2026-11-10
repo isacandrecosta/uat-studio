@@ -430,6 +430,9 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       const alternativa = (enc?: { alternativa: boolean; usado: Parameters<typeof descreverLocalizador>[0] }): string =>
         enc?.alternativa ? `encontrado por uma alternativa (${descreverLocalizador(enc.usado)}): o localizador preferido falhou` : '';
       const juntar = (...partes: Array<string | undefined>): string | undefined => partes.filter(Boolean).join('; ') || undefined;
+      // "Encontrar linha na tabela": o texto que identifica a linha, com os dados deste caso.
+      const linha = passo.alvo?.linha ? resolver(passo.alvo.linha.valor, item, 'linha da tabela').texto : undefined;
+      const notaLinha = linha !== undefined ? `na linha "${linha}"` : undefined;
 
       switch (passo.acao) {
         case 'navegar': {
@@ -447,18 +450,18 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         case 'marcar':
         case 'clicar': {
           const valor = resolver(passo.valor, item).texto;
-          const feito = await executarAcao(p, passo, valor, { limiteMs });
+          const feito = await executarAcao(p, passo, valor, { limiteMs, linha });
           ecraAssente = false;
           const mostrado = passo.acao === 'clicar' ? undefined : passo.secreto ? 'valor: ***' : feito.detalhe ?? `valor: "${valor}"`;
-          return { estado: 'ok', detalhe: juntar(mostrado, alternativa(feito.encontrado)) };
+          return { estado: 'ok', detalhe: juntar(mostrado, notaLinha, alternativa(feito.encontrado)) };
         }
         case 'guardar': {
           if (!passo.variavel) throw new ErroDados(`O passo "${passo.descricao}" não diz em que variável guardar.`);
           const fim = Date.now() + limiteMs;
-          let leitura = await lerElemento(p, passo, { limiteMs });
+          let leitura = await lerElemento(p, passo, { limiteMs, linha });
           while (!leitura.texto && Date.now() < fim) {
             await p.waitForTimeout(200);
-            leitura = await lerElemento(p, passo, { limiteMs: 2_000 });
+            leitura = await lerElemento(p, passo, { limiteMs: 2_000, linha });
           }
           variaveis[passo.variavel] = leitura.texto;
           resultado.variaveis[passo.variavel] = leitura.texto;
@@ -466,7 +469,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         }
         case 'esperar': {
           if (passo.alvo) {
-            const leitura = await lerElemento(p, passo, { limiteMs });
+            const leitura = await lerElemento(p, passo, { limiteMs, linha });
             await leitura.encontrado.locator.waitFor({ state: 'visible', timeout: limiteMs });
           } else {
             const numero = Number(resolver(passo.valor, item).texto.replace(',', '.'));
@@ -499,7 +502,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           for (;;) {
             let coincide = false;
             try {
-              const leitura = await lerElemento(p, passo, { limiteMs: Math.max(500, fim - Date.now()) });
+              const leitura = await lerElemento(p, passo, { limiteMs: Math.max(500, fim - Date.now()), linha });
               nota = alternativa(leitura.encontrado);
               if (tipo === 'visivel') {
                 obtido = leitura.visivel ? 'visível' : 'não visível';
@@ -526,7 +529,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
             }
             if (coincide) {
               ecraAssente = true;
-              return { estado: 'ok', detalhe: juntar(tipo === 'visivel' ? undefined : `"${obtido}"`, nota) };
+              return { estado: 'ok', detalhe: juntar(tipo === 'visivel' ? undefined : `"${obtido}"`, notaLinha, nota) };
             }
             if (Date.now() >= fim) break;
             await p.waitForTimeout(200);
@@ -535,7 +538,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           const esperadoMostrado = tipo === 'visivel' ? 'visível' : numeroEsperado ? formatar(numeroEsperado) : compactar(esperado);
           return {
             estado: 'ko',
-            detalhe: juntar(`esperado "${esperadoMostrado}", obtido "${obtido}"${diferenca ? ` (diferença ${diferenca})` : ''}`, nota),
+            detalhe: juntar(`esperado "${esperadoMostrado}", obtido "${obtido}"${diferenca ? ` (diferença ${diferenca})` : ''}`, notaLinha, nota),
             diferenca: { bloco: nomeBloco, passo: passo.descricao, esperado: esperadoMostrado, obtido, ...(diferenca ? { diferenca } : {}) },
           };
         }

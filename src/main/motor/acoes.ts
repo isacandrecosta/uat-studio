@@ -57,11 +57,11 @@ export async function executarAcao(
   pagina: Page,
   passo: Passo,
   valor: string,
-  opcoes: { limiteMs?: number } = {},
+  opcoes: { limiteMs?: number; linha?: string } = {},
 ): Promise<ResultadoAcao> {
   if (!passo.alvo) throw new ErroAcao(`O passo "${passo.descricao}" não tem elemento.`);
   const limiteMs = opcoes.limiteMs ?? 15_000;
-  const encontrado = await encontrar(pagina, passo.alvo, { limiteMs });
+  const encontrado = await encontrar(pagina, passo.alvo, { limiteMs, linha: opcoes.linha });
   const { locator } = encontrado;
 
   switch (passo.acao) {
@@ -111,9 +111,9 @@ export interface Leitura {
 }
 
 /** Lê o que o elemento mostra: o valor (se for um campo) ou o texto. */
-export async function lerElemento(pagina: Page, passo: Passo, opcoes: { limiteMs?: number } = {}): Promise<Leitura> {
+export async function lerElemento(pagina: Page, passo: Passo, opcoes: { limiteMs?: number; linha?: string } = {}): Promise<Leitura> {
   if (!passo.alvo) throw new ErroAcao(`O passo "${passo.descricao}" não tem elemento.`);
-  const encontrado = await encontrar(pagina, passo.alvo, { limiteMs: opcoes.limiteMs });
+  const encontrado = await encontrar(pagina, passo.alvo, { limiteMs: opcoes.limiteMs, linha: opcoes.linha });
   const controlo = await controloDe(encontrado.locator, 'input, textarea, select');
   const texto = await controlo.evaluate((el) => {
     if (el instanceof HTMLSelectElement) return el.selectedOptions[0]?.text ?? '';

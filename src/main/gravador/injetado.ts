@@ -70,6 +70,9 @@ export function scriptGravador(): void {
     input[type="text"], select { width: 100%; padding: 6px 8px; border: 1px solid #d5d9e2; border-radius: 6px; background: #fff; color: #1c2230; font: inherit; }
     input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid #2f6bed; outline-offset: 1px; }
     .nota { margin: 6px 0 0; color: #667085; font-size: 12px; }
+    .linha-tabela { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #d5d9e2; border-radius: 8px; background: #f7f8fb; }
+    .linha-tabela .marca { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
+    .linha-tabela select { margin-top: 8px; }
     .erro { margin: 8px 0 0; color: #c0392b; font-size: 12px; font-weight: 600; }
     .botoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
     .botoes button { padding: 6px 12px; border: 1px solid #d5d9e2; border-radius: 6px; background: #fff; color: #1c2230; font-weight: 600; }
@@ -237,6 +240,41 @@ export function scriptGravador(): void {
     return { descricao: `${prefixo} "${nome.slice(0, 60)}"`, localizadores: locs, widget };
   }
 
+  // ---------- Linhas de tabelas ----------
+  /** A linha de dados da tabela onde o elemento está (ou null se não estiver numa tabela). */
+  function linhaDe(e: Element): Element | null {
+    const linha = e.closest('tr, [role="row"]');
+    if (!linha || linha.closest('thead')) return null;
+    return linha.closest('table, [role="grid"], [role="table"]') ? linha : null;
+  }
+
+  /** Formas de encontrar o elemento a partir da linha (em vez de a partir da página). */
+  function localizadoresNaLinha(e: Element, linha: Element): Loc[] {
+    if (e === linha) return [{ tipo: 'css', valor: ':scope' }];
+    const locs: Loc[] = [];
+    const texto = textoDe(e);
+    if (especieDe(e) === 'botao' && texto && texto.length <= 80) locs.push({ tipo: 'role', valor: e.tagName === 'A' ? 'link' : 'button', nome: texto });
+    const partes: string[] = [];
+    let atual: Element | null = e;
+    while (atual && atual !== linha) {
+      const pai: Element | null = atual.parentElement;
+      if (!pai) break;
+      partes.unshift(`${atual.tagName.toLowerCase()}:nth-child(${Array.from(pai.children).indexOf(atual) + 1})`);
+      atual = pai;
+    }
+    locs.push({ tipo: 'css', valor: `:scope > ${partes.join(' > ')}` });
+    return locs;
+  }
+
+  /** Título da coluna onde o elemento está (se a tabela tiver cabeçalho). */
+  function nomeDaColuna(e: Element, linha: Element): string {
+    const celula = Array.from(linha.children).find((c) => c.contains(e));
+    if (!celula) return '';
+    const indice = Array.from(linha.children).indexOf(celula);
+    const cabecalho = linha.closest('table')?.querySelectorAll('thead th')[indice];
+    return limpar(cabecalho?.textContent);
+  }
+
   // ---------- Popup ----------
   type Acao = 'escrever' | 'escolher' | 'marcar' | 'clicar' | 'verificar' | 'guardar';
   const NOMES_ACAO: Record<Acao, string> = {
@@ -269,6 +307,52 @@ export function scriptGravador(): void {
     const erro = el('p', { class: 'erro', role: 'alert' });
     erro.style.display = 'none';
     const botoesAcao = el('div', { class: 'acoes', role: 'group', 'aria-label': 'Ação' });
+
+    // Elemento dentro de uma tabela: a linha pode ser escolhida pelo conteúdo (por exemplo, o número do pedido).
+    const linha = linhaDe(alvo);
+    const primeiraCelula = linha ? limpar((linha.children[0] as HTMLElement | undefined)?.innerText ?? '') : '';
+    const porConteudo = el('input', { type: 'checkbox', 'aria-label': 'Escolher a linha pelo conteúdo' });
+    const linhaOrigem = el('select', { 'aria-label': 'De onde vem o texto da linha' }, el('option', { value: 'fixo' }, 'Texto fixo'), el('option', { value: 'variavel' }, 'Coluna dos dados'));
+    const linhaTexto = el('input', { type: 'text', value: primeiraCelula, 'aria-label': 'Texto que identifica a linha' });
+    const linhaExemplo = el('input', { type: 'text', value: primeiraCelula, 'aria-label': 'Texto da linha neste momento' });
+    const rotuloLinhaTexto = el('label', {}, 'Texto que identifica a linha');
+    const zonaLinhaExemplo = el('div', {}, el('label', {}, 'Texto da linha neste momento (usado agora)'), linhaExemplo);
+    const zonaLinhaDetalhe = el('div', {}, linhaOrigem, rotuloLinhaTexto, linhaTexto, zonaLinhaExemplo);
+    const atualizarLinha = (): void => {
+      zonaLinhaDetalhe.style.display = porConteudo.checked ? 'block' : 'none';
+      const variavel = linhaOrigem.value === 'variavel';
+      zonaLinhaExemplo.style.display = variavel ? 'block' : 'none';
+      rotuloLinhaTexto.textContent = variavel ? 'Nome da coluna (por exemplo: PedidoId)' : 'Texto que identifica a linha';
+      linhaTexto.setAttribute('aria-label', variavel ? 'Nome da coluna da linha' : 'Texto que identifica a linha');
+      if (variavel) linhaTexto.setAttribute('list', idLista);
+      else linhaTexto.removeAttribute('list');
+    };
+    porConteudo.addEventListener('change', atualizarLinha);
+    linhaOrigem.addEventListener('change', () => {
+      linhaTexto.value = linhaOrigem.value === 'variavel' ? '' : linhaExemplo.value;
+      atualizarLinha();
+    });
+    atualizarLinha();
+    const zonaLinha = linha
+      ? el('div', { class: 'linha-tabela' }, el('label', { class: 'marca' }, porConteudo, 'Tabela: agir na linha que contém um texto'), zonaLinhaDetalhe)
+      : null;
+    /** Devolve o alvo relativo à linha, ou uma mensagem de erro; null se não se aplica. */
+    const lerLinha = (): { alvo: Record<string, unknown>; linhaExemplo: string } | string | null => {
+      if (!linha || !porConteudo.checked) return null;
+      const texto = linhaTexto.value.trim().replace(/^\{|\}$/g, '');
+      if (!texto) return linhaOrigem.value === 'variavel' ? 'Escreve o nome da coluna que identifica a linha.' : 'Escreve o texto que identifica a linha.';
+      const exemplo = linhaOrigem.value === 'variavel' ? linhaExemplo.value.trim() : texto;
+      if (!exemplo) return 'Escreve o texto que a linha tem neste momento.';
+      const coluna = nomeDaColuna(alvo, linha);
+      return {
+        alvo: {
+          descricao: alvo === linha ? 'Linha da tabela' : coluna ? `Coluna "${coluna}"` : info.descricao,
+          localizadores: localizadoresNaLinha(alvo, linha),
+          linha: { valor: linhaOrigem.value === 'variavel' ? { tipo: 'variavel', nome: texto } : { tipo: 'fixo', valor: texto } },
+        },
+        linhaExemplo: exemplo,
+      };
+    };
 
     // Devolve os dados do passo, ou uma mensagem de erro.
     let ler: () => Record<string, unknown> | string = () => ({});
@@ -414,6 +498,12 @@ export function scriptGravador(): void {
         erro.style.display = 'block';
         return;
       }
+      const naLinha = lerLinha();
+      if (typeof naLinha === 'string') {
+        erro.textContent = naLinha;
+        erro.style.display = 'block';
+        return;
+      }
       marcador += 1;
       alvo.setAttribute('data-uat-alvo', String(marcador));
       fechar();
@@ -425,7 +515,8 @@ export function scriptGravador(): void {
           tipo: 'passo',
           marcador,
           acao,
-          alvo: info,
+          alvo: naLinha ? naLinha.alvo : info,
+          ...(naLinha ? { linhaExemplo: naLinha.linhaExemplo } : {}),
           secreto,
           ...dados,
         });
@@ -454,6 +545,7 @@ export function scriptGravador(): void {
       },
       el('h2', {}, info.descricao),
       el('p', { class: 'sub' }, `${info.localizadores.length} forma${info.localizadores.length === 1 ? '' : 's'} de o encontrar`),
+      zonaLinha,
       botoesAcao,
       listaColunas,
       corpo,
@@ -469,14 +561,19 @@ export function scriptGravador(): void {
     raiz.append(popup);
     popupAberto = true;
 
-    // Posicionar junto ao elemento, sem sair do ecrã.
-    const r = alvo.getBoundingClientRect();
-    const p = popup.getBoundingClientRect();
-    let topo = r.bottom + 8;
-    if (topo + p.height > window.innerHeight - 8) topo = Math.max(8, r.top - p.height - 8);
-    const esquerda = Math.min(Math.max(8, r.left), window.innerWidth - p.width - 8);
-    popup.style.top = `${Math.max(8, Math.min(topo, window.innerHeight - p.height - 8))}px`;
-    popup.style.left = `${esquerda}px`;
+    // Posicionar junto ao elemento, sem sair do ecrã. Repete-se sempre que o popup muda de tamanho
+    // (por exemplo, ao trocar de ação), para os botões nunca ficarem fora da janela.
+    const posicionar = (): void => {
+      const r = alvo.getBoundingClientRect();
+      const p = popup.getBoundingClientRect();
+      let topo = r.bottom + 8;
+      if (topo + p.height > window.innerHeight - 8) topo = Math.max(8, r.top - p.height - 8);
+      const esquerda = Math.min(Math.max(8, r.left), window.innerWidth - p.width - 8);
+      popup.style.top = `${Math.max(8, Math.min(topo, window.innerHeight - p.height - 8))}px`;
+      popup.style.left = `${Math.max(8, esquerda)}px`;
+    };
+    posicionar();
+    new ResizeObserver(posicionar).observe(popup);
     (popup.querySelector('input[type="text"], select') as HTMLElement | null)?.focus();
   }
 

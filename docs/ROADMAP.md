@@ -19,7 +19,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [ ] Blocos de API, o que falta: certificado de cliente (mTLS), OAuth Authorization Code + PKCE, verificações em XML (XPath), SOAP, importar cURL/OpenAPI/Postman.
 - [x] Cofre local de segredos; segredos fora do trace (desligado ou limpo no login e nos pedidos de token).
 - [x] Passos e blocos condicionais ("só se `{Produto}` = X").
-- [ ] Bloco "esperar até" e ação "encontrar linha na tabela".
+- [x] Bloco "esperar até" e ação "encontrar linha na tabela".
 - [x] Blocos de preparação e limpeza por API (qualquer bloco pode ser marcado "limpeza: corre sempre").
 
 ## Fase 3: execuções a sério

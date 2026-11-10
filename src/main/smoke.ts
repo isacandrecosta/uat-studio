@@ -389,6 +389,44 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(editado.passos[5].condicao === '{MotivoBO} <> ""' && editado.passos[7].verificacao?.esperaSeg === 12, 'As alterações aos passos não foram guardadas.');
         await tirarPrint(j, raiz, 'passos');
 
+        // "Encontrar linha na tabela": gravar, no Backoffice, uma verificação na linha escolhida pelo número do pedido.
+        await naPagina(
+          j,
+          "(() => { document.getElementById('gravar-aplicacao').value = 'backoffice'; document.getElementById('gravar-nome').value = 'Verificar na tabela'; document.getElementById('btn-gravar').click(); })()",
+        );
+        await esperar(j, "document.getElementById('gravacao-ativa')", 120_000);
+        const p = paginaDoGravador();
+        if (!p) throw new Error('O gravador não tem página.');
+        const popup = p.locator('#__uat-gravador .popup');
+        const primeiraLinha = p.locator('[data-testid="tblPedidos"] tbody tr').first();
+        await primeiraLinha.waitFor({ timeout: 60_000 });
+        const idDaLinha = ((await primeiraLinha.locator('td').first().textContent()) ?? '').trim();
+        await primeiraLinha.locator('td').nth(4).click();
+        await popup.waitFor();
+        await popup.getByLabel('Escolher a linha pelo conteúdo').check();
+        await popup.getByLabel('De onde vem o texto da linha').selectOption('variavel');
+        await popup.getByLabel('Nome da coluna da linha').fill('PedidoId');
+        confirmar((await popup.getByLabel('Texto da linha neste momento').inputValue()) === idDaLinha, 'O popup devia sugerir o número do pedido como texto da linha.');
+        await popup.getByRole('button', { name: 'Verificar' }).click();
+        await popup.getByLabel('Valor esperado').fill('Validado');
+        await p.screenshot({ path: path.join(raiz, 'out', 'smoke-gravar-tabela.png') }).catch(() => undefined);
+        await popup.getByRole('button', { name: 'Gravar passo' }).click();
+        const fimTabela = Date.now() + 20_000;
+        while ((estadoGravador().bloco?.passos.length ?? 0) < 2) {
+          if (Date.now() > fimTabela) throw new Error(`O passo da tabela não foi gravado: ${await p.locator('#__uat-gravador .aviso').textContent()}`);
+          await p.waitForTimeout(100);
+        }
+        await naPagina(j, "document.getElementById('btn-guardar-bloco').click()");
+        await esperar(j, "document.getElementById('btn-gravar')");
+        const naTabela = repo.ler(pasta, 'blocos', 'verificar-na-tabela').passos[1];
+        confirmar(
+          naTabela.alvo?.linha?.valor.tipo === 'variavel' && naTabela.alvo.linha.valor.nome === 'PedidoId' && (naTabela.alvo.localizadores[0]?.valor ?? '').startsWith(':scope > td:nth-child(5)') && naTabela.alvo.descricao === 'Coluna "Decisão"',
+          `O passo da tabela não ficou como esperado: ${JSON.stringify(naTabela)}`,
+        );
+        const comTabela = repo.ler(pasta, 'jornadas', 'simular-e-validar');
+        comTabela.blocos.push({ id: 'b4', blocoId: 'verificar-na-tabela', condicao: '{EstadoEsperado} = "Aprovado"' });
+        repo.guardar(pasta, 'jornadas', comTabela);
+
         await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
         await esperar(j, "document.getElementById('btn-correr') && document.querySelector('#run-ambito option[value=\"jornada:simular-e-validar\"]')");
         await naPagina(
@@ -407,7 +445,12 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         }
         confirmar(run.casos.length === 3 && run.casos.every((c) => c.estado === 'OK'), 'Os 3 casos da jornada entre portais deviam dar OK.');
         const saltados = run.casos[2].passos.filter((p) => p.estado === 'ignorado' && p.descricao === 'Bloco não executado').map((p) => p.bloco);
-        confirmar(saltados.join(',') === 'Validar pedido no Backoffice,Consultar pedido pela API', `No caso rejeitado, os blocos condicionais deviam ser saltados: ${saltados.join(',')}`);
+        confirmar(saltados.join(',') === 'Validar pedido no Backoffice,Consultar pedido pela API,Verificar na tabela', `No caso rejeitado, os blocos condicionais deviam ser saltados: ${saltados.join(',')}`);
+        const linhaDaTabela = run.casos[0].passos.find((p) => p.bloco === 'Verificar na tabela' && p.descricao.startsWith('Verificar'));
+        confirmar(
+          linhaDaTabela?.estado === 'ok' && (linhaDaTabela.detalhe ?? '').includes(`na linha "${run.casos[0].variaveis.PedidoId}"`),
+          `A verificação na linha da tabela não correu como esperado: ${JSON.stringify(linhaDaTabela)}`,
+        );
         confirmar(!run.casos[0].passos.some((p) => p.estado === 'ignorado'), 'No caso aprovado não devia haver nada saltado.');
         const pastaCaso = path.join(pastaProjeto, 'exemplo', 'execucoes', run.pasta, 'casos', 'simular-e-validar', 'BO0001');
         for (const esperado of ['01_simular-credito.png', '02_validar-pedido-no-backoffice.png', path.join('api', '03_consultar-pedido-pela-api.response.json')]) {
