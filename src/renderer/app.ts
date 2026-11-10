@@ -3,6 +3,7 @@
 import type { EstadoProjeto } from '../shared/modelo.js';
 import { h, mensagemDeErro, obter } from './dom.js';
 import { mostrarBoasVindas } from './ecras/boasVindas.js';
+import { ecraEditor } from './ecras/editor.js';
 import { ecraGravar } from './ecras/gravar.js';
 import { ecraJornadas } from './ecras/jornadas.js';
 
@@ -15,6 +16,14 @@ export interface Contexto {
   acoes: HTMLElement;
   /** Volta a ler o projeto e a desenhar o ecrã atual. */
   atualizar(): Promise<void>;
+  /** O que está escolhido (mantém-se ao mudar de ecrã). */
+  selecao: Selecao;
+  /** Muda para outro ecrã. */
+  irPara(ecraId: string): void;
+}
+
+export interface Selecao {
+  jornadaId?: string;
 }
 
 interface Ecra {
@@ -26,7 +35,7 @@ interface Ecra {
 
 const ECRAS: Ecra[] = [
   { id: 'jornadas', nome: 'Jornadas', descricao: 'Épicos, jornadas e blocos partilhados.', desenhar: ecraJornadas },
-  { id: 'editor', nome: 'Editor de jornada', descricao: 'Compor uma jornada com blocos, variáveis e casos.' },
+  { id: 'editor', nome: 'Editor de jornada', descricao: 'Compor uma jornada com blocos, variáveis e casos.', desenhar: ecraEditor },
   { id: 'api', nome: 'Blocos de API', descricao: 'Construir pedidos, perfis de autenticação e teste individual.' },
   { id: 'gravar', nome: 'Gravar', descricao: 'Gravar ações no browser para criar blocos de UI.', desenhar: ecraGravar },
   { id: 'dados', nome: 'Dados de teste', descricao: 'Variáveis, fórmulas, geradores e contadores.' },
@@ -44,6 +53,12 @@ const tipoAmbiente = obter<HTMLElement>('tipo-ambiente');
 
 let estado: EstadoProjeto | null = null;
 let ecraAtual = ECRAS[0].id;
+let selecao: Selecao = {};
+
+function irPara(ecraId: string): void {
+  ecraAtual = ecraId;
+  void desenharEcra();
+}
 
 function mostrarVista(vista: 'boas-vindas' | 'app'): void {
   vistaBoasVindas.hidden = vista !== 'boas-vindas';
@@ -87,7 +102,7 @@ async function desenharEcra(): Promise<void> {
     return;
   }
   try {
-    await ecra.desenhar({ estado, corpo, acoes, atualizar });
+    await ecra.desenhar({ estado, corpo, acoes, atualizar, selecao, irPara });
   } catch (erro) {
     corpo.replaceChildren(h('p', { class: 'aviso-erro', role: 'alert' }, mensagemDeErro(erro)));
   }
@@ -108,6 +123,7 @@ async function atualizar(): Promise<void> {
 
 function entrarNoProjeto(): void {
   ecraAtual = ECRAS[0].id;
+  selecao = {};
   void atualizar();
 }
 
@@ -119,10 +135,7 @@ ECRAS.forEach((ecra, indice) => {
         type: 'button',
         class: 'menu-item',
         'data-ecra': ecra.id,
-        onclick: () => {
-          ecraAtual = ecra.id;
-          void desenharEcra();
-        },
+        onclick: () => irPara(ecra.id),
       },
       h('span', { class: 'menu-numero' }, indice + 1),
       h('span', {}, ecra.nome),

@@ -1,0 +1,406 @@
+// Editor de jornada: compor o percurso com blocos da biblioteca, definir parâmetros e editar os casos.
+import type { Aplicacao, Bloco, BlocoDaJornada, Caso, ConjuntoCasos, Jornada, Valor } from '../../shared/modelo.js';
+import { variaveisDaJornada, variaveisDoBloco } from '../../shared/variaveis.js';
+import type { Contexto } from '../app.js';
+import { confirmar, h, pedirTexto, plural } from '../dom.js';
+
+const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
+
+export async function ecraEditor(contexto: Contexto): Promise<void> {
+  const { corpo, acoes, selecao, irPara } = contexto;
+  const dados = window.uatStudio.dados;
+  const [jornadas, blocos, aplicacoes, epicos] = await Promise.all([
+    dados.listar('jornadas'),
+    dados.listar('blocos'),
+    dados.listar('aplicacoes'),
+    dados.listar('epicos'),
+  ]);
+
+  if (jornadas.length === 0) {
+    corpo.append(
+      h(
+        'div',
+        { class: 'vazio' },
+        h('p', { class: 'vazio-titulo' }, 'Ainda não há jornadas'),
+        h('p', {}, 'Cria uma jornada no ecrã Jornadas (botão "Nova jornada" dentro de um épico).'),
+        h('button', { type: 'button', class: 'botao', onclick: () => irPara('jornadas') }, 'Ir para Jornadas'),
+      ),
+    );
+    return;
+  }
+
+  const jornada: Jornada = jornadas.find((j) => j.id === selecao.jornadaId) ?? jornadas[0];
+  selecao.jornadaId = jornada.id;
+  const conjuntos = await dados.listar('casos');
+  const conjunto: ConjuntoCasos = conjuntos.find((c) => c.id === jornada.id) ?? { id: jornada.id, colunas: [], casos: [] };
+  const blocoPorId = new Map<string, Bloco>(blocos.map((b) => [b.id, b]));
+  const aplicacaoPorId = new Map<string, Aplicacao>(aplicacoes.map((a) => [a.id, a]));
+
+  const guardarJornada = async (redesenhar = true): Promise<void> => {
+    await dados.guardar('jornadas', jornada);
+    if (redesenhar) await desenhar();
+  };
+  const guardarCasos = async (redesenhar = false): Promise<void> => {
+    await dados.guardar('casos', conjunto);
+    if (redesenhar) await desenhar();
+  };
+
+  // Escolher a jornada (cabeçalho)
+  const escolha = h(
+    'select',
+    { id: 'editor-jornada', class: 'campo', 'aria-label': 'Jornada' },
+    jornadas.map((j) => {
+      const epico = epicos.find((e) => e.id === j.epicoId);
+      return h('option', { value: j.id, selected: j.id === jornada.id }, `${epico ? `${epico.nome} › ` : ''}${j.nome}`);
+    }),
+  );
+  escolha.addEventListener('change', () => {
+    selecao.jornadaId = escolha.value;
+    irPara('editor');
+  });
+  acoes.append(
+    escolha,
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'botao botao-discreto-claro',
+        onclick: async () => {
+          if (!(await confirmar('Apagar jornada', `Apagar a jornada "${jornada.nome}" e os seus casos? Os blocos não são apagados.`))) return;
+          await dados.apagar('casos', jornada.id);
+          await dados.apagar('jornadas', jornada.id);
+          selecao.jornadaId = undefined;
+          irPara('jornadas');
+        },
+      },
+      'Apagar jornada',
+    ),
+  );
+
+  const zona = h('div', { class: 'editor' });
+  corpo.append(zona);
+  await desenhar();
+
+  async function desenhar(): Promise<void> {
+    const variaveis = variaveisDaJornada(jornada, blocos);
+    // Colunas dos casos: as que já existem e as que a jornada precisa.
+    for (const nome of variaveis.necessarias) if (!conjunto.colunas.includes(nome)) conjunto.colunas.push(nome);
+    zona.replaceChildren(
+      h('div', { class: 'editor-principal' }, cartaoPropriedades(), cartaoPercurso(variaveis.blocosEmFalta), cartaoCasos(variaveis.necessarias)),
+      h('aside', { class: 'editor-lateral' }, cartaoBiblioteca(), cartaoVariaveis(variaveis.necessarias, variaveis.produzidas)),
+    );
+  }
+
+  function cartaoPropriedades(): HTMLElement {
+    const campo = (id: string, rotulo: string, valor: string, aoMudar: (v: string) => void, ajuda = ''): HTMLElement => {
+      const input = h('input', { id, type: 'text', class: 'campo', value: valor, maxlength: 120, placeholder: ajuda });
+      input.addEventListener('change', () => {
+        aoMudar(input.value.trim());
+        void guardarJornada(false);
+      });
+      return h('div', { class: 'campo-grupo' }, h('label', { for: id }, rotulo), input);
+    };
+    return h(
+      'section',
+      { class: 'cartao' },
+      h(
+        'div',
+        { class: 'grelha-campos' },
+        campo('jornada-nome', 'Nome da jornada', jornada.nome, (v) => {
+          if (v) jornada.nome = v;
+        }),
+        campo(
+          'jornada-etiquetas',
+          'Etiquetas (separadas por vírgulas)',
+          jornada.etiquetas.join(', '),
+          (v) => {
+            jornada.etiquetas = v.split(',').map((e) => e.trim()).filter(Boolean);
+          },
+          'Por exemplo: crédito, FO',
+        ),
+        campo(
+          'jornada-requisito',
+          'ID do requisito (opcional)',
+          jornada.requisitoId ?? '',
+          (v) => {
+            jornada.requisitoId = v || undefined;
+          },
+          'Por exemplo: REQ-123',
+        ),
+      ),
+    );
+  }
+
+  function linhaParametro(item: BlocoDaJornada, nome: string): HTMLElement {
+    const atual: Valor | undefined = item.parametros?.[nome];
+    const modo = atual?.tipo === 'fixo' ? 'fixo' : atual?.tipo === 'variavel' ? 'coluna' : 'igual';
+    const escolhaModo = h(
+      'select',
+      { class: 'campo', 'aria-label': `De onde vem ${nome}` },
+      h('option', { value: 'igual', selected: modo === 'igual' }, `Coluna "${nome}" dos casos`),
+      h('option', { value: 'coluna', selected: modo === 'coluna' }, 'Outra coluna'),
+      h('option', { value: 'fixo', selected: modo === 'fixo' }, 'Valor fixo'),
+    );
+    const valor = h('input', {
+      type: 'text',
+      class: 'campo',
+      'aria-label': `Valor para ${nome}`,
+      value: atual?.tipo === 'fixo' ? atual.valor : atual?.tipo === 'variavel' ? atual.nome : '',
+      hidden: modo === 'igual',
+    });
+    const aplicar = async (): Promise<void> => {
+      const parametros = { ...(item.parametros ?? {}) };
+      const texto = valor.value.trim();
+      if (escolhaModo.value === 'fixo') parametros[nome] = { tipo: 'fixo', valor: valor.value };
+      else if (escolhaModo.value === 'coluna' && texto) parametros[nome] = { tipo: 'variavel', nome: texto.replace(/^\{|\}$/g, '') };
+      else delete parametros[nome];
+      item.parametros = Object.keys(parametros).length > 0 ? parametros : undefined;
+      await guardarJornada(true);
+    };
+    escolhaModo.addEventListener('change', () => {
+      valor.hidden = escolhaModo.value === 'igual';
+      valor.placeholder = escolhaModo.value === 'coluna' ? 'Nome da coluna' : 'Valor';
+      if (escolhaModo.value === 'igual') void aplicar();
+      else valor.focus();
+    });
+    valor.addEventListener('change', () => void aplicar());
+    return h('div', { class: 'parametro' }, h('code', {}, `{${nome}}`), escolhaModo, valor);
+  }
+
+  function cartaoPercurso(emFalta: string[]): HTMLElement {
+    const mover = async (indice: number, delta: number): Promise<void> => {
+      const destino = indice + delta;
+      if (destino < 0 || destino >= jornada.blocos.length) return;
+      const [item] = jornada.blocos.splice(indice, 1);
+      jornada.blocos.splice(destino, 0, item);
+      await guardarJornada();
+    };
+    const itens = jornada.blocos.map((item, indice) => {
+      const bloco = blocoPorId.get(item.blocoId);
+      const aplicacao = bloco?.aplicacaoId ? aplicacaoPorId.get(bloco.aplicacaoId) : undefined;
+      const usa = bloco ? variaveisDoBloco(bloco).usa : [];
+      const produz = bloco ? variaveisDoBloco(bloco).produz : [];
+      return h(
+        'li',
+        { class: 'bloco-percurso', 'data-bloco': item.blocoId },
+        h(
+          'div',
+          { class: 'bloco-topo' },
+          h('span', { class: 'passo-numero' }, indice + 1),
+          h('span', { class: 'tipo-bloco', 'data-tipo': aplicacao?.tipo ?? bloco?.tipo ?? '' }, bloco ? (NOMES_TIPO[bloco.tipo] ?? bloco.tipo) : '?'),
+          h(
+            'div',
+            { class: 'bloco-nome' },
+            h('strong', {}, bloco?.nome ?? `Bloco apagado (${item.blocoId})`),
+            bloco && h('span', { class: 'suave' }, `${aplicacao ? `${aplicacao.nome} · ` : ''}${plural(bloco.passos.length, 'passo')}`),
+          ),
+          h(
+            'div',
+            { class: 'acoes' },
+            h('button', { type: 'button', class: 'botao botao-icone', disabled: indice === 0, 'aria-label': 'Mover para cima', title: 'Mover para cima', onclick: () => void mover(indice, -1) }, '↑'),
+            h('button', { type: 'button', class: 'botao botao-icone', disabled: indice === jornada.blocos.length - 1, 'aria-label': 'Mover para baixo', title: 'Mover para baixo', onclick: () => void mover(indice, 1) }, '↓'),
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao botao-discreto-claro',
+                onclick: async () => {
+                  jornada.blocos.splice(indice, 1);
+                  await guardarJornada();
+                },
+              },
+              'Retirar',
+            ),
+          ),
+        ),
+        usa.length > 0 &&
+          h(
+            'details',
+            { class: 'parametros', open: Boolean(item.parametros) },
+            h('summary', {}, `Parâmetros (${usa.length})`),
+            usa.map((nome) => linhaParametro(item, nome)),
+          ),
+        produz.length > 0 && h('p', { class: 'suave produz' }, 'Guarda: ', produz.map((n) => h('code', {}, `{${n}}`))),
+      );
+    });
+    return h(
+      'section',
+      { class: 'cartao' },
+      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Percurso'), h('span', { class: 'etiqueta' }, plural(jornada.blocos.length, 'bloco'))),
+      emFalta.length > 0 && h('p', { class: 'aviso-erro', role: 'alert' }, 'Há blocos nesta jornada que já não existem. Retira-os do percurso.'),
+      jornada.blocos.length === 0
+        ? h('p', { class: 'suave' }, 'A jornada ainda não tem blocos. Acrescenta-os a partir da biblioteca, à direita.')
+        : h('ol', { id: 'percurso', class: 'percurso' }, itens),
+    );
+  }
+
+  function cartaoBiblioteca(): HTMLElement {
+    return h(
+      'section',
+      { class: 'cartao' },
+      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Biblioteca de blocos')),
+      blocos.length === 0
+        ? h('p', { class: 'suave' }, 'Ainda não há blocos. Cria-os no ecrã Gravar.')
+        : h(
+            'ul',
+            { class: 'lista-itens' },
+            blocos.map((bloco) => {
+              const aplicacao = bloco.aplicacaoId ? aplicacaoPorId.get(bloco.aplicacaoId) : undefined;
+              return h(
+                'li',
+                { class: 'item' },
+                h('span', { class: 'tipo-bloco', 'data-tipo': aplicacao?.tipo ?? bloco.tipo }, NOMES_TIPO[bloco.tipo] ?? bloco.tipo),
+                h('span', { class: 'item-nome' }, bloco.nome),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'botao botao-pequeno',
+                    'data-adicionar': bloco.id,
+                    'aria-label': `Acrescentar "${bloco.nome}" à jornada`,
+                    onclick: async () => {
+                      const numeros = jornada.blocos.map((b) => Number(/^b(\d+)$/.exec(b.id)?.[1] ?? 0));
+                      jornada.blocos.push({ id: `b${Math.max(0, ...numeros) + 1}`, blocoId: bloco.id });
+                      await guardarJornada();
+                    },
+                  },
+                  'Acrescentar',
+                ),
+              );
+            }),
+          ),
+    );
+  }
+
+  function cartaoVariaveis(necessarias: string[], produzidas: string[]): HTMLElement {
+    return h(
+      'section',
+      { class: 'cartao' },
+      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Variáveis')),
+      h('h3', {}, 'Vêm dos casos'),
+      necessarias.length === 0 ? h('p', { class: 'suave' }, 'Nenhuma.') : h('p', { class: 'lista-codigo' }, necessarias.map((n) => h('code', {}, `{${n}}`))),
+      h('h3', {}, 'Guardadas durante a jornada'),
+      produzidas.length === 0 ? h('p', { class: 'suave' }, 'Nenhuma.') : h('p', { class: 'lista-codigo' }, produzidas.map((n) => h('code', {}, `{${n}}`))),
+    );
+  }
+
+  function cartaoCasos(necessarias: string[]): HTMLElement {
+    const celula = (valor: string, rotulo: string, aoMudar: (v: string, input: HTMLInputElement) => void, classe = ''): HTMLElement => {
+      const input = h('input', { type: 'text', class: `celula ${classe}`, value: valor, 'aria-label': rotulo });
+      input.addEventListener('change', () => aoMudar(input.value, input));
+      return h('td', {}, input);
+    };
+    const linha = (caso: Caso, indice: number): HTMLElement =>
+      h(
+        'tr',
+        {},
+        celula(caso.id, `ID do caso ${indice + 1}`, (v, input) => {
+          const novo = v.trim();
+          if (!novo || conjunto.casos.some((c) => c !== caso && c.id === novo)) {
+            input.value = caso.id; // id vazio ou repetido: volta ao anterior
+            return;
+          }
+          caso.id = novo;
+          void guardarCasos();
+        }, 'celula-id'),
+        celula(caso.nome ?? '', `Descrição do caso ${caso.id}`, (v) => {
+          caso.nome = v.trim() || undefined;
+          void guardarCasos();
+        }, 'celula-larga'),
+        conjunto.colunas.map((coluna) =>
+          celula(caso.dados[coluna] ?? '', `${coluna} do caso ${caso.id}`, (v) => {
+            caso.dados[coluna] = v;
+            void guardarCasos();
+          }),
+        ),
+        celula(caso.etiquetas.join(', '), `Etiquetas do caso ${caso.id}`, (v) => {
+          caso.etiquetas = v.split(',').map((e) => e.trim()).filter(Boolean);
+          void guardarCasos();
+        }),
+        h(
+          'td',
+          {},
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao botao-discreto-claro',
+              'aria-label': `Apagar o caso ${caso.id}`,
+              onclick: async () => {
+                conjunto.casos.splice(indice, 1);
+                await guardarCasos(true);
+              },
+            },
+            'Apagar',
+          ),
+        ),
+      );
+
+    const novoCaso = async (): Promise<void> => {
+      const numeros = conjunto.casos.map((c) => Number(/(\d+)$/.exec(c.id)?.[1] ?? 0));
+      const id = `TC${String(Math.max(0, ...numeros) + 1).padStart(4, '0')}`;
+      conjunto.casos.push({ id, etiquetas: [], dados: {} });
+      await guardarCasos(true);
+    };
+    const novaColuna = async (): Promise<void> => {
+      const nome = (await pedirTexto('Nova coluna', 'Nome da coluna (sem espaços)'))?.replace(/^\{|\}$/g, '');
+      if (!nome || conjunto.colunas.includes(nome)) return;
+      conjunto.colunas.push(nome);
+      await guardarCasos(true);
+    };
+    const removerColuna = async (coluna: string): Promise<void> => {
+      if (!(await confirmar('Apagar coluna', `Apagar a coluna "${coluna}" e os valores de todos os casos?`))) return;
+      conjunto.colunas = conjunto.colunas.filter((c) => c !== coluna);
+      for (const caso of conjunto.casos) delete caso.dados[coluna];
+      await guardarCasos(true);
+    };
+
+    return h(
+      'section',
+      { class: 'cartao' },
+      h(
+        'header',
+        { class: 'cartao-topo' },
+        h('div', {}, h('h2', {}, 'Casos'), h('p', { class: 'suave' }, 'Cada linha é uma variante: a jornada corre uma vez por caso, com estes dados.')),
+        h(
+          'div',
+          { class: 'acoes' },
+          h('button', { type: 'button', class: 'botao', onclick: () => void novaColuna() }, 'Nova coluna'),
+          h('button', { id: 'btn-novo-caso', type: 'button', class: 'botao', onclick: () => void novoCaso() }, 'Novo caso'),
+        ),
+      ),
+      conjunto.casos.length === 0
+        ? h('p', { class: 'suave' }, 'Ainda não há casos.')
+        : h(
+            'div',
+            { class: 'tabela-caixa' },
+            h(
+              'table',
+              { id: 'tabela-casos', class: 'tabela' },
+              h(
+                'thead',
+                {},
+                h(
+                  'tr',
+                  {},
+                  h('th', {}, 'ID'),
+                  h('th', {}, 'Descrição'),
+                  conjunto.colunas.map((coluna) =>
+                    h(
+                      'th',
+                      {},
+                      coluna,
+                      !necessarias.includes(coluna) &&
+                        h('button', { type: 'button', class: 'botao-mini', 'aria-label': `Apagar a coluna ${coluna}`, title: 'Apagar coluna (a jornada não a usa)', onclick: () => void removerColuna(coluna) }, '×'),
+                    ),
+                  ),
+                  h('th', {}, 'Etiquetas'),
+                  h('th', { 'aria-label': 'Ações' }),
+                ),
+              ),
+              h('tbody', {}, conjunto.casos.map(linha)),
+            ),
+          ),
+    );
+  }
+}

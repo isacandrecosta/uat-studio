@@ -4,7 +4,7 @@ import { confirmar, h, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
-export async function ecraJornadas({ estado, corpo, acoes, atualizar }: Contexto): Promise<void> {
+export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, irPara }: Contexto): Promise<void> {
   const dados = window.uatStudio.dados;
   const [epicos, jornadas, blocos, aplicacoes, conjuntos] = await Promise.all([
     dados.listar('epicos'),
@@ -66,8 +66,9 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar }: Contexto
                 onclick: async () => {
                   const nome = await pedirTexto('Nova jornada', `Nome da jornada em "${epico.nome}"`);
                   if (!nome) return;
-                  await dados.guardar('jornadas', { nome, epicoId: epico.id, etiquetas: [], blocos: [] });
-                  await atualizar();
+                  const nova = await dados.guardar('jornadas', { nome, epicoId: epico.id, etiquetas: [], blocos: [] });
+                  selecao.jornadaId = nova.id;
+                  irPara('editor');
                 },
               },
               'Nova jornada',
@@ -98,7 +99,20 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar }: Contexto
                 h(
                   'li',
                   { class: 'item' },
-                  h('span', { class: 'item-nome' }, jornada.nome),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'ligacao item-nome',
+                      'data-jornada': jornada.id,
+                      title: 'Abrir no editor de jornada',
+                      onclick: () => {
+                        selecao.jornadaId = jornada.id;
+                        irPara('editor');
+                      },
+                    },
+                    jornada.nome,
+                  ),
                   h(
                     'span',
                     { class: 'item-meta' },

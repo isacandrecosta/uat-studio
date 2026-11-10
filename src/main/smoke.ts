@@ -4,7 +4,7 @@ import { app, BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Bloco } from '../shared/modelo';
+import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { criarProjeto } from './projeto/ipc';
 
@@ -180,6 +180,58 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
           `O passo da lista não ficou como esperado: ${JSON.stringify(escolher)}`,
         );
         confirmar((bloco.passos[2].alvo?.localizadores.length ?? 0) >= 2, 'O campo Valor devia ter vários localizadores.');
+      },
+    ],
+    [
+      'editor de jornada: acrescentar bloco, parâmetro fixo, editar casos',
+      async (j) => {
+        const lerJornada = (): Jornada =>
+          JSON.parse(fs.readFileSync(path.join(pastaProjeto, 'exemplo', 'jornadas', 'simular-credito.json'), 'utf8')) as Jornada;
+        const lerCasos = (): ConjuntoCasos =>
+          JSON.parse(fs.readFileSync(path.join(pastaProjeto, 'exemplo', 'casos', 'simular-credito.json'), 'utf8')) as ConjuntoCasos;
+        /** Muda o valor de um campo como se fosse o utilizador (dispara o evento "change"). */
+        const mudar = (seletor: string, valor: string): Promise<void> =>
+          naPagina(
+            j,
+            `(() => { const e = document.querySelector(${JSON.stringify(seletor)}); e.value = ${JSON.stringify(valor)}; e.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+          );
+
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('[data-jornada=\"simular-credito\"]')");
+        await naPagina(j, "document.querySelector('[data-jornada=\"simular-credito\"]').click()");
+        await esperar(j, "document.querySelectorAll('#percurso > li').length === 1");
+
+        await naPagina(j, "document.querySelector('[data-adicionar=\"simulacao-gravada\"]').click()");
+        await esperar(j, "document.querySelectorAll('#percurso > li').length === 2");
+        confirmar(lerJornada().blocos[1]?.blocoId === 'simulacao-gravada', 'O bloco não foi acrescentado à jornada.');
+
+        // Parâmetro: no 2.º bloco, {Variante} passa a ser um valor fixo.
+        await mudar('#percurso > li:nth-child(2) .parametro select', 'fixo');
+        await mudar('#percurso > li:nth-child(2) .parametro input', 'CP24');
+        await esperar(j, "document.querySelector('#percurso > li:nth-child(2) .parametro input')?.value === 'CP24'");
+        const parametro = lerJornada().blocos[1]?.parametros?.Variante;
+        confirmar(parametro?.tipo === 'fixo' && parametro.valor === 'CP24', `Parâmetro mal gravado: ${JSON.stringify(parametro)}`);
+
+        // Casos: editar uma célula e criar um caso novo.
+        await mudar('#tabela-casos tbody tr:first-child td:nth-child(2) input', 'Descrição alterada');
+        await naPagina(j, "document.getElementById('btn-novo-caso').click()");
+        await esperar(j, "document.querySelectorAll('#tabela-casos tbody tr').length === 7");
+        const casos = lerCasos();
+        confirmar(casos.casos[0].nome === 'Descrição alterada', 'A descrição do caso não foi gravada.');
+        confirmar(casos.casos[6].id === 'TC0007', `O caso novo ficou com o id ${casos.casos[6]?.id}.`);
+        await tirarPrint(j, raiz, 'editor');
+        const larguras = await naPagina<{ conteudo: number; visivel: number }>(
+          j,
+          "(() => { const c = document.querySelector('.corpo'); return { conteudo: c.scrollWidth, visivel: c.clientWidth }; })()",
+        );
+        confirmar(larguras.conteudo <= larguras.visivel, `O editor tem deslocamento horizontal (${larguras.conteudo} > ${larguras.visivel}).`);
+
+        // Repor: apagar o caso novo e retirar o 2.º bloco (o exemplo fica como estava para os passos seguintes).
+        await naPagina(j, "document.querySelector('#tabela-casos tbody tr:last-child button').click()");
+        await esperar(j, "document.querySelectorAll('#tabela-casos tbody tr').length === 6");
+        await naPagina(j, "document.querySelector('#percurso > li:nth-child(2) .acoes button:last-child').click()");
+        await esperar(j, "document.querySelectorAll('#percurso > li').length === 1");
+        confirmar(lerJornada().blocos.length === 1 && lerCasos().casos.length === 6, 'O exemplo não voltou ao estado inicial.');
       },
     ],
   ];
