@@ -431,6 +431,33 @@ export function variaveisDaFormula(formula: string): string[] {
   return nomes;
 }
 
+// ---------- Textos com {variáveis} (endereços, cabeçalhos e corpos dos pedidos de API) ----------
+
+/** {Nome}, {TESTE}, {DATA:yyyyMMdd}... O interior não pode ter aspas, chavetas nem mudanças de linha (para não apanhar JSON). */
+const MARCADOR_NO_TEXTO = /\{([^{}"'\s][^{}"'\n]*)\}/g;
+const E_MARCADOR = (conteudo: string): boolean => {
+  const cabeca = conteudo.split(':')[0].trim().toUpperCase();
+  return ['TESTE', 'RUN', 'DATA', 'CONTADOR', 'ALEATORIO'].includes(cabeca) || /^HOJE\s*([+-]\s*\d+)?$/.test(cabeca);
+};
+
+/**
+ * Troca cada {variável} ou {marcador} de um texto pelo seu valor.
+ * `transformar` permite proteger o valor (por exemplo, dentro de um JSON).
+ */
+export function preencherTexto(texto: string, ctx: ContextoFormula, transformar: (valor: string) => string = (v) => v): string {
+  return texto.replace(MARCADOR_NO_TEXTO, (_tudo, conteudo: string) => transformar(comoTexto(resolverMarcador(conteudo.trim(), ctx))));
+}
+
+/** Variáveis usadas num texto com {variáveis}, sem contar com os marcadores. */
+export function variaveisDoTexto(texto: string): string[] {
+  const nomes: string[] = [];
+  for (const [, conteudo] of texto.matchAll(MARCADOR_NO_TEXTO)) {
+    const nome = conteudo.trim();
+    if (!E_MARCADOR(nome) && !nomes.includes(nome)) nomes.push(nome);
+  }
+  return nomes;
+}
+
 /**
  * Verifica se a fórmula está bem escrita, sem precisar dos dados de um caso
  * (as variáveis contam como "1"). Devolve a mensagem de erro, ou null se estiver bem.

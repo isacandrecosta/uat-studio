@@ -224,6 +224,93 @@ export interface PedidoGravacao {
 
 export type TipoBloco = 'UI' | 'API' | 'EMAIL' | 'VERIFICACAO';
 
+// ---------- Blocos de API ----------
+export interface ParNomeValor {
+  nome: string;
+  /** Pode ter {variáveis}. */
+  valor: string;
+}
+
+export type MetodoHttp = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export type TipoCorpo = 'nenhum' | 'json' | 'xml' | 'texto' | 'formulario';
+export type OperadorApi = 'igual' | 'diferente' | 'contem' | 'maior' | 'menor' | 'regex' | 'existe';
+
+/** Uma verificação sobre a resposta. */
+export interface VerificacaoApi {
+  id: string;
+  /** estado: código HTTP; corpo: um campo da resposta; cabecalho: um cabeçalho; tempo: milissegundos. */
+  alvo: 'estado' | 'corpo' | 'cabecalho' | 'tempo';
+  /** Para `corpo`: caminho do campo (por exemplo `cliente.id` ou `itens[0].valor`); vazio = a resposta toda. Para `cabecalho`: o nome. */
+  caminho?: string;
+  operador: OperadorApi;
+  /** Valor esperado; pode ter {variáveis}. */
+  esperado: string;
+}
+
+export interface GuardarApi {
+  variavel: string;
+  /** Caminho do campo na resposta JSON (por exemplo `id`). */
+  caminho: string;
+}
+
+export interface PedidoApi {
+  metodo: MetodoHttp;
+  /** Caminho a juntar ao endereço da aplicação, ou um endereço completo. Pode ter {variáveis}. */
+  url: string;
+  parametros: ParNomeValor[];
+  cabecalhos: ParNomeValor[];
+  tipoCorpo: TipoCorpo;
+  corpo: string;
+  /** Perfil de autenticação a usar (vazio = sem autenticação). */
+  perfilId?: string;
+  /** Tempo limite em milissegundos (por omissão, 30 segundos). */
+  limiteMs?: number;
+  verificacoes: VerificacaoApi[];
+  guardar: GuardarApi[];
+}
+
+export type TipoPerfil = 'oauth2-cliente' | 'oauth2-password' | 'apikey' | 'basic' | 'bearer';
+
+/**
+ * Forma de autenticação reutilizável. Os segredos (client secret, password, chave, token)
+ * NUNCA ficam aqui: ficam no cofre local encriptado, com o nome `<idDoPerfil>.<campo>`.
+ */
+export interface PerfilAutenticacao {
+  id: string;
+  nome: string;
+  tipo: TipoPerfil;
+  /** OAuth 2.0: endereço onde se pede o token. */
+  urlToken?: string;
+  clientId?: string;
+  ambito?: string;
+  /** OAuth 2.0: como enviar o client secret (por omissão, cabeçalho Basic). */
+  envioCliente?: 'basic' | 'corpo';
+  /** OAuth 2.0 (password) e Basic: nome do utilizador. */
+  utilizador?: string;
+  /** API Key: nome do cabeçalho (por omissão, X-API-Key). */
+  cabecalho?: string;
+}
+
+/** Campos secretos de cada tipo de perfil (os nomes usados no cofre). */
+export const SEGREDOS_DO_PERFIL: Record<TipoPerfil, Array<{ campo: string; rotulo: string }>> = {
+  'oauth2-cliente': [{ campo: 'clientSecret', rotulo: 'Client secret' }],
+  'oauth2-password': [
+    { campo: 'clientSecret', rotulo: 'Client secret' },
+    { campo: 'password', rotulo: 'Password do utilizador' },
+  ],
+  apikey: [{ campo: 'chave', rotulo: 'Chave da API' }],
+  basic: [{ campo: 'password', rotulo: 'Password' }],
+  bearer: [{ campo: 'token', rotulo: 'Token' }],
+};
+
+/** O que aconteceu ao executar um bloco de API (segredos já mascarados). */
+export interface ResultadoApi {
+  pedido: { metodo: string; url: string; cabecalhos: Record<string, string>; corpo?: string };
+  resposta: { estado: number; cabecalhos: Record<string, string>; corpo: string; tempoMs: number };
+  verificacoes: Array<{ descricao: string; ok: boolean; esperado: string; obtido: string }>;
+  guardadas: Record<string, string>;
+}
+
 /** Unidade reutilizável: alterada num sítio, atualiza todas as jornadas que a usam. */
 export interface Bloco {
   id: string;
@@ -231,7 +318,10 @@ export interface Bloco {
   tipo: TipoBloco;
   aplicacaoId?: string;
   descricao?: string;
+  /** Blocos de UI: os passos gravados. */
   passos: Passo[];
+  /** Blocos de API: o pedido HTTP. */
+  pedido?: PedidoApi;
 }
 
 /** Um bloco colocado numa jornada. */
@@ -272,11 +362,12 @@ export interface Colecoes {
   jornadas: Jornada;
   blocos: Bloco;
   casos: ConjuntoCasos;
+  perfis: PerfilAutenticacao;
 }
 
 export type NomeColecao = keyof Colecoes;
 
-export const NOMES_COLECOES: NomeColecao[] = ['aplicacoes', 'epicos', 'jornadas', 'blocos', 'casos'];
+export const NOMES_COLECOES: NomeColecao[] = ['aplicacoes', 'epicos', 'jornadas', 'blocos', 'casos', 'perfis'];
 
 /** O que a interface recebe sobre o projeto aberto. */
 export interface EstadoProjeto {

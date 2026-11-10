@@ -1,7 +1,7 @@
 // Que variáveis um bloco ou uma jornada usam e produzem.
 // Usado pela interface (para mostrar o que falta) e pelo executor (para verificar antes de correr).
 // Nota: dentro de src/shared, os imports de código têm de acabar em ".js" (a interface corre no browser).
-import { variaveisDaFormula } from './formulas.js';
+import { variaveisDaFormula, variaveisDoTexto } from './formulas.js';
 import type { Bloco, Jornada, Valor, VariavelCalculada } from './modelo';
 
 export interface VariaveisDoBloco {
@@ -31,6 +31,19 @@ export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
     // Uma variável guardada num passo anterior do mesmo bloco não precisa de vir de fora.
     for (const nome of variaveisDoValor(passo.valor)) if (!produz.includes(nome)) juntar(usa, nome);
     if (passo.acao === 'guardar' && passo.variavel) juntar(produz, passo.variavel);
+  }
+  // Blocos de API: as {variáveis} do endereço, parâmetros, cabeçalhos, corpo e valores esperados.
+  const pedido = bloco.pedido;
+  if (pedido) {
+    const textos = [
+      pedido.url,
+      ...pedido.parametros.flatMap((p) => [p.nome, p.valor]),
+      ...pedido.cabecalhos.map((c) => c.valor),
+      pedido.corpo,
+      ...pedido.verificacoes.map((v) => v.esperado),
+    ];
+    for (const texto of textos) for (const nome of variaveisDoTexto(texto ?? '')) juntar(usa, nome);
+    for (const guardar of pedido.guardar) juntar(produz, guardar.variavel);
   }
   return { usa, produz };
 }
