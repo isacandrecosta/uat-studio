@@ -98,3 +98,42 @@ Os logs e as evidências são mostrados na interface ao abrir os detalhes de uma
 7. Mapa de execução (grafo ao vivo e controlos)
 
 Cada ecrã de bloco ou jornada tem "Ver código (.ts)".
+
+## 8. Valores financeiros
+- Ler valores formatados ("1.234,56 €", percentagens) como números; cálculo **decimal exato** (nunca vírgula flutuante).
+- **Tolerância** configurável por verificação (por exemplo ±0,01).
+- **Arredondamento selecionável** nas fórmulas: ao par (como o `Round()` do OutSystems) ou meio para cima.
+- **Verificar todos os valores antes de dar KO**: o relatório lista todas as diferenças do caso, não só a primeira.
+- **Valores esperados por fórmula** (prestação, TAEG, comissões) calculados a partir dos dados do caso.
+
+## 9. Variantes, produtos e roles
+- **Etiquetas** nos casos e jornadas (produto, canal, role, tipo de cliente) com filtros para escolher o que correr.
+- **Passos e blocos condicionais**: "só se `{Produto}` = X".
+- **Matriz de cobertura**: variantes × jornadas com o estado da última execução.
+- **Várias sessões na mesma jornada** (cliente no FO, operador e aprovador no BO), cada uma com o seu perfil de login.
+- Campo opcional **ID do requisito** na jornada, mostrado no relatório.
+
+## 10. Integrações e robustez
+- Bloco **"esperar até"**: repetir uma consulta (API ou ecrã) a cada N segundos até uma condição ser verdadeira ou passar o tempo limite.
+- Ação **"encontrar linha na tabela"**: localizar a linha em que uma coluna tem `{Valor}` e agir nessa linha.
+- **Retomar a meio**: recomeçar uma jornada a partir de um bloco, com as variáveis já guardadas.
+- Blocos de **preparação e limpeza** (por API) antes e depois da jornada.
+- Bloco **"passo manual"**: a execução pára, mostra a instrução, o testador confirma OK/KO e pode anexar um print.
+- Esperar que o ecrã OutSystems acabe de carregar antes de cada passo.
+
+## 11. Facilidade de uso e manutenção
+- **Verificação antes de correr**: variáveis em falta, segredos por preencher, ambiente inacessível.
+- **Reparar localizadores com um clique** quando foi usada uma alternativa; regravar só um passo.
+- **"Onde é usado"** de cada bloco, antes de o alterar.
+- **Comparar com a execução anterior** (o que passou de OK para KO).
+- **Um ficheiro JSON por bloco, jornada e conjunto de casos** (evita conflitos em pasta partilhada ou Git); exportar/importar pacotes de blocos.
+
+## 12. Segurança e PC da empresa
+Os UAT correm em **QA com dados fictícios**, por isso as regras de dados são leves:
+- Mantém-se: **segredos fora de logs, relatórios e trace** (trace desligado ou limpo nos passos de login e nos pedidos de token); **tipo de ambiente** (DEV/QA/PRD), com produção bloqueada ou sujeita a confirmação; registo básico de quem correu, quando e em que ambiente.
+- Fica para mais tarde, só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.
+
+Compatibilidade com o PC da empresa:
+- **Mini .exe de diagnóstico** (logo no início): abre o Edge com Playwright e mostra verificações a verde/vermelho (o .exe arranca, o Edge deixa-se controlar, proxy e certificados do Windows funcionam).
+- Se for bloqueado: pedir a IT um **ambiente aprovado** (VM ou máquina de testes fornecida por eles). **Nunca** criar uma VM por conta própria para contornar os controlos.
+- **Ficha da ferramenta** para a equipa de segurança: sem IA, sem telemetria, sem atualizações automáticas, só comunica com as apps testadas, lista de componentes e licenças.

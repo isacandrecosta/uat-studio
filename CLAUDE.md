@@ -27,6 +27,10 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
 - Sucesso e erro detetados por **regras** (mensagens de feedback OutSystems, textos configuráveis).
 - **Dados do projeto em ficheiros JSON** legíveis (bons para Git) numa pasta escolhida pelo utilizador. Excel apenas para importar e exportar casos e resultados (`exceljs`).
 - Segredos (client secrets, passwords de teste) num **cofre local encriptado** (Electron `safeStorage`). Nunca em JSON, logs ou relatórios: mascarar sempre.
+- O trace do Playwright grava tudo: **desligá-lo ou limpá-lo nos passos de login e nos pedidos de token**.
+- Os UAT correm em **QA com dados fictícios**: regras de dados leves (sem mascarar prints, sem auditoria detalhada). Mantém-se o **tipo de ambiente** (DEV/QA/PRD) com produção bloqueada ou sujeita a confirmação.
+- **Valores financeiros**: cálculo decimal exato, formato pt-PT, tolerância configurável, arredondamento selecionável; verificar todos os valores antes de dar KO.
+- **PC da empresa**: validar cedo com um mini .exe de diagnóstico. Se for bloqueado, pedir a IT um ambiente aprovado (VM ou máquina de testes deles). **Nunca contornar os controlos** (por exemplo, com uma VM por conta própria).
 - **Pausa entre passos**, nunca a meio de uma ação.
 - Resultados: **OK** (tudo coincide), **KO** (chegou ao fim mas um valor difere), **ERRO** (não chegou ao fim).
 
@@ -46,4 +50,4 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
 - Achado real: `Round()` do OutSystems arredonda "ao par" (86,405 → 86,40).
 
 ## Estado atual
-- 2026-11-10: Repositório criado com documentação (CLAUDE.md, docs/). **Ainda sem código.** Próximo passo: Fase 1, passo 1 do `docs/ROADMAP.md` (esqueleto Electron + abrir o Edge com Playwright).
+- 2026-11-10: Repositório criado com documentação (CLAUDE.md, docs/). Especificação alargada (secções 8 a 12: valores financeiros, variantes e roles, integrações, facilidade de uso, segurança e PC da empresa) e roadmap reordenado (novo passo 2: mini .exe de diagnóstico). **Ainda sem código.** Próximo passo: Fase 1, passo 1 do `docs/ROADMAP.md` (esqueleto Electron + abrir o Edge com Playwright).
