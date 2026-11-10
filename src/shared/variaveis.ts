@@ -29,7 +29,8 @@ export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
   const produz: string[] = [];
   for (const passo of bloco.passos) {
     // Uma variável guardada num passo anterior do mesmo bloco não precisa de vir de fora.
-    for (const nome of variaveisDoValor(passo.valor)) if (!produz.includes(nome)) juntar(usa, nome);
+    const doPasso = [...variaveisDoValor(passo.valor), ...variaveisDaFormula(passo.condicao ?? '')];
+    for (const nome of doPasso) if (!produz.includes(nome)) juntar(usa, nome);
     if (passo.acao === 'guardar' && passo.variavel) juntar(produz, passo.variavel);
   }
   // Blocos de API: as {variáveis} do endereço, parâmetros, cabeçalhos, corpo e valores esperados.
@@ -86,6 +87,7 @@ export function variaveisDaJornada(jornada: Jornada, blocos: Bloco[], calculadas
       continue;
     }
     const { usa, produz } = variaveisDoBloco(bloco);
+    for (const nome of variaveisDaFormula(item.condicao ?? '')) precisar(nome);
     for (const nome of usa) {
       const troca: Valor | undefined = item.parametros?.[nome];
       if (!troca) precisar(nome);

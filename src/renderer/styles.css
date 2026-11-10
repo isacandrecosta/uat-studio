@@ -475,3 +475,17 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .item-perfil { align-items: flex-start; }
 .dialogo-formulario { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
 .dialogo .campo-grupo label { display: block; }
+/* Condições, limpeza, esperar até e editor de passos */
+.opcoes-bloco { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 8px 0 0 34px; font-size: 13px; }
+.opcao-condicao { flex: 1; min-width: 260px; display: flex; align-items: center; gap: 8px; color: var(--texto-suave); }
+.opcao-condicao span { white-space: nowrap; }
+.opcoes-bloco .opcao { display: flex; align-items: center; gap: 6px; color: var(--texto-suave); }
+.opcoes-bloco .erro-campo { flex-basis: 100%; }
+.linha-esperar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.linha-esperar .campo-numero { width: 90px; }
+.cartao-bloco { display: block !important; }
+.passo-edicao { display: grid; grid-template-columns: 24px 74px minmax(180px, 2fr) minmax(160px, 1.4fr) 110px auto; gap: 8px; align-items: center; padding: 6px 0; }
+.passo-edicao + .passo-edicao { border-top: 1px solid var(--borda); }
+.passo-edicao .campo-numero { width: 100%; }
+.passo-edicao .erro-campo { grid-column: 3 / -1; }
+.passo-cabecalho { padding-bottom: 2px; color: var(--texto-suave); font-size: 12px; font-weight: 600; }

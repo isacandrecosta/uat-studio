@@ -1,6 +1,7 @@
 // Ecrã Gravar: escolher a aplicação e o bloco, abrir o browser e acompanhar os passos gravados.
 import type { Bloco, EstadoGravador, Passo } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
+import { validarFormula } from '../../shared/formulas.js';
 import { confirmar, h, mensagemDeErro, plural } from '../dom.js';
 
 const NOMES_ACAO: Record<Passo['acao'], string> = {
@@ -15,6 +16,8 @@ const NOMES_ACAO: Record<Passo['acao'], string> = {
 };
 
 let deixarDeOuvir: (() => void) | null = null;
+/** Bloco aberto no editor de passos (mantém-se ao mudar de ecrã). */
+let blocoEmEdicao: string | null = null;
 
 /** Lista de passos de um bloco (também usada noutros ecrãs). */
 export function listaDePassos(bloco: Bloco, aoRemover?: (passo: Passo) => void): HTMLElement {
@@ -210,5 +213,192 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         botao,
       ),
     );
+
+    // Blocos já gravados: rever e afinar os passos.
+    const jornadas = await api.dados.listar('jornadas');
+    const zonaBlocos = h('div', { id: 'blocos-gravados' });
+    corpo.append(zonaBlocos);
+    const desenharBlocos = (): void => {
+      zonaBlocos.replaceChildren(
+        h(
+          'section',
+          { class: 'cartao cartao-bloco' },
+          h('header', { class: 'cartao-topo' }, h('div', {}, h('h2', {}, 'Blocos gravados'), h('p', { class: 'suave' }, 'Abre um bloco para rever os passos: mudar a descrição, pôr uma condição ("só se..."), esperar mais tempo numa verificação, trocar a ordem ou remover.'))),
+          blocosUi.length === 0
+            ? h('p', { class: 'suave' }, 'Ainda não há blocos gravados.')
+            : h(
+                'ul',
+                { class: 'lista-itens' },
+                blocosUi.map((bloco) =>
+                  h(
+                    'li',
+                    { class: 'item' },
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        class: `ligacao item-nome${bloco.id === blocoEmEdicao ? ' atual' : ''}`,
+                        'data-editar-bloco': bloco.id,
+                        'aria-expanded': String(bloco.id === blocoEmEdicao),
+                        onclick: () => {
+                          blocoEmEdicao = bloco.id === blocoEmEdicao ? null : bloco.id;
+                          desenharBlocos();
+                        },
+                      },
+                      bloco.nome,
+                    ),
+                    h('span', { class: 'item-meta' }, plural(bloco.passos.length, 'passo')),
+                  ),
+                ),
+              ),
+        ),
+      );
+      const aberto = blocosUi.find((b) => b.id === blocoEmEdicao);
+      if (aberto) zonaBlocos.append(editorDePassos(aberto));
+    };
+
+    const editorDePassos = (bloco: Bloco): HTMLElement => {
+      const aviso = h('span', { class: 'estado', role: 'status' });
+      const guardar = async (redesenhar: boolean): Promise<void> => {
+        try {
+          await api.dados.guardar('blocos', bloco);
+          aviso.textContent = 'Guardado.';
+          aviso.className = 'estado ok';
+        } catch (e) {
+          aviso.textContent = mensagemDeErro(e);
+          aviso.className = 'estado erro';
+        }
+        if (redesenhar) desenharBlocos();
+      };
+      const mover = (indice: number, delta: number): void => {
+        const destino = indice + delta;
+        if (destino < 0 || destino >= bloco.passos.length) return;
+        const [passo] = bloco.passos.splice(indice, 1);
+        bloco.passos.splice(destino, 0, passo);
+        void guardar(true);
+      };
+      const nome = h('input', { type: 'text', class: 'campo', value: bloco.nome, maxlength: 80, 'aria-label': 'Nome do bloco' });
+      nome.addEventListener('change', () => {
+        if (!nome.value.trim()) return;
+        bloco.nome = nome.value.trim();
+        void guardar(true);
+      });
+      const linhas = bloco.passos.map((passo, indice) => {
+        const erro = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
+        const descricao = h('input', { type: 'text', class: 'campo', value: passo.descricao, 'aria-label': `Descrição do passo ${indice + 1}` });
+        descricao.addEventListener('change', () => {
+          if (!descricao.value.trim()) return;
+          passo.descricao = descricao.value.trim();
+          void guardar(false);
+        });
+        const condicao = h('input', {
+          type: 'text',
+          class: 'campo campo-formula',
+          value: passo.condicao ?? '',
+          placeholder: 'Sempre',
+          'aria-label': `Condição do passo ${indice + 1} (só se)`,
+          spellcheck: 'false',
+        });
+        condicao.addEventListener('change', () => {
+          const texto = condicao.value.trim();
+          const problema = texto ? validarFormula(texto) : null;
+          erro.hidden = !problema;
+          erro.textContent = problema ?? '';
+          if (problema) return;
+          passo.condicao = texto || undefined;
+          void guardar(false);
+        });
+        const espera = h('input', {
+          type: 'number',
+          min: 0,
+          max: 3600,
+          step: 1,
+          class: 'campo campo-numero',
+          value: passo.verificacao?.esperaSeg ?? '',
+          placeholder: 'normal',
+          'aria-label': `Esperar até, em segundos, no passo ${indice + 1}`,
+          hidden: passo.acao !== 'verificar',
+        });
+        espera.addEventListener('change', () => {
+          if (!passo.verificacao) return;
+          const segundos = Math.floor(Number(espera.value) || 0);
+          if (segundos > 0) passo.verificacao.esperaSeg = segundos;
+          else delete passo.verificacao.esperaSeg;
+          void guardar(false);
+        });
+        return h(
+          'li',
+          { class: 'passo-edicao', 'data-acao': passo.acao },
+          h('span', { class: 'passo-numero' }, indice + 1),
+          h('span', { class: 'passo-acao' }, NOMES_ACAO[passo.acao]),
+          descricao,
+          condicao,
+          passo.acao === 'verificar' ? espera : h('span', {}),
+          h(
+            'div',
+            { class: 'acoes' },
+            h('button', { type: 'button', class: 'botao botao-icone', disabled: indice === 0, 'aria-label': `Mover o passo ${indice + 1} para cima`, onclick: () => mover(indice, -1) }, '↑'),
+            h('button', { type: 'button', class: 'botao botao-icone', disabled: indice === bloco.passos.length - 1, 'aria-label': `Mover o passo ${indice + 1} para baixo`, onclick: () => mover(indice, 1) }, '↓'),
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao botao-discreto-claro',
+                'aria-label': `Remover o passo ${indice + 1}`,
+                onclick: async () => {
+                  if (!(await confirmar('Remover passo', `Remover o passo "${passo.descricao}"?`, 'Remover'))) return;
+                  bloco.passos.splice(indice, 1);
+                  await guardar(true);
+                },
+              },
+              'Remover',
+            ),
+          ),
+          erro,
+        );
+      });
+      const usos = jornadas.filter((j) => j.blocos.some((b) => b.blocoId === bloco.id)).map((j) => j.nome);
+      return h(
+        'section',
+        { class: 'cartao cartao-bloco', id: 'editor-passos' },
+        h(
+          'header',
+          { class: 'cartao-topo' },
+          h('div', { class: 'campo-grupo' }, h('h2', {}, 'Passos do bloco'), nome, h('p', { class: 'ajuda-campo' }, usos.length > 0 ? `Usado em: ${usos.join(', ')}. As alterações valem para todas.` : 'Ainda não é usado em nenhuma jornada.')),
+          h(
+            'div',
+            { class: 'acoes' },
+            aviso,
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao botao-discreto-claro',
+                onclick: async () => {
+                  const avisoUso = usos.length > 0 ? ` É usado em: ${usos.join(', ')}.` : '';
+                  if (!(await confirmar('Apagar bloco', `Apagar o bloco "${bloco.nome}"?${avisoUso}`))) return;
+                  await api.dados.apagar('blocos', bloco.id);
+                  blocoEmEdicao = null;
+                  await atualizar();
+                },
+              },
+              'Apagar bloco',
+            ),
+          ),
+        ),
+        h(
+          'div',
+          { class: 'passo-edicao passo-cabecalho', 'aria-hidden': 'true' },
+          h('span', {}),
+          h('span', {}),
+          h('span', {}, 'O que faz'),
+          h('span', {}, 'Só se (condição)'),
+          h('span', {}, 'Esperar até (s)'),
+          h('span', {}),
+        ),
+        h('ol', { class: 'lista-passos' }, linhas),
+      );
+    };
+    desenharBlocos();
   }
 }

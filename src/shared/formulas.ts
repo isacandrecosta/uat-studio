@@ -413,6 +413,13 @@ export function avaliarFormula(formula: string, ctx: ContextoFormula): string {
   return comoTexto(calcular(separar(limpa), ctx));
 }
 
+/** Avalia uma condição ("só se..."), por exemplo `{Produto} = "CP12"`. Uma condição vazia é verdadeira. */
+export function avaliarCondicao(formula: string, ctx: ContextoFormula): boolean {
+  const limpa = formula.trim().replace(/^=/, '');
+  if (!limpa) return true;
+  return comoBooleano(calcular(separar(limpa), ctx));
+}
+
 /** Variáveis ({Nome}) usadas numa fórmula, sem contar com os marcadores (TESTE, DATA, ...). */
 export function variaveisDaFormula(formula: string): string[] {
   const nomes: string[] = [];

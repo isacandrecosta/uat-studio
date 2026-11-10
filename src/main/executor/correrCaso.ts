@@ -16,10 +16,11 @@ import {
   RegistoPasso,
   ResultadoCaso,
   PerfilAutenticacao,
+  ResultadoApi,
   Valor,
   VariavelCalculada,
 } from '../../shared/modelo';
-import { avaliarFormula, ErroFormula, preencherTexto } from '../../shared/formulas';
+import { avaliarCondicao, avaliarFormula, ErroFormula, preencherTexto } from '../../shared/formulas';
 import { AmbienteApi, ErroApi, escaparJson, executarBlocoApi } from '../api/pedidos';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, ErroElemento } from '../motor/localizar';
@@ -155,7 +156,6 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     evento({ tipo: 'passo', ...registo });
   };
 
-  /** Resolve o valor de um passo, tendo em conta os parâmetros do bloco nesta jornada. */
   const formulas = new Map(pedido.calculadas.map((v) => [v.nome, v.formula]));
   const emCalculo: string[] = [];
 
@@ -217,6 +217,16 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       }
     };
 
+  /** Avalia uma condição ("só se...") com os dados do caso. */
+  const cumpre = (condicao: string, variavel: (nome: string) => string | undefined, onde: string): boolean => {
+    try {
+      return avaliarCondicao(condicao, { variavel, teste: caso.id, run: pedido.runId, agora: new Date(), contador: pedido.proximoContador, aleatorio: Math.random });
+    } catch (erro) {
+      if (erro instanceof ErroFormula) throw new ErroDados(`Erro na ${onde}: ${erro.message}`);
+      throw erro;
+    }
+  };
+
   /** Resolve o valor de um passo, tendo em conta os parâmetros do bloco nesta jornada. */
   const resolver = (valor: Valor | undefined, item: BlocoDaJornada, onde = 'passo'): { texto: string; deVariavel: boolean } => {
     if (!valor) return { texto: '', deVariavel: false };
@@ -261,6 +271,24 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     }
   };
 
+  /** Marca o caso como ERRO (não chegou ao fim) e guarda a explicação e o print do momento. */
+  const registarErro = async (erro: unknown): Promise<void> => {
+    resultado.estado = 'ERRO';
+    const mensagem = explicarErro(erro, limiteMs);
+    const porExecutar = jornada.blocos
+      .slice(indiceBloco + 1)
+      .filter((b) => !b.sempre)
+      .map((b) => pedido.blocos.get(b.blocoId)?.nome ?? b.blocoId);
+    resultado.erro = { mensagem, bloco: blocoAtual, passo: passoAtual, porExecutar };
+    registar(blocoAtual, passoAtual || 'Preparar o caso', 'erro', 0, mensagem);
+    if (porExecutar.length > 0) escrever(`Blocos por executar: ${porExecutar.join(', ')}`);
+    if (!(erro instanceof ErroElemento || erro instanceof ErroAcao || erro instanceof ErroDados || erro instanceof ErroApi)) {
+      const tecnico = erro instanceof Error ? erro.message : String(erro);
+      fs.appendFileSync(ficheiroLog, `  Detalhe técnico: ${tecnico.replace(/\n/g, '\n    ')}\n`, 'utf8');
+    }
+    await tirarPrint('erro.png');
+  };
+
   try {
     contexto = await pedido.browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'pt-PT' });
     if (pedido.trace) await contexto.tracing.start({ screenshots: true, snapshots: true });
@@ -269,7 +297,9 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     // Depois de uma verificação, o ecrã já assentou: as seguintes não precisam de esperar tanto.
     let ecraAssente = false;
 
-    for (const [indice, item] of jornada.blocos.entries()) {
+    const correrBloco = async (indice: number, item: BlocoDaJornada): Promise<void> => {
+      const pag = pagina as Page;
+      const ctx = contexto as BrowserContext;
       indiceBloco = indice;
       const bloco = pedido.blocos.get(item.blocoId);
       if (!bloco) throw new ErroDados(`O bloco "${item.blocoId}" já não existe.`);
@@ -277,7 +307,13 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       passoAtual = '';
       if (bloco.tipo !== 'UI' && bloco.tipo !== 'API') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
       const aplicacao = bloco.aplicacaoId ? pedido.aplicacoes.get(bloco.aplicacaoId) : undefined;
-      escrever(`Bloco ${indice + 1}: ${bloco.nome}`);
+      // Bloco condicional: só corre se a condição se cumprir para este caso.
+      if (item.condicao?.trim() && !cumpre(item.condicao, procurar, `condição do bloco "${bloco.nome}"`)) {
+        escrever(`Bloco ${indice + 1}: ${bloco.nome} (não executado)`);
+        registar(bloco.nome, 'Bloco não executado', 'ignorado', 0, `a condição não se cumpre: ${item.condicao.trim()}`);
+        return;
+      }
+      escrever(`Bloco ${indice + 1}: ${bloco.nome}${item.sempre ? ' (limpeza: corre sempre)' : ''}`);
       evento({ tipo: 'bloco-inicio', bloco: bloco.nome });
 
       if (bloco.tipo === 'API') {
@@ -288,22 +324,39 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         resultado.passoAtual = `${bloco.nome}: ${passoAtual}`;
         pedido.aoProgredir(resultado);
         const t0 = Date.now();
-        const feito = await executarBlocoApi(
-          {
-            bloco,
-            urlBase: aplicacao?.urls[pedido.ambiente.id],
-            perfil: definicao.perfilId ? pedido.perfis.get(definicao.perfilId) : undefined,
-            preencher: preencherNoBloco(item),
-          },
-          pedido.api,
-        );
+        // "Esperar até": repete o pedido até todas as verificações passarem, ou até acabar o tempo.
+        const repetir = definicao.repetir;
+        const fimRepetir = t0 + Math.max(0, repetir?.limiteSeg ?? 0) * 1000;
+        let tentativas = 0;
+        let feito!: ResultadoApi;
+        for (;;) {
+          tentativas += 1;
+          const ultima = !repetir || Date.now() >= fimRepetir;
+          try {
+            feito = await executarBlocoApi(
+              {
+                bloco,
+                urlBase: aplicacao?.urls[pedido.ambiente.id],
+                perfil: definicao.perfilId ? pedido.perfis.get(definicao.perfilId) : undefined,
+                preencher: preencherNoBloco(item),
+              },
+              pedido.api,
+            );
+            if (ultima || feito.verificacoes.every((v) => v.ok)) break;
+          } catch (erro) {
+            // Enquanto se espera, um erro (por exemplo, o registo ainda não existe) conta como "ainda não".
+            if (ultima || !(erro instanceof ErroApi)) throw erro;
+          }
+          if (pedido.devePararAgora()) throw new Parado();
+          await new Promise((r) => setTimeout(r, Math.max(1, repetir?.intervaloSeg ?? 1) * 1000));
+        }
         // Evidências do pedido e da resposta (com os segredos já mascarados).
         const base = `${String(indice + 1).padStart(2, '0')}_${criarSlug(bloco.nome)}`;
         fs.mkdirSync(path.join(pedido.pasta, 'api'), { recursive: true });
         fs.writeFileSync(path.join(pedido.pasta, 'api', `${base}.request.json`), `${JSON.stringify(feito.pedido, null, 2)}\n`, 'utf8');
         fs.writeFileSync(path.join(pedido.pasta, 'api', `${base}.response.json`), `${JSON.stringify(feito.resposta, null, 2)}\n`, 'utf8');
         resultado.evidencias?.push(`api/${base}.request.json`, `api/${base}.response.json`);
-        registar(bloco.nome, `${feito.pedido.metodo} ${feito.pedido.url}`, 'ok', Date.now() - t0, `HTTP ${feito.resposta.estado} em ${feito.resposta.tempoMs} ms`);
+        registar(bloco.nome, `${feito.pedido.metodo} ${feito.pedido.url}`, 'ok', Date.now() - t0, `HTTP ${feito.resposta.estado} em ${feito.resposta.tempoMs} ms${tentativas > 1 ? ` (à ${tentativas}.ª tentativa)` : ''}`);
         for (const v of feito.verificacoes) {
           if (!v.ok) resultado.diferencas.push({ bloco: bloco.nome, passo: `Verificar: ${v.descricao}`, esperado: v.esperado, obtido: v.obtido });
           registar(bloco.nome, `Verificar: ${v.descricao}`, v.ok ? 'ok' : 'ko', 0, v.ok ? undefined : `obtido "${v.obtido}"`);
@@ -313,7 +366,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           resultado.variaveis[nome] = valor;
           registar(bloco.nome, `Guardar {${nome}}`, 'ok', 0, `"${valor}"`);
         }
-        continue;
+        return;
       }
 
       // Blocos com segredos (por exemplo, login) correm sem trace, para a password não ficar gravada.
@@ -321,7 +374,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       if (pedido.trace) {
         if (temSegredos) await guardarTrace();
         else if (!traceLigado) {
-          await contexto.tracing.startChunk();
+          await ctx.tracing.startChunk();
           traceLigado = true;
         }
       }
@@ -331,18 +384,40 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         passoAtual = passo.descricao;
         resultado.passoAtual = `${bloco.nome}: ${passo.descricao}`;
         pedido.aoProgredir(resultado);
+        // Passo condicional: só corre se a condição se cumprir para este caso.
+        if (passo.condicao?.trim() && !cumpre(passo.condicao, procurarNoBloco(item), `condição do passo "${passo.descricao}"`)) {
+          registar(bloco.nome, passo.descricao, 'ignorado', 0, `a condição não se cumpre: ${passo.condicao.trim()}`);
+          continue;
+        }
         const t0 = Date.now();
-        await monitor.esperarCalma(pagina, 10_000);
+        await monitor.esperarCalma(pag, 10_000);
         const nota = await executarPasso(passo, item, aplicacao, bloco.nome);
         if (nota.estado === 'ko' && nota.diferenca) resultado.diferencas.push(nota.diferenca);
         registar(bloco.nome, passo.descricao, nota.estado, Date.now() - t0, nota.detalhe);
       }
 
-      await monitor.esperarCalma(pagina, 5_000);
+      await monitor.esperarCalma(pag, 5_000);
       await tirarPrint(`${String(indice + 1).padStart(2, '0')}_${criarSlug(bloco.nome)}.png`);
-    }
+    };
 
-    resultado.estado = resultado.diferencas.length > 0 ? 'KO' : 'OK';
+    // Corre os blocos por ordem. Depois de um erro, só correm os blocos de limpeza ("corre sempre").
+    let houveErro = false;
+    for (const [indice, item] of jornada.blocos.entries()) {
+      if (houveErro && !item.sempre) continue;
+      try {
+        await correrBloco(indice, item);
+      } catch (erro) {
+        if (erro instanceof Parado) throw erro;
+        if (houveErro) {
+          // Uma limpeza que falha não muda o resultado do caso, mas fica registada.
+          registar(blocoAtual, passoAtual || 'Limpeza', 'erro', 0, `A limpeza falhou: ${explicarErro(erro, limiteMs)}`);
+        } else {
+          houveErro = true;
+          await registarErro(erro);
+        }
+      }
+    }
+    if (!houveErro) resultado.estado = resultado.diferencas.length > 0 ? 'KO' : 'OK';
 
     /** Executa um passo e devolve o que escrever no log. */
     async function executarPasso(
@@ -401,7 +476,9 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         }
         case 'verificar': {
           const tipo = passo.verificacao?.tipo ?? 'texto';
-          const espera = ecraAssente ? 1_000 : Math.min(limiteMs, 8_000);
+          // "Esperar até": o passo pode ter o seu próprio tempo de espera (por exemplo, um estado que demora a mudar).
+          const esperaPropria = passo.verificacao?.esperaSeg;
+          const espera = esperaPropria && esperaPropria > 0 ? esperaPropria * 1000 : ecraAssente ? 1_000 : Math.min(limiteMs, 8_000);
           const fim = Date.now() + espera;
           let esperado = '';
           if (tipo !== 'visivel') {
@@ -470,20 +547,8 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     if (erro instanceof Parado) {
       resultado.estado = 'PARADO';
       escrever('Parado a pedido do utilizador.');
-    } else {
-      resultado.estado = 'ERRO';
-      const mensagem = explicarErro(erro, limiteMs);
-      const porExecutar = jornada.blocos
-        .slice(indiceBloco + 1)
-        .map((b) => pedido.blocos.get(b.blocoId)?.nome ?? b.blocoId);
-      resultado.erro = { mensagem, bloco: blocoAtual, passo: passoAtual, porExecutar };
-      registar(blocoAtual, passoAtual || 'Preparar o caso', 'erro', 0, mensagem);
-      if (porExecutar.length > 0) escrever(`Blocos por executar: ${porExecutar.join(', ')}`);
-      if (!(erro instanceof ErroElemento || erro instanceof ErroAcao || erro instanceof ErroDados || erro instanceof ErroApi)) {
-        const tecnico = erro instanceof Error ? erro.message : String(erro);
-        fs.appendFileSync(ficheiroLog, `  Detalhe técnico: ${tecnico.replace(/\n/g, '\n    ')}\n`, 'utf8');
-      }
-      await tirarPrint('erro.png');
+    } else if (resultado.estado !== 'ERRO') {
+      await registarErro(erro);
     }
   } finally {
     await guardarTrace();

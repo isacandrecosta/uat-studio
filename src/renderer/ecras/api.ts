@@ -563,6 +563,26 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
         ),
         listaGuardar,
       ),
+      (() => {
+        // "Esperar até": repetir o pedido até as verificações passarem.
+        const numero = (id: string, valor: number, rotulo: string): HTMLInputElement =>
+          h('input', { id, type: 'number', min: 0, max: 3600, step: 1, class: 'campo campo-numero', value: valor, 'aria-label': rotulo });
+        const intervalo = numero('api-repetir-intervalo', pedido.repetir?.intervaloSeg ?? 5, 'Repetir a cada (segundos)');
+        const limite = numero('api-repetir-limite', pedido.repetir?.limiteSeg ?? 0, 'Durante no máximo (segundos)');
+        const aplicar = (): void => {
+          const maximo = Math.max(0, Math.floor(Number(limite.value) || 0));
+          pedido.repetir = maximo > 0 ? { intervaloSeg: Math.max(1, Math.floor(Number(intervalo.value) || 1)), limiteSeg: maximo } : undefined;
+        };
+        intervalo.addEventListener('input', aplicar);
+        limite.addEventListener('input', aplicar);
+        return h(
+          'div',
+          { class: 'campo-grupo' },
+          h('h3', {}, 'Esperar até (opcional)'),
+          h('div', { class: 'linha-esperar' }, 'Repetir o pedido a cada', intervalo, 'segundos, durante no máximo', limite, 'segundos, até todas as verificações passarem.'),
+          h('p', { class: 'ajuda-campo' }, 'Com 0 no máximo, o pedido é feito só uma vez. Útil quando o resultado demora (por exemplo, um estado que muda passado um bocado). No "Testar", o pedido é sempre feito só uma vez.'),
+        );
+      })(),
       h('div', { class: 'linha-testar' }, escolhaExemplo, botaoTestar),
       zonaResultado,
     );

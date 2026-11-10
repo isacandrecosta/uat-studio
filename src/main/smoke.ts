@@ -344,8 +344,51 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
     [
       'jornada entre 2 portais: simular no Front Office, validar no Backoffice e confirmar pela API',
       async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const mudar = (seletor: string, valor: string): Promise<void> =>
+          naPagina(
+            j,
+            `(() => { const e = document.querySelector(${JSON.stringify(seletor)}); e.value = ${JSON.stringify(valor)}; e.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+          );
+        // Um 3.º caso, rejeitado: o Backoffice e a API só fazem sentido para pedidos aprovados.
+        const conjunto = repo.ler(pasta, 'casos', 'simular-e-validar');
+        conjunto.casos.push({
+          id: 'BO0003',
+          nome: 'CP12: acima do máximo (rejeitado, não vai ao Backoffice)',
+          etiquetas: ['rejeitado'],
+          dados: { Variante: 'CP12', Valor: '20001', EstadoEsperado: 'Rejeitado', MensagemEsperada: 'Valor fora dos limites', PrestacaoEsperada: '0,00', ComissaoEsperada: '0,00', TotalEsperado: '0,00', PontosEsperados: '0', MotivoBO: '' },
+        });
+        repo.guardar(pasta, 'casos', conjunto);
+
+        // Blocos condicionais, definidos no editor de jornada ("Só se").
         await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
         await esperar(j, "document.querySelector('[data-jornada=\"simular-e-validar\"]')");
+        await naPagina(j, "document.querySelector('[data-jornada=\"simular-e-validar\"]').click()");
+        await esperar(j, "document.querySelectorAll('#percurso > li').length === 3");
+        await mudar('#percurso > li:nth-child(2) .opcao-condicao input', '{EstadoEsperado} = "Aprovado" e');
+        await esperar(j, "!document.querySelector('#percurso > li:nth-child(2) .opcoes-bloco .erro-campo').hidden");
+        confirmar(!repo.ler(pasta, 'jornadas', 'simular-e-validar').blocos[1].condicao, 'Uma condição mal escrita não devia ser guardada.');
+        await mudar('#percurso > li:nth-child(2) .opcao-condicao input', '{EstadoEsperado} = "Aprovado"');
+        await esperar(j, "document.querySelector('#percurso > li:nth-child(2) .opcao-condicao input')?.value === '{EstadoEsperado} = \"Aprovado\"' && document.querySelector('#percurso > li:nth-child(2) .opcoes-bloco .erro-campo').hidden");
+        await mudar('#percurso > li:nth-child(3) .opcao-condicao input', '{EstadoEsperado} = "Aprovado"');
+        const fimCondicao = Date.now() + 5_000;
+        while (!repo.ler(pasta, 'jornadas', 'simular-e-validar').blocos[2].condicao && Date.now() < fimCondicao) await new Promise((r) => setTimeout(r, 100));
+        const comCondicoes = repo.ler(pasta, 'jornadas', 'simular-e-validar');
+        confirmar(comCondicoes.blocos[1].condicao === '{EstadoEsperado} = "Aprovado"' && Boolean(comCondicoes.blocos[2].condicao), 'As condições dos blocos não foram guardadas.');
+
+        // Editor de passos: condição num passo e "esperar até" numa verificação.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"gravar\"]').click()");
+        await esperar(j, "document.querySelector('[data-editar-bloco=\"validar-no-backoffice\"]')");
+        await naPagina(j, "document.querySelector('[data-editar-bloco=\"validar-no-backoffice\"]').click()");
+        await esperar(j, "document.querySelectorAll('#editor-passos .lista-passos > li').length === 9");
+        await mudar('#editor-passos .lista-passos > li:nth-child(6) input[aria-label^="Condição"]', '{MotivoBO} <> ""');
+        await mudar('#editor-passos .lista-passos > li:nth-child(8) input[type="number"]', '12');
+        const fimPassos = Date.now() + 5_000;
+        while (repo.ler(pasta, 'blocos', 'validar-no-backoffice').passos[7].verificacao?.esperaSeg !== 12 && Date.now() < fimPassos) await new Promise((r) => setTimeout(r, 100));
+        const editado = repo.ler(pasta, 'blocos', 'validar-no-backoffice');
+        confirmar(editado.passos[5].condicao === '{MotivoBO} <> ""' && editado.passos[7].verificacao?.esperaSeg === 12, 'As alterações aos passos não foram guardadas.');
+        await tirarPrint(j, raiz, 'passos');
+
         await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
         await esperar(j, "document.getElementById('btn-correr') && document.querySelector('#run-ambito option[value=\"jornada:simular-e-validar\"]')");
         await naPagina(
@@ -362,7 +405,10 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
             : caso.diferencas.map((d) => `${d.bloco} › ${d.passo}: esperado ${d.esperado}, obtido ${d.obtido}`).join(' | ');
           console.log(`[smoke]   ${caso.casoId} ${caso.estado} (${(caso.duracaoMs / 1000).toFixed(1)} s) ${detalhe}`);
         }
-        confirmar(run.casos.length === 2 && run.casos.every((c) => c.estado === 'OK'), 'Os 2 casos da jornada entre portais deviam dar OK.');
+        confirmar(run.casos.length === 3 && run.casos.every((c) => c.estado === 'OK'), 'Os 3 casos da jornada entre portais deviam dar OK.');
+        const saltados = run.casos[2].passos.filter((p) => p.estado === 'ignorado' && p.descricao === 'Bloco não executado').map((p) => p.bloco);
+        confirmar(saltados.join(',') === 'Validar pedido no Backoffice,Consultar pedido pela API', `No caso rejeitado, os blocos condicionais deviam ser saltados: ${saltados.join(',')}`);
+        confirmar(!run.casos[0].passos.some((p) => p.estado === 'ignorado'), 'No caso aprovado não devia haver nada saltado.');
         const pastaCaso = path.join(pastaProjeto, 'exemplo', 'execucoes', run.pasta, 'casos', 'simular-e-validar', 'BO0001');
         for (const esperado of ['01_simular-credito.png', '02_validar-pedido-no-backoffice.png', path.join('api', '03_consultar-pedido-pela-api.response.json')]) {
           confirmar(fs.existsSync(path.join(pastaCaso, esperado)), `Falta a evidência ${esperado}.`);
@@ -513,6 +559,76 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
           .map((f) => fs.readFileSync(path.join(pasta, 'execucoes', run.pasta ?? '', f), 'utf8'))
           .join('\n');
         confirmar(!tudo.includes('segredo-de-teste'), 'O client secret aparece nos ficheiros da execução!');
+
+        // 5. "Esperar até" e limpeza: um bloco repete o pedido até desistir (KO), outro dá erro,
+        //    e o bloco de limpeza (apagar o cliente) corre na mesma.
+        const pedidoBase = { parametros: [], cabecalhos: [], tipoCorpo: 'nenhum' as const, corpo: '', perfilId: 'oauth-de-teste', guardar: [] };
+        repo.guardar(pasta, 'blocos', {
+          id: 'esperar-estado',
+          nome: 'Esperar que o cliente fique suspenso',
+          tipo: 'API',
+          aplicacaoId: 'api-de-teste',
+          passos: [],
+          pedido: {
+            ...pedidoBase,
+            metodo: 'GET',
+            url: '/api/clientes/{ClienteId}',
+            repetir: { intervaloSeg: 1, limiteSeg: 3 },
+            verificacoes: [{ id: 'v1', alvo: 'corpo', caminho: 'estado', operador: 'igual', esperado: 'Suspenso' }],
+          },
+        });
+        repo.guardar(pasta, 'blocos', {
+          id: 'pedido-com-erro',
+          nome: 'Pedido que falha',
+          tipo: 'API',
+          aplicacaoId: 'api-de-teste',
+          passos: [],
+          pedido: { ...pedidoBase, metodo: 'GET', url: '/api/erro/500', verificacoes: [], guardar: [{ variavel: 'NaoVaiExistir', caminho: 'id' }] },
+        });
+        repo.guardar(pasta, 'blocos', {
+          id: 'apagar-cliente',
+          nome: 'Apagar cliente',
+          tipo: 'API',
+          aplicacaoId: 'api-de-teste',
+          passos: [],
+          pedido: { ...pedidoBase, metodo: 'DELETE', url: '/api/clientes/{ClienteId}', verificacoes: [{ id: 'v1', alvo: 'estado', operador: 'igual', esperado: '204' }] },
+        });
+        repo.guardar(pasta, 'jornadas', {
+          id: 'limpeza-por-api',
+          nome: 'Limpeza por API',
+          epicoId: 'simulacoes',
+          etiquetas: ['api'],
+          blocos: [
+            { id: 'b1', blocoId: 'criar-cliente' },
+            { id: 'b2', blocoId: 'esperar-estado' },
+            { id: 'b3', blocoId: 'consultar-cliente', condicao: '{Saltar} <> "S"' },
+            { id: 'b4', blocoId: 'pedido-com-erro' },
+            { id: 'b5', blocoId: 'consultar-cliente' },
+            { id: 'b6', blocoId: 'apagar-cliente', sempre: true },
+          ],
+        });
+        repo.guardar(pasta, 'casos', { id: 'limpeza-por-api', colunas: ['Saltar', 'EstadoEsperado'], casos: [{ id: 'LIMP01', etiquetas: [], dados: { Saltar: 'S', EstadoEsperado: 'Ativo' } }] });
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('[data-jornada=\"limpeza-por-api\"]')");
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-correr') && document.querySelector('#run-ambito option[value=\"jornada:limpeza-por-api\"]')");
+        await escrever('#run-ambito', 'jornada:limpeza-por-api', 'change');
+        await naPagina(j, "document.getElementById('btn-correr').click()");
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"true\"]')", 60_000);
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"false\"]')", 120_000);
+        const limpeza = estadoRun()?.casos[0];
+        if (!limpeza) throw new Error('Não há execução da jornada de limpeza.');
+        const linhas = limpeza.passos.map((p) => `${p.estado} | ${p.bloco} | ${p.descricao} | ${p.detalhe ?? ''}`);
+        console.log(`[smoke]   ${limpeza.casoId} ${limpeza.estado}: ${limpeza.erro?.mensagem ?? ''}`);
+        const tem = (padrao: RegExp): boolean => linhas.some((l) => padrao.test(l));
+        confirmar(limpeza.estado === 'ERRO' && limpeza.erro?.bloco === 'Pedido que falha', `Esperava ERRO no bloco "Pedido que falha": ${limpeza.estado} ${limpeza.erro?.bloco}`);
+        confirmar(tem(/^ok \| Esperar que o cliente fique suspenso \| GET .* \(à [3-5]\.ª tentativa\)/), `O "esperar até" não repetiu o pedido como esperado:\n${linhas.join('\n')}`);
+        confirmar(tem(/^ko \| Esperar que o cliente fique suspenso \| Verificar: Campo estado igual a Suspenso/), 'O "esperar até" devia acabar em KO.');
+        confirmar(tem(/^ignorado \| Consultar cliente \| Bloco não executado \| a condição não se cumpre/), 'O bloco condicional devia ter sido saltado.');
+        confirmar(tem(/^ok \| Apagar cliente \| DELETE .*HTTP 204/), `O bloco de limpeza devia ter corrido depois do erro:\n${linhas.join('\n')}`);
+        confirmar(linhas.filter((l) => l.includes('| Consultar cliente |')).length === 1, 'O bloco depois do erro (sem "corre sempre") não devia ter corrido.');
+        confirmar(limpeza.erro?.porExecutar.join(',') === 'Consultar cliente', `Blocos por executar errados: ${limpeza.erro?.porExecutar.join(',')}`);
+
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');
       },

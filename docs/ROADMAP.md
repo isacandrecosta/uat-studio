@@ -18,9 +18,9 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Blocos de API: construtor de pedidos, perfis OAuth 2.0 (client credentials, password, renovação) / API Key / Basic / Bearer, verificações, guardar da resposta, teste individual.
 - [ ] Blocos de API, o que falta: certificado de cliente (mTLS), OAuth Authorization Code + PKCE, verificações em XML (XPath), SOAP, importar cURL/OpenAPI/Postman.
 - [x] Cofre local de segredos; segredos fora do trace (desligado ou limpo no login e nos pedidos de token).
-- [ ] Passos e blocos condicionais ("só se `{Produto}` = X").
+- [x] Passos e blocos condicionais ("só se `{Produto}` = X").
 - [ ] Bloco "esperar até" e ação "encontrar linha na tabela".
-- [ ] Blocos de preparação e limpeza por API.
+- [x] Blocos de preparação e limpeza por API (qualquer bloco pode ser marcado "limpeza: corre sempre").
 
 ## Fase 3: execuções a sério
 - [ ] Ecrã Runs: opções, filtros por etiqueta, progresso ao vivo, histórico, detalhes com logs e evidências.

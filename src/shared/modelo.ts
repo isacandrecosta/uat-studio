@@ -89,7 +89,11 @@ export interface Passo {
     tipo: TipoVerificacao;
     /** Para `numero`: diferença máxima aceite (por exemplo "0,01"). */
     tolerancia?: string;
+    /** "Esperar até": quantos segundos esperar que o valor apareça (por omissão, poucos segundos). */
+    esperaSeg?: number;
   };
+  /** Passo condicional: fórmula que tem de ser verdadeira para o passo correr (por exemplo `{Produto} = "CP12"`). */
+  condicao?: string;
   /** Para `guardar`: nome da variável onde fica o valor lido. */
   variavel?: string;
   /** O valor é um segredo (por exemplo, uma password): nunca aparece em logs nem relatórios. */
@@ -265,6 +269,8 @@ export interface PedidoApi {
   perfilId?: string;
   /** Tempo limite em milissegundos (por omissão, 30 segundos). */
   limiteMs?: number;
+  /** "Esperar até": repete o pedido de X em X segundos até todas as verificações passarem ou acabar o tempo. */
+  repetir?: { intervaloSeg: number; limiteSeg: number };
   verificacoes: VerificacaoApi[];
   guardar: GuardarApi[];
 }
@@ -330,6 +336,10 @@ export interface BlocoDaJornada {
   blocoId: string;
   /** Troca variáveis do bloco por outros valores só nesta jornada: { NomeNoBloco: valor }. */
   parametros?: Record<string, Valor>;
+  /** Bloco condicional: fórmula que tem de ser verdadeira para o bloco correr neste caso. */
+  condicao?: string;
+  /** Bloco de limpeza: corre sempre, mesmo que um bloco anterior tenha dado erro. */
+  sempre?: boolean;
 }
 
 export interface Jornada {

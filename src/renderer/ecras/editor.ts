@@ -198,6 +198,40 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
     return h('div', { class: 'parametro' }, h('code', {}, `{${nome}}`), escolhaModo, valor, erroFormula);
   }
 
+  /** Condição ("só se...") e limpeza ("corre sempre") de um bloco nesta jornada. */
+  function opcoesDoBloco(item: BlocoDaJornada, indice: number): HTMLElement {
+    const erro = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
+    const condicao = h('input', {
+      type: 'text',
+      class: 'campo campo-formula',
+      value: item.condicao ?? '',
+      placeholder: 'Sempre. Ou, por exemplo: {Variante} = "CP12"',
+      'aria-label': `Condição do bloco ${indice + 1}`,
+      spellcheck: 'false',
+    });
+    condicao.addEventListener('change', () => {
+      const texto = condicao.value.trim();
+      const problema = texto ? validarFormula(texto) : null;
+      erro.hidden = !problema;
+      erro.textContent = problema ?? '';
+      if (problema) return;
+      item.condicao = texto || undefined;
+      void guardarJornada(true);
+    });
+    const sempre = h('input', { type: 'checkbox', checked: Boolean(item.sempre) });
+    sempre.addEventListener('change', () => {
+      item.sempre = sempre.checked || undefined;
+      void guardarJornada(false);
+    });
+    return h(
+      'div',
+      { class: 'opcoes-bloco' },
+      h('label', { class: 'opcao-condicao' }, h('span', {}, 'Só se'), condicao),
+      h('label', { class: 'opcao', title: 'Para blocos de limpeza: correm mesmo que um bloco anterior tenha dado erro.' }, sempre, 'Limpeza: corre sempre'),
+      erro,
+    );
+  }
+
   function cartaoPercurso(emFalta: string[]): HTMLElement {
     const mover = async (indice: number, delta: number): Promise<void> => {
       const destino = indice + delta;
@@ -252,6 +286,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
             usa.map((nome) => linhaParametro(item, nome)),
           ),
         produz.length > 0 && h('p', { class: 'suave produz' }, 'Guarda: ', produz.map((n) => h('code', {}, `{${n}}`))),
+        opcoesDoBloco(item, indice),
       );
     });
     return h(
