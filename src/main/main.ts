@@ -7,6 +7,8 @@ import {
   iniciarGravacao,
   removerPasso,
   terminarGravacao,
+  capturarEcra,
+  gravarSobrePrint,
 } from './gravador/gravador';
 import { aoMudarRun, pararRun } from './executor/execucao';
 import { registarIpcExecucoes } from './executor/ipc';
@@ -14,7 +16,7 @@ import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
 import { registarIpcPacotes } from './projeto/pacotes';
 import { correrSmoke } from './smoke';
 import { ficheiroDeVerificacao, verificarArranque } from './arranque';
-import { PedidoGravacao } from '../shared/modelo';
+import { PassoSobrePrint, PedidoGravacao } from '../shared/modelo';
 
 const RAIZ = path.join(__dirname, '..', '..');
 const MODO_SMOKE = process.argv.includes('--smoke');
@@ -54,6 +56,8 @@ registarIpcPacotes();
 ipcMain.handle('gravador:estado', () => estadoGravador());
 ipcMain.handle('gravador:iniciar', (_e, pedido: PedidoGravacao) => iniciarGravacao(pastaDoProjeto(), pedido));
 ipcMain.handle('gravador:remover-passo', (_e, passoId: string) => removerPasso(String(passoId)));
+ipcMain.handle('gravador:capturar', () => capturarEcra());
+ipcMain.handle('gravador:sobre-print', (_e, pedido: PassoSobrePrint) => gravarSobrePrint(pedido));
 ipcMain.handle('gravador:terminar', (_e, guardar: boolean) => terminarGravacao(Boolean(guardar)));
 
 void app.whenReady().then(() => {

@@ -965,6 +965,54 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'modo print: gravar passos sobre uma captura do ecrã e corrê-los',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"gravar\"]').click()");
+        await esperar(j, "document.getElementById('btn-gravar')");
+        await naPagina(j, "(() => { document.getElementById('gravar-aplicacao').value = 'simulador'; document.getElementById('gravar-nome').value = 'Gravado sobre print'; document.getElementById('btn-gravar').click(); })()");
+        await esperar(j, "document.getElementById('gravacao-ativa')", 120_000);
+        const p = paginaDoGravador();
+        if (!p) throw new Error('O gravador não tem página.');
+        await p.locator('[data-testid="ddVariante"] select option').nth(1).waitFor({ state: 'attached', timeout: 60_000 });
+        await esperar(j, "document.getElementById('btn-modo-print') && !document.getElementById('btn-modo-print').disabled");
+        await naPagina(j, "document.getElementById('btn-modo-print').click()");
+        await esperar(j, "document.querySelectorAll('#modo-print .print-elemento').length > 3", 30_000);
+        await tirarPrint(j, raiz, 'modo-print');
+        /** Clica no elemento do print cuja descrição tem o texto e grava o passo com estes valores. */
+        const gravarSobre = async (descricao: RegExp, valores: Record<string, string>, passos: number): Promise<void> => {
+          const indice = await naPagina<number>(j, `[...document.querySelectorAll('#modo-print .print-elemento')].findIndex((b) => ${descricao.toString()}.test(b.getAttribute('aria-label') ?? ''))`);
+          confirmar(indice >= 0, `Não há no print um elemento ${descricao}.`);
+          await naPagina(j, `document.querySelectorAll('#modo-print .print-elemento')[${indice}].click()`);
+          await esperar(j, "document.querySelector('dialog[open] #form-acao')");
+          await naPagina(j, `(() => { const d = document.querySelector('dialog[open]'); for (const [id, v] of Object.entries(${JSON.stringify(valores)})) d.querySelector('#form-' + id).value = v; d.querySelector('button[type=submit]').click(); })()`);
+          const fim = Date.now() + 10_000;
+          while ((estadoGravador().bloco?.passos.length ?? 0) < passos && Date.now() < fim) await new Promise((r) => setTimeout(r, 100));
+          confirmar((estadoGravador().bloco?.passos.length ?? 0) === passos, `O passo sobre ${descricao} não foi gravado.`);
+        };
+        await gravarSobre(/Valor/i, { acao: 'escrever', origem: 'variavel', valor: 'Valor' }, 2);
+        await gravarSobre(/Submeter/i, { acao: 'clicar' }, 3);
+        await esperar(j, "document.getElementById('btn-guardar-bloco') && !document.getElementById('btn-guardar-bloco').disabled");
+        await naPagina(j, "document.getElementById('btn-guardar-bloco').click()");
+        await esperar(j, "!document.getElementById('gravacao-ativa')", 30_000);
+        const bloco = repo.ler(pasta, 'blocos', 'gravado-sobre-print');
+        const [, escrever, clicar] = bloco.passos;
+        confirmar(
+          escrever?.acao === 'escrever' && escrever.valor?.tipo === 'variavel' && escrever.alvo?.localizadores[0]?.valor === 'inpValor' && escrever.descricao.includes('(gravado sobre o print)'),
+          `O passo "escrever" gravado sobre o print está errado: ${JSON.stringify(escrever)}`,
+        );
+        confirmar(clicar?.acao === 'clicar' && clicar.alvo?.localizadores.some((l) => l.valor === 'btnSubmeter'), `O passo "clicar" gravado sobre o print está errado: ${JSON.stringify(clicar)}`);
+        // Os passos gravados sobre o print correm a sério numa jornada.
+        const casosSimular = repo.ler(pasta, 'casos', 'simular-credito');
+        repo.guardar(pasta, 'jornadas', { id: 'sobre-print', nome: 'Sobre o print', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'gravado-sobre-print' }] });
+        repo.guardar(pasta, 'casos', { id: 'sobre-print', colunas: casosSimular.colunas, casos: casosSimular.casos.filter((c) => c.id === 'TC0001') });
+        await iniciarRun(pasta, { jornadaIds: ['sobre-print'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const caso = (await esperarFimDoRun(90_000))?.casos[0];
+        console.log(`[smoke]   ${caso?.casoId}=${caso?.estado} ${caso?.erro?.mensagem ?? ''}`);
+        confirmar(caso?.estado === 'OK', 'Os passos gravados sobre o print deviam correr (OK).');
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {

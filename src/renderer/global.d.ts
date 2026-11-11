@@ -14,6 +14,8 @@ import type {
   ProjetoRecente,
   ResultadoApi,
   ResultadoVerificacao,
+  PassoSobrePrint,
+  PrintDoEcra,
   SugestaoReparo,
   VariavelCalculada,
 } from '../shared/modelo';
@@ -54,6 +56,10 @@ declare global {
         estado(): Promise<EstadoGravador>;
         iniciar(pedido: PedidoGravacao): Promise<EstadoGravador>;
         removerPasso(passoId: string): Promise<EstadoGravador>;
+        /** Modo print: captura o ecrã do browser e os elementos por baixo. */
+        capturar(): Promise<PrintDoEcra>;
+        /** Modo print: grava um passo sobre um elemento da captura (sem o executar). */
+        gravarSobrePrint(pedido: PassoSobrePrint): Promise<EstadoGravador>;
         /** Fecha o browser; com `guardar`, grava o bloco no projeto. */
         terminar(guardar: boolean): Promise<Bloco | null>;
         /** Devolve a função para deixar de ouvir. */

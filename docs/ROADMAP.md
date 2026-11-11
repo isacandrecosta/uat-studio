@@ -40,7 +40,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Blocos de Email (Microsoft Graph ou compatível).
 - [ ] Blocos de Email por IMAP (Gmail): por fazer, falta uma caixa de testes para o testar.
 - [x] Intercetar e simular respostas de APIs externas.
-- [ ] Modo print híbrido.
+- [x] Modo print híbrido (gravar passos sobre uma captura do ecrã, com a estrutura da página por baixo).
 - [x] Relatório PDF para assinatura do UAT, com ID do requisito.
 - [x] Exportar/importar pacotes de blocos.
 - [x] Executável portátil (`npm.cmd run exe`, verificado com `npm.cmd run exe:verificar`), ficha da ferramenta para a equipa de segurança (`docs/FICHA-SEGURANCA.md`, `docs/LICENCAS.md`) e guia de instalação (`docs/GUIA-INSTALACAO.md`).

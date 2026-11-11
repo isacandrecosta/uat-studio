@@ -1,5 +1,5 @@
 // Ecrã Gravar: escolher a aplicação e o bloco, abrir o browser e acompanhar os passos gravados.
-import type { Bloco, EstadoGravador, Passo } from '../../shared/modelo.js';
+import type { Bloco, EstadoGravador, Passo, PrintDoEcra, Valor } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { validarFormula } from '../../shared/formulas.js';
 import { confirmar, h, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
@@ -18,6 +18,8 @@ const NOMES_ACAO: Record<Passo['acao'], string> = {
 };
 
 let deixarDeOuvir: (() => void) | null = null;
+/** Modo print: a última captura do ecrã (mantém-se entre redesenhos da gravação). */
+let printAtual: PrintDoEcra | null = null;
 /** Bloco aberto no editor de passos (mantém-se ao mudar de ecrã). */
 let blocoEmEdicao: string | null = null;
 
@@ -79,6 +81,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         const sim = await confirmar('Cancelar gravação', 'Os passos gravados nesta sessão perdem-se.', 'Cancelar gravação');
         if (!sim) return;
       }
+      printAtual = null;
       await api.gravador.terminar(guardar);
       await atualizar();
     };
@@ -140,10 +143,156 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
           h('span', { class: 'etiqueta', id: 'contagem-passos' }, plural(bloco.passos.length, 'passo')),
         ),
         g.mensagem && h('p', { class: 'aviso-erro', role: 'alert' }, g.mensagem),
+        h(
+          'div',
+          { class: 'acoes' },
+          !printAtual &&
+            h(
+              'button',
+              {
+                id: 'btn-modo-print',
+                type: 'button',
+                class: 'botao',
+                disabled: !g.browserAberto,
+                title: 'Tirar um print do browser e gravar passos por cima dele (sem os executar).',
+                onclick: async () => {
+                  try {
+                    printAtual = await api.gravador.capturar();
+                  } catch (e) {
+                    await confirmar('Não foi possível tirar o print', mensagemDeErro(e), 'Fechar');
+                  }
+                  desenharGravacao(await api.gravador.estado());
+                },
+              },
+              'Modo print',
+            ),
+        ),
         listaDePassos(bloco, (passo) => void api.gravador.removerPasso(passo.id)),
       ),
+      ...[painelPrint(g)].filter((p): p is HTMLElement => p !== false),
     );
   }
+
+  /**
+   * Modo print: a captura do ecrã do browser com os elementos por cima (botões transparentes).
+   * Clicar num elemento abre um formulário e o passo é gravado sem ser executado na página.
+   */
+  function painelPrint(g: EstadoGravador): HTMLElement | false {
+    if (!printAtual) return false;
+    const print = printAtual;
+    const atualizar = async (): Promise<void> => {
+      try {
+        printAtual = await api.gravador.capturar();
+      } catch (e) {
+        printAtual = null;
+        await confirmar('Não foi possível tirar o print', mensagemDeErro(e), 'Fechar');
+      }
+      desenharGravacao(await api.gravador.estado());
+    };
+    const gravarSobre = async (indice: number): Promise<void> => {
+      const e = print.elementos[indice];
+      const acoesPossiveis: Array<[Passo['acao'], string]> =
+        e.especie === 'texto'
+          ? [['escrever', 'Escrever'], ['verificar', 'Verificar'], ['guardar', 'Guardar numa variável']]
+          : e.especie === 'lista'
+            ? [['escolher', 'Escolher uma opção'], ['verificar', 'Verificar'], ['guardar', 'Guardar numa variável']]
+            : e.especie === 'marca'
+              ? [['marcar', 'Marcar ou desmarcar'], ['verificar', 'Verificar']]
+              : e.especie === 'botao'
+                ? [['clicar', 'Clicar'], ['verificar', 'Verificar']]
+                : [['verificar', 'Verificar'], ['guardar', 'Guardar numa variável'], ['clicar', 'Clicar']];
+      const valores = await pedirFormulario(`Passo sobre "${e.descricao}"`, [
+        { id: 'acao', rotulo: 'O que fazer', tipo: 'escolha', valor: acoesPossiveis[0][0], opcoes: acoesPossiveis.map(([valor, texto]) => ({ valor, texto })) },
+        {
+          id: 'origem',
+          rotulo: 'De onde vem o valor',
+          tipo: 'escolha',
+          valor: 'fixo',
+          opcoes: [
+            { valor: 'fixo', texto: 'Valor fixo' },
+            { valor: 'variavel', texto: 'Coluna dos dados (nome da coluna)' },
+            { valor: 'formula', texto: 'Fórmula' },
+          ],
+        },
+        {
+          id: 'valor',
+          rotulo: 'Valor (para escrever, escolher, marcar S/N ou verificar)',
+          valor: e.especie === 'marca' ? 'S' : e.texto,
+          ajuda: e.opcoes?.length ? `Opções: ${e.opcoes.slice(0, 8).join(' · ')}${e.opcoes.length > 8 ? ' …' : ''}` : undefined,
+        },
+        {
+          id: 'tipoVerificacao',
+          rotulo: 'Verificar como',
+          tipo: 'escolha',
+          valor: 'texto',
+          opcoes: [
+            { valor: 'texto', texto: 'Texto igual' },
+            { valor: 'numero', texto: 'Número (decimal exato)' },
+            { valor: 'visivel', texto: 'Só que está visível' },
+          ],
+        },
+        { id: 'variavel', rotulo: 'Guardar: nome da variável' },
+      ], 'Gravar passo');
+      if (!valores) return;
+      const acao = valores.acao as Passo['acao'];
+      const precisaValor = ['escrever', 'escolher', 'marcar'].includes(acao) || (acao === 'verificar' && valores.tipoVerificacao !== 'visivel');
+      const valor: Valor | undefined = !precisaValor
+        ? undefined
+        : valores.origem === 'variavel'
+          ? { tipo: 'variavel', nome: valores.valor.trim() }
+          : valores.origem === 'formula'
+            ? { tipo: 'formula', expressao: valores.valor }
+            : { tipo: 'fixo', valor: valores.valor };
+      try {
+        await api.gravador.gravarSobrePrint({
+          elemento: indice,
+          acao,
+          ...(valor ? { valor } : {}),
+          ...(acao === 'verificar' ? { verificacao: { tipo: valores.tipoVerificacao as 'texto' | 'numero' | 'visivel' } } : {}),
+          ...(acao === 'guardar' ? { variavel: valores.variavel.trim() } : {}),
+        });
+      } catch (erro) {
+        await confirmar('Não foi possível gravar o passo', mensagemDeErro(erro), 'Fechar');
+      }
+    };
+    const caixas = print.elementos.map((e, i) => {
+      const caixa = h('button', { type: 'button', class: 'print-elemento', 'data-elemento': i, 'data-especie': e.especie, title: `${e.descricao}${e.texto ? ` · "${e.texto}"` : ''}`, 'aria-label': e.descricao, onclick: () => void gravarSobre(i) });
+      // Posição em percentagem da captura (definida por código: a política de segurança não aceita style="...").
+      caixa.style.setProperty('left', `${(e.x / print.largura) * 100}%`);
+      caixa.style.setProperty('top', `${(e.y / print.altura) * 100}%`);
+      caixa.style.setProperty('width', `${(e.largura / print.largura) * 100}%`);
+      caixa.style.setProperty('height', `${(e.altura / print.altura) * 100}%`);
+      return caixa;
+    });
+    return h(
+      'section',
+      { class: 'cartao', id: 'modo-print' },
+      h(
+        'header',
+        { class: 'cartao-topo' },
+        h('div', {}, h('h2', {}, 'Modo print'), h('p', { class: 'suave' }, `Clica num elemento destacado (${print.elementos.length}) para gravar um passo sobre o print. Os passos não são executados na página: confirma-os numa execução.${g.browserAberto ? '' : ' O browser foi fechado.'}`)),
+        h(
+          'div',
+          { class: 'acoes' },
+          h('button', { id: 'btn-atualizar-print', type: 'button', class: 'botao', disabled: !g.browserAberto, onclick: () => void atualizar() }, 'Tirar outro print'),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao',
+              onclick: async () => {
+                printAtual = null;
+                desenharGravacao(await api.gravador.estado());
+              },
+            },
+            'Fechar o modo print',
+          ),
+        ),
+      ),
+      h('div', { class: 'print-zona' }, h('img', { src: print.imagem, alt: 'Captura do ecrã do browser', class: 'print-imagem' }), caixas),
+    );
+  }
+
 
   async function desenharFormulario(): Promise<void> {
     const [aplicacoes, blocos] = await Promise.all([api.dados.listar('aplicacoes'), api.dados.listar('blocos')]);

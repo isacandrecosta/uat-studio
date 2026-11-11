@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('uatStudio', {
     estado: chamar('gravador:estado'),
     iniciar: chamar('gravador:iniciar'),
     removerPasso: chamar('gravador:remover-passo'),
+    capturar: chamar('gravador:capturar'),
+    gravarSobrePrint: chamar('gravador:sobre-print'),
     terminar: chamar('gravador:terminar'),
     aoAtualizar: ouvir('gravador:atualizado'),
   },

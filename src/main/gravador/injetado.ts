@@ -612,7 +612,43 @@ export function scriptGravador(): void {
   }
 
   // ---------- Ligação ao UAT Studio ----------
-  w.__uatPagina = { definirModo: (m: 'gravar' | 'livre') => definirModo(m, false), mostrarAviso };
+  /**
+   * Modo print: os elementos visíveis com que se pode fazer alguma coisa (controlos e elementos com data-testid),
+   * com a posição no ecrã e os localizadores, para gravar passos por cima de uma captura do ecrã.
+   */
+  function mapaDoEcra(): Array<{ x: number; y: number; largura: number; altura: number; especie: Especie; descricao: string; localizadores: Loc[]; widget?: string; texto: string; opcoes?: string[] }> {
+    const vistos = new Set<Element>();
+    const lista: ReturnType<typeof mapaDoEcra> = [];
+    for (const candidato of Array.from(document.querySelectorAll(`${CONTROLOS}, [data-testid]`))) {
+      if (lista.length >= 400 || candidato === hospedeiro || hospedeiro.contains(candidato)) continue;
+      const e = normalizar(candidato);
+      if (vistos.has(e)) continue;
+      vistos.add(e);
+      const r = e.getBoundingClientRect();
+      const estilo = getComputedStyle(e);
+      if (r.width < 2 || r.height < 2 || estilo.visibility === 'hidden' || estilo.display === 'none') continue;
+      if (r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
+      const especie = especieDe(e);
+      const dados = recolher(e, especie);
+      if (dados.localizadores.length === 0) continue;
+      const valor = 'value' in e && typeof (e as HTMLInputElement).value === 'string' ? (e as HTMLInputElement).value : '';
+      lista.push({
+        x: r.left,
+        y: r.top,
+        largura: r.width,
+        altura: r.height,
+        especie,
+        descricao: dados.descricao,
+        localizadores: dados.localizadores,
+        ...(dados.widget ? { widget: dados.widget } : {}),
+        texto: limpar(e.tagName === 'SELECT' ? (e as HTMLSelectElement).selectedOptions[0]?.text : valor || (e as HTMLElement).innerText).slice(0, 200),
+        ...(e.tagName === 'SELECT' ? { opcoes: Array.from((e as HTMLSelectElement).options).map((o) => limpar(o.text)).slice(0, 100) } : {}),
+      });
+    }
+    return lista;
+  }
+
+  w.__uatPagina = { definirModo: (m: 'gravar' | 'livre') => definirModo(m, false), mostrarAviso, mapaDoEcra };
   definirModo('gravar', false);
   void enviar({ tipo: 'estado' }).then((resposta) => {
     if (!resposta) return;

@@ -4,7 +4,10 @@ import { Browser, BrowserContext, chromium, Page } from 'playwright-core';
 import {
   Alvo,
   Bloco,
+  ElementoDoPrint,
   EstadoGravador,
+  PassoSobrePrint,
+  PrintDoEcra,
   Localizador,
   Passo,
   PedidoGravacao,
@@ -32,6 +35,8 @@ interface Sessao {
   mensagem?: string;
   /** "Regravar este elemento": o passo a corrigir e os valores do caso. */
   regravar?: { passoId: string; valores: Record<string, string>; feito: boolean };
+  /** Modo print: os elementos da última captura (com os localizadores, que não vão para a interface). */
+  print?: Array<ElementoDoPrint & { localizadores: Localizador[]; widget?: string }>;
 }
 
 /** O que a página envia quando o utilizador confirma o popup. */
@@ -334,6 +339,63 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
   }
   if (!sessao?.regravar) avisar(undefined);
   else notificar(estadoGravador());
+  return estadoGravador();
+}
+
+/**
+ * Modo print: captura a parte visível da página e a estrutura por baixo (os elementos com que se pode
+ * fazer alguma coisa, com posição e localizadores). Os passos gravam-se depois por cima da captura.
+ */
+export async function capturarEcra(): Promise<PrintDoEcra> {
+  const s = sessao;
+  if (!s || !s.browser.isConnected()) throw new repo.ErroProjeto('Não há uma gravação com o browser aberto.');
+  const elementos = (await s.pagina.evaluate(() => (window as unknown as { __uatPagina?: { mapaDoEcra(): unknown } }).__uatPagina?.mapaDoEcra() ?? [])) as NonNullable<Sessao['print']>;
+  const tamanho = await s.pagina.evaluate(() => ({ largura: window.innerWidth, altura: window.innerHeight }));
+  // A barra e o realce do gravador não entram no print.
+  await s.pagina.evaluate(() => (window as unknown as { __uatPagina?: { definirModo(m: string): void } }).__uatPagina?.definirModo('livre')).catch(() => undefined);
+  const png = await s.pagina.screenshot({ type: 'png', animations: 'disabled', mask: [s.pagina.locator('#__uat-gravador')], maskColor: '#00000000' });
+  await s.pagina.evaluate((m) => (window as unknown as { __uatPagina?: { definirModo(m: string): void } }).__uatPagina?.definirModo(m), s.modo).catch(() => undefined);
+  s.print = elementos;
+  return {
+    imagem: `data:image/png;base64,${png.toString('base64')}`,
+    largura: tamanho.largura,
+    altura: tamanho.altura,
+    elementos: elementos.map(({ localizadores: _l, widget: _w, ...resto }) => resto),
+  };
+}
+
+/** Modo print: grava um passo sobre um elemento da última captura (sem o executar na página). */
+export function gravarSobrePrint(pedido: PassoSobrePrint): EstadoGravador {
+  const s = sessao;
+  const elemento = s?.print?.[pedido.elemento];
+  if (!s || !elemento) throw new repo.ErroProjeto('Esse elemento já não está na captura: tire o print outra vez.');
+  if (pedido.valor?.tipo === 'formula') {
+    const erro = validarFormula(pedido.valor.expressao);
+    if (erro) throw new repo.ErroProjeto(`A fórmula tem um erro: ${erro}`);
+  }
+  if (pedido.acao === 'guardar' && !pedido.variavel?.trim()) throw new repo.ErroProjeto('Diga em que variável guardar.');
+  const alvo: Alvo = { descricao: elemento.descricao, localizadores: elemento.localizadores, ...(elemento.widget ? { widget: elemento.widget } : {}) };
+  const mensagem: MensagemPasso = {
+    tipo: 'passo',
+    marcador: 0,
+    acao: pedido.acao,
+    alvo,
+    ...(pedido.valor ? { valor: pedido.valor } : {}),
+    ...(pedido.verificacao ? { verificacao: pedido.verificacao } : {}),
+    ...(pedido.variavel ? { variavel: pedido.variavel.trim() } : {}),
+  };
+  s.bloco.passos.push({
+    id: proximoId(s.bloco),
+    acao: pedido.acao,
+    descricao: `${descreverPasso(mensagem)} (gravado sobre o print)`,
+    alvo,
+    ...(pedido.valor ? { valor: pedido.valor } : {}),
+    ...(pedido.verificacao ? { verificacao: pedido.verificacao } : {}),
+    ...(pedido.variavel ? { variavel: pedido.variavel.trim() } : {}),
+  });
+  if (pedido.valor?.tipo === 'variavel' && !s.colunas.includes(pedido.valor.nome)) s.colunas.push(pedido.valor.nome);
+  if (pedido.variavel && !s.colunas.includes(pedido.variavel.trim())) s.colunas.push(pedido.variavel.trim());
+  avisar('Passo gravado sobre o print (não foi executado na página: confirme-o numa execução).');
   return estadoGravador();
 }
 
