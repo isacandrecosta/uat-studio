@@ -338,7 +338,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
               const usos = ondeEUsado(bloco.id, jornadas, epicos, conjuntos);
               return h(
                 'li',
-                { class: 'item' },
+                { class: bloco.descricao ? 'item item-com-descricao' : 'item' },
                 h('span', { class: 'tipo-bloco', 'data-tipo': bloco.tipo }, NOMES_TIPO_BLOCO[bloco.tipo] ?? bloco.tipo),
                 bloco.tipo === 'EMAIL'
                   ? h('button', { type: 'button', class: 'ligacao item-nome', 'data-email': bloco.id, title: 'Alterar o bloco de email', onclick: () => void editarEmail(bloco) }, bloco.nome)
@@ -379,6 +379,8 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                       'Ver código (.ts)',
                     ),
                 ),
+                // A descrição do bloco (nas receitas da Wiki: COMO se faz e as ARMADILHAS).
+                bloco.descricao && h('details', { class: 'item-descricao', 'data-descricao': bloco.id }, h('summary', {}, 'Como usar'), h('p', {}, bloco.descricao)),
               );
             }),
           ),

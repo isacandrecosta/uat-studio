@@ -47,8 +47,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Wiki de componentes OutSystems (projeto apagável na lista Projeto): receitas com jornadas de prova (`npm.cmd run wiki:testar`) e ações novas: carregar e descarregar ficheiros, perguntas do browser, separadores e iframes.
 - [ ] Wiki: receitas dos widgets do OutSystems UI (Date Picker, Dropdown Search/Tags, Range Slider, Rating, Tabs, Accordion, Popup, Wizard, Paginação) sobre a app de teste `CatalogoComponentesPOC` (por publicar: o Mentor ficou sem créditos) e suporte da ferramenta para os que precisarem.
 - [x] Modo demo (`npm.cmd run demo`): vídeos por capítulo com legendas e realces (`out/demo/*.webm`) e um guia em HTML com uma imagem por legenda (`out/demo/guia.html`). Capítulos: primeiros passos, gravar, montar uma jornada, correr e resultados, entre dois portais, dados de teste e APIs.
-- [ ] Demo: capítulo "Perceber o projeto de exemplo" (percorrer os épicos 1 a 4 e o que cada um ensina).
-- [ ] Demo: capítulo "Usar a Wiki de componentes" (abrir a Wiki, ler uma receita, correr as provas, exportar blocos para o próprio projeto). Fazer depois das receitas do catálogo.
-- [ ] Demo: capítulo "Quando algo falha" (sugestões, reparar localizadores, regravar um elemento, retomar a meio).
+- [x] Demo: capítulo "Perceber o projeto de exemplo" (os épicos 1 a 4 e o que cada um ensina).
+- [x] Demo: capítulo "Usar a Wiki de componentes" (abrir a Wiki, ler uma receita em "Como usar", correr as provas, exportar blocos). Voltar a gravar quando houver as receitas do catálogo.
+- [x] Demo: capítulo "Quando algo falha" (erro explicado, sugestões, regravar um elemento, repetir o caso).
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

@@ -270,6 +270,10 @@ form.cartao .opcao { display: flex; gap: 8px; align-items: flex-start; font-weig
 .item + .item { border-top: 1px solid var(--borda); }
 .item-nome { font-weight: 600; }
 .item-meta { margin-left: auto; display: flex; gap: 12px; align-items: center; color: var(--texto-suave); font-size: 13px; }
+.item-com-descricao { flex-wrap: wrap; }
+.item-descricao { flex-basis: 100%; font-size: 13px; color: var(--texto-suave); }
+.item-descricao summary { cursor: pointer; width: fit-content; }
+.item-descricao p { margin: 6px 0 0; line-height: 1.5; white-space: pre-line; }
 .item-url { overflow-wrap: anywhere; text-align: right; }
 
 .etiqueta {

@@ -177,7 +177,8 @@ export function criarWiki(pasta: string): void {
   ];
 
   for (const r of receitas) {
-    guardar(pasta, 'blocos', { ...r.bloco, nome: `Receita: ${r.bloco.nome}` });
+    // As armadilhas num parágrafo à parte (a interface mostra as quebras de linha).
+    guardar(pasta, 'blocos', { ...r.bloco, nome: `Receita: ${r.bloco.nome}`, descricao: r.bloco.descricao?.replace(/\s*(ARMADILHAS?:)/, '\n\n$1') });
     const blocos: BlocoDaJornada[] = [...(r.antes ?? []), r.bloco.id, ...(r.depois ?? [])].map((blocoId, i) => ({ id: `b${i + 1}`, blocoId }));
     const id = `prova-${r.bloco.id.replace(/^receita-/, '')}`;
     guardar(pasta, 'jornadas', { id, nome: `Prova: ${r.bloco.nome}`, epicoId: r.epicoId, etiquetas: ['wiki'], blocos });

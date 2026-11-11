@@ -378,6 +378,169 @@ const dadosEApis: FuncaoCapitulo = async (r, pasta) => {
   await r.realcar(null);
 };
 
+/** Marca o 1.º elemento do seletor cujo texto contém "texto" (para o realçar com [data-demo-alvo]). */
+async function marcar(r: Realizador, seletor: string, texto: string): Promise<string> {
+  await naPagina(
+    r.janela,
+    `(() => {
+      document.querySelectorAll('[data-demo-alvo]').forEach((e) => e.removeAttribute('data-demo-alvo'));
+      const el = [...document.querySelectorAll(${JSON.stringify(seletor)})].find((e) => (e.textContent || '').includes(${JSON.stringify(texto)}));
+      if (el) el.setAttribute('data-demo-alvo', '');
+    })()`,
+  );
+  return '[data-demo-alvo]';
+}
+
+/** Espera que comece uma execução diferente da anterior e que acabe. */
+async function esperarNovaExecucao(anterior: string | undefined, limiteMs: number): Promise<void> {
+  const fim = Date.now() + 60_000;
+  while (estadoRun()?.id === anterior && Date.now() < fim) await new Promise((res) => setTimeout(res, 200));
+  await esperarFimDoRun(limiteMs);
+}
+
+const projetoDeExemplo: FuncaoCapitulo = async (r) => {
+  await r.irPara('jornadas');
+  await r.realcar('#escolha-projeto');
+  await r.legenda('O "Projeto de exemplo" (na lista Projeto) traz casos de uso prontos a correr contra as apps de teste. É o melhor sítio para aprender: veja como está feito e corra-o.');
+  const epicos: Array<[string, string]> = [
+    ['1. Básico', '1. Básico: o Simulador. Um bloco gravado, 6 casos (podem vir do Excel), uma fórmula para o valor esperado e verificações de números. A 2.ª jornada passa o número do pedido ({PedidoId}) para o Backoffice.'],
+    ['2. Entre portais', '2. Entre portais: o cliente pede no Front Office, o gestor decide no Backoffice e o cliente só continua se for aprovado. Duas sessões no mesmo teste, login reutilizado, blocos "só se" e uma confirmação pela API.'],
+    ['3. Serviços externos', '3. Serviços externos: o pedido ao prestador de pagamentos é intercetado (verifica-se o que a app envia) e a resposta é simulada (aprovado, recusado, indisponível). Assim testam-se situações difíceis de provocar a sério.'],
+    ['4. APIs', '4. APIs e passo manual: regras de negócio testadas só pela API, e um passo em que a execução pára e uma pessoa confirma OK ou KO, com observação.'],
+  ];
+  for (const [titulo, texto] of epicos) {
+    await r.realcar(await marcar(r, '.cartao-epico', titulo));
+    await r.legenda(texto);
+  }
+  await r.realcar(null);
+  await r.clicar('[data-jornada="pc-pagamento-simulado"]', 'Abrir uma jornada no editor mostra como foi montada. Aqui, o pagamento com o prestador simulado.');
+  await esperar(r.janela, "document.querySelector('#percurso > li')");
+  await r.realcar('#percurso');
+  await r.legenda('Cada bloco diz de onde vêm os dados, quando corre ("só se") e em que sessão. Os blocos com um nome começado por "API:" preparam ou confirmam dados sem passar pelo ecrã.');
+  await r.realcar('#tabela-casos');
+  await r.legenda('Os casos mostram as variações testadas: aqui, o prestador responde "aprovado", "recusado" ou não responde.');
+  await r.realcar(null);
+  await r.irPara('runs');
+  await esperar(r.janela, "document.getElementById('run-velocidade')");
+  await r.realcar('#run-velocidade');
+  await r.legenda('Para aprender, corra cada jornada com o browser visível e a velocidade "lenta" ou "passo a passo": vê-se o que cada passo faz na app.');
+  await r.realcar('#escolha-projeto');
+  await r.legenda('Quando já não precisar dele: lista Projeto, "Apagar este projeto de exemplo…". Pode voltar a criá-lo quando quiser.');
+  await r.realcar(null);
+};
+
+const quandoAlgoFalha: FuncaoCapitulo = async (r, pasta) => {
+  // O ecrã "mudou": o campo Valor deixou de ter o identificador que o teste conhece.
+  const bloco = repo.ler(pasta, 'blocos', 'simular-credito');
+  const passoValor = bloco.passos.find((p) => p.id === 'p3');
+  if (!passoValor?.alvo) throw new Error('O passo p3 do exemplo não tem alvo.');
+  const original = passoValor.alvo;
+  passoValor.alvo = { ...original, localizadores: [{ tipo: 'testid', valor: 'inpValorAntigo' }] };
+  repo.guardar(pasta, 'blocos', bloco);
+  try {
+    await r.irPara('runs');
+    await r.legenda('As apps mudam e os testes partem. Vamos simular isso: o campo Valor do Simulador deixou de ter o identificador que o teste conhece.');
+    await esperar(r.janela, "document.querySelector('#run-ambito option[value=\"jornada:simular-credito\"]') && !document.getElementById('btn-correr').disabled");
+    await r.escolher('#run-ambito', 'jornada:simular-credito');
+    await r.escrever('#run-casos', 'TC0001');
+    await r.escolher('#run-paralelo', '1');
+    const antes = estadoRun()?.id;
+    await r.clicar('#btn-correr', 'Corremos só um caso.');
+    await esperar(r.janela, "document.querySelector('#run-atual[data-ativo=\"true\"]') || document.getElementById('btn-correr-na-mesma')", 60_000);
+    if (await naPagina<boolean>(r.janela, "Boolean(document.getElementById('btn-correr-na-mesma'))")) await naPagina(r.janela, "document.getElementById('btn-correr-na-mesma').click()");
+    await esperarNovaExecucao(antes, 180_000);
+    await esperar(r.janela, "document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo')");
+    await naPagina(r.janela, "document.querySelector('.caixa-sugestoes') || document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo').click()");
+    await esperar(r.janela, "document.querySelector('.caixa-sugestoes .botao-regravar')");
+    await r.realcar('.caso[data-chave="simular-credito/TC0001"]');
+    await r.legenda('ERRO: o teste não chegou ao fim. O detalhe diz em que bloco e passo parou, com o print do ecrã nesse momento.');
+    await r.realcar('.caixa-sugestoes');
+    await r.legenda('E explica o porquê, com sugestões: o ecrã pode ter mudado, o elemento pode ter outro nome, a página pode ser lenta... As sugestões também ficam no log e no relatório.');
+    await r.realcar('.botao-trace');
+    await r.legenda('"Abrir trace" mostra a gravação do Playwright passo a passo (ecrã, pedidos à rede, consola). "Copiar log" serve para enviar a quem ajuda.');
+    await r.clicar('.caixa-sugestoes .botao-regravar', '"Regravar este elemento": o gravador abre, repete os passos anteriores com os dados do caso e pede que se aponte o campo certo.');
+    await esperar(r.janela, "document.querySelector('#gravacao-ativa[data-regravar=\"a-espera\"]')", 120_000);
+    const fim = Date.now() + 120_000;
+    while (!(estadoGravador().mensagem ?? '').startsWith('Pronto') && Date.now() < fim) await r.pausa(0.3);
+    const p = paginaDoGravador();
+    if (!p) throw new Error('O gravador não tem página.');
+    await p.bringToFront().catch(() => undefined);
+    r.noEdge = await r.video.mostrarEdge();
+    await r.realcarNoEdge(p, '#__uat-gravador .barra');
+    await r.legenda('A variante do caso já foi escolhida. A barra diz o que apontar: "Campo Valor".');
+    await r.realcarNoEdge(p, null);
+    const popup = p.locator('#__uat-gravador .popup');
+    await p.locator('[data-testid="inpValor"]').click();
+    await popup.waitFor();
+    await popup.getByLabel('Texto a escrever').fill('1');
+    await r.legenda('Clica-se no campo certo. Só o "onde" muda: a ação e o valor (a coluna Valor do caso) ficam iguais.');
+    await popup.getByRole('button', { name: 'Gravar passo' }).click();
+    const fimRegravar = Date.now() + 20_000;
+    while (!estadoGravador().regravado && Date.now() < fimRegravar) await r.pausa(0.2);
+    r.noEdge = false;
+    await r.video.mostrarJanela(r.janela);
+    r.janela.focus();
+    await esperar(r.janela, "document.querySelector('#gravacao-ativa[data-regravar=\"feito\"]')", 30_000);
+    await r.legenda('O passo foi testado com o elemento novo e o bloco ficou guardado. Vale para todas as jornadas que usam este bloco.');
+    await r.clicar('#btn-terminar-regravar');
+    await esperar(r.janela, "!document.getElementById('gravacao-ativa')");
+    await r.irPara('runs');
+    await esperar(r.janela, "document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo')");
+    await naPagina(r.janela, "document.querySelector('.botao-repetir-caso') || document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo').click()");
+    await esperar(r.janela, "document.querySelector('.botao-repetir-caso:not([disabled])')");
+    const antesDeRepetir = estadoRun()?.id;
+    await r.clicar('.botao-repetir-caso', '"Repetir só este caso" confirma a correção.');
+    await esperarNovaExecucao(antesDeRepetir, 180_000);
+    await r.pausa(1);
+    await r.legenda('Agora dá OK. Há ainda mais ajudas: quando o localizador preferido falha mas outro funciona, o caso passa e no fim aparece "Localizadores a reparar", para corrigir com um clique.');
+    await r.legenda('E "Retomar a partir do bloco" recomeça um caso a meio, com as variáveis guardadas, sem repetir o que já correu bem.');
+  } finally {
+    // Se a demo falhar a meio, o bloco do projeto da demo volta a funcionar.
+    const atual = repo.ler(pasta, 'blocos', 'simular-credito');
+    const p3 = atual.passos.find((p) => p.id === 'p3');
+    if (p3?.alvo?.localizadores[0]?.valor === 'inpValorAntigo') {
+      p3.alvo = original;
+      repo.guardar(pasta, 'blocos', atual);
+    }
+    if (estadoGravador().ativo) await terminarGravacao(false);
+  }
+};
+
+const usarAWiki: FuncaoCapitulo = async (r, pasta) => {
+  await r.irPara('jornadas');
+  await r.realcar('#escolha-projeto');
+  await r.legenda('"Como é que testo este componente?" A resposta está na Wiki de componentes OutSystems, que se abre na lista Projeto.');
+  await r.realcar(null);
+  await naPagina(r.janela, "(() => { const e = document.getElementById('escolha-projeto'); e.value = '__wiki'; e.dispatchEvent(new Event('change')); })()");
+  await esperar(r.janela, "document.querySelector('.cartao-epico') && document.body.innerText.includes('Campos de formulário')", 30_000);
+  const pastaWiki = await naPagina<string>(r.janela, "document.getElementById('escolha-projeto').value");
+  await r.legenda('A Wiki é um projeto à parte, organizado por tipo de componente: campos de formulário, botões e tabelas, e situações típicas do OutSystems.');
+  await r.realcar(await marcar(r, '.cartao-epico', 'A. Campos'));
+  await r.legenda('Cada receita tem uma jornada "Prova": se a prova der OK nas apps de teste, a ferramenta sabe testar aquele componente.');
+  await naPagina(r.janela, "document.querySelector('[data-descricao=\"receita-lista-e-numero\"]')?.setAttribute('open', '')");
+  await r.pausa(0.5);
+  await r.realcar('[data-descricao="receita-lista-e-numero"]');
+  await r.legenda('Nos blocos, "Como usar" explica a receita: a ação certa, o localizador que funciona e as armadilhas (por exemplo: no Dropdown do OutSystems o identificador está à volta da lista).');
+  await r.realcar('#btn-exportar-pacote');
+  await r.legenda('Para usar uma receita no seu projeto: "Exportar blocos" aqui e "Importar pacote" no seu projeto. Depois troque os identificadores pelos da sua app.');
+  await r.realcar(null);
+  await r.irPara('mapa', 'Correr a Wiki inteira mostra o que a ferramenta já cobre.');
+  await esperar(r.janela, "document.getElementById('mapa-run')");
+  const jornadas = repo.listar(pastaWiki, 'jornadas').map((j) => j.id);
+  await iniciarRun(pastaWiki, { jornadaIds: jornadas }, { canal: 'msedge', visivel: false, paralelo: 2 });
+  await r.pausa(10);
+  await r.realcar('#workers');
+  await r.legenda('As provas correm em paralelo contra o Simulador e o Portal de Crédito.', 6);
+  await r.realcar(null);
+  await esperarFimDoRun(600_000);
+  await r.clicar('.separador[data-vista="epicos"]', 'No fim, cada épico mostra o resultado das suas provas.');
+  await r.pausa(1);
+  await r.legenda('Em breve, mais receitas: calendários, listas com pesquisa, sliders, classificação, separadores, popups, assistentes e paginação.');
+  // Voltar ao projeto da demo.
+  await naPagina(r.janela, `(() => { const e = document.getElementById('escolha-projeto'); e.value = ${JSON.stringify(pasta)}; e.dispatchEvent(new Event('change')); })()`);
+  await esperar(r.janela, `document.getElementById('escolha-projeto').value === ${JSON.stringify(pasta)}`, 30_000).catch(() => undefined);
+};
+
 const CAPITULOS: Capitulo[] = [
   { id: 'primeiros-passos', titulo: '1. Primeiros passos', resumo: 'O que é o UAT Studio, as ideias principais e o menu.', correr: primeirosPassos },
   { id: 'gravar', titulo: '2. Gravar um bloco', resumo: 'Abrir a app no Edge e gravar passos com cliques.', correr: gravarBloco },
@@ -385,7 +548,9 @@ const CAPITULOS: Capitulo[] = [
   { id: 'correr', titulo: '4. Correr e ver os resultados', resumo: 'Execução em paralelo, mapa ao vivo, OK/KO/ERRO e evidências.', correr: correrResultados },
   { id: 'entre-portais', titulo: '5. Testar entre dois portais', resumo: 'Front Office e Backoffice na mesma jornada, com aprovação.', correr: entrePortais },
   { id: 'dados-apis', titulo: '6. Dados de teste e APIs', resumo: 'Fórmulas, geradores e blocos de API.', correr: dadosEApis },
-  // Por fazer (ver ROADMAP): "Perceber o projeto de exemplo", "Usar a Wiki de componentes" e "Quando algo falha".
+  { id: 'projeto-exemplo', titulo: '7. Perceber o projeto de exemplo', resumo: 'Os 4 épicos do exemplo e o que cada um ensina.', correr: projetoDeExemplo },
+  { id: 'quando-falha', titulo: '8. Quando algo falha', resumo: 'Erro explicado, sugestões, regravar um elemento e repetir o caso.', correr: quandoAlgoFalha },
+  { id: 'wiki', titulo: '9. Usar a Wiki de componentes', resumo: 'Receitas por componente, provas e como as levar para o seu projeto.', correr: usarAWiki },
 ];
 
 /** As apps ODC "adormecem": acordá-las antes de gravar, para a 1.ª carga não falhar no vídeo. */
@@ -439,6 +604,9 @@ export async function correrDemo(janela: BrowserWindow, raiz: string): Promise<v
   const gravados: CapituloGravado[] = [];
   try {
     await carregada;
+    // Uma janela minimizada deixa de se desenhar e o vídeo fica em branco: durante a demo, volta logo ao lugar.
+    janela.webContents.setBackgroundThrottling(false);
+    janela.on('minimize', () => janela.restore());
     await acordarApps();
     // A demo precisa do projeto: se o 1.º capítulo não for pedido, cria-o já.
     if (escolhidos[0]?.id !== 'primeiros-passos') {
