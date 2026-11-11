@@ -338,7 +338,7 @@ export interface PedidoApi {
   guardar: GuardarApi[];
 }
 
-export type TipoPerfil = 'oauth2-cliente' | 'oauth2-password' | 'apikey' | 'basic' | 'bearer';
+export type TipoPerfil = 'oauth2-cliente' | 'oauth2-password' | 'oauth2-pkce' | 'apikey' | 'basic' | 'bearer';
 
 /**
  * Forma de autenticação reutilizável. Os segredos (client secret, password, chave, token)
@@ -350,6 +350,10 @@ export interface PerfilAutenticacao {
   tipo: TipoPerfil;
   /** OAuth 2.0: endereço onde se pede o token. */
   urlToken?: string;
+  /** OAuth 2.0 com login (Authorization Code + PKCE): página de login. */
+  urlAutorizacao?: string;
+  /** OAuth 2.0 com login: endereço de regresso registado na aplicação (é apanhado pelo UAT Studio; não precisa de existir). */
+  redirectUri?: string;
   clientId?: string;
   ambito?: string;
   /** OAuth 2.0: como enviar o client secret (por omissão, cabeçalho Basic). */
@@ -361,12 +365,14 @@ export interface PerfilAutenticacao {
 }
 
 /** Campos secretos de cada tipo de perfil (os nomes usados no cofre). */
-export const SEGREDOS_DO_PERFIL: Record<TipoPerfil, Array<{ campo: string; rotulo: string }>> = {
+export const SEGREDOS_DO_PERFIL: Record<TipoPerfil, Array<{ campo: string; rotulo: string; opcional?: boolean }>> = {
   'oauth2-cliente': [{ campo: 'clientSecret', rotulo: 'Client secret' }],
   'oauth2-password': [
     { campo: 'clientSecret', rotulo: 'Client secret' },
     { campo: 'password', rotulo: 'Password do utilizador' },
   ],
+  // Sem segredo de cliente (cliente público). A password é opcional: serve para preencher o login sozinho.
+  'oauth2-pkce': [{ campo: 'password', rotulo: 'Password do utilizador (opcional: preenche o login sozinho)', opcional: true }],
   apikey: [{ campo: 'chave', rotulo: 'Chave da API' }],
   basic: [{ campo: 'password', rotulo: 'Password' }],
   bearer: [{ campo: 'token', rotulo: 'Token' }],

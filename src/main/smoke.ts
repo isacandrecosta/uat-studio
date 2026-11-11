@@ -6,7 +6,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { ChildProcess, spawn } from 'node:child_process';
 import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
-import { apagarSegredosDoPerfil, segredosPreenchidos } from './cofre';
+import { testarBloco } from './api/ambiente';
+import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from './cofre';
 import * as repo from './projeto/repositorio';
 import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
@@ -1056,6 +1057,28 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
           importado?.pedido?.metodo === 'PUT' && importado.pedido.tipoCorpo === 'json' && importado.pedido.parametros[0]?.nome === 'origem' && !JSON.stringify(importado).includes('xpto'),
           `O bloco importado do cURL está errado: ${JSON.stringify(importado?.pedido)}`,
         );
+
+        // OAuth 2.0 com login no browser (PKCE): o Edge abre, o login é preenchido sozinho e o código é apanhado.
+        repo.guardar(pasta, 'perfis', {
+          id: 'login-pkce',
+          nome: 'Login PKCE',
+          tipo: 'oauth2-pkce',
+          urlAutorizacao: `${base}/oauth/authorize`,
+          urlToken: `${base}/oauth/token`,
+          clientId: 'uat-publico',
+          redirectUri: 'http://127.0.0.1/uat-studio/callback',
+          utilizador: 'qa.teste',
+        });
+        definirSegredo(pasta, 'login-pkce.password', 'password-de-teste');
+        const blocoPkce = { id: 'com-login', nome: 'Com login', tipo: 'API' as const, aplicacaoId: 'api-de-teste', passos: [], pedido: { metodo: 'GET' as const, url: '/api/clientes', parametros: [], cabecalhos: [], tipoCorpo: 'nenhum' as const, corpo: '', perfilId: 'login-pkce', verificacoes: [{ id: 'v1', alvo: 'estado' as const, operador: 'igual' as const, esperado: '200' }], guardar: [] } };
+        const comLogin = await testarBloco(pasta, blocoPkce, undefined);
+        confirmar(comLogin.verificacoes[0]?.ok, `Com o login PKCE, a API devia responder 200: ${JSON.stringify(comLogin.verificacoes)}`);
+        confirmar(segredosPreenchidos(pasta, ['login-pkce.refreshToken'])['login-pkce.refreshToken'], 'A sessão do login PKCE devia ficar guardada no cofre.');
+        const inicioSessao = Date.now();
+        const comSessao = await testarBloco(pasta, blocoPkce, undefined);
+        confirmar(comSessao.verificacoes[0]?.ok, 'Com a sessão guardada, a API devia responder 200.');
+        console.log(`[smoke]   login PKCE no browser OK; 2.º pedido com a sessão guardada em ${Date.now() - inicioSessao} ms`);
+        apagarSegredosDoPerfil(pasta, 'login-pkce');
 
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');

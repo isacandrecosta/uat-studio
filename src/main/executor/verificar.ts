@@ -139,13 +139,17 @@ export async function verificarAntesDeCorrer(pasta: string, ambito: AmbitoRun, o
   for (const perfil of perfisUsados.values()) {
     const campos = SEGREDOS_DO_PERFIL[perfil.tipo];
     const preenchidos = opcoes.segredosPreenchidos(campos.map((c) => `${perfil.id}.${c.campo}`));
-    const emFalta = campos.filter((c) => !preenchidos[`${perfil.id}.${c.campo}`]);
+    const emFalta = campos.filter((c) => !c.opcional && !preenchidos[`${perfil.id}.${c.campo}`]);
     if (emFalta.length > 0) {
       juntar('erro', `Perfil de autenticação "${perfil.nome}"`, `Falta preencher neste PC: ${emFalta.map((c) => c.rotulo).join(', ')} (ecrã Blocos de API).`);
     }
-    const eOAuth = perfil.tipo === 'oauth2-cliente' || perfil.tipo === 'oauth2-password';
+    const eOAuth = perfil.tipo === 'oauth2-cliente' || perfil.tipo === 'oauth2-password' || perfil.tipo === 'oauth2-pkce';
     if (eOAuth && (!perfil.urlToken?.trim() || !perfil.clientId?.trim())) {
       juntar('erro', `Perfil de autenticação "${perfil.nome}"`, 'Falta o endereço do token ou o client ID.');
+    }
+    if (perfil.tipo === 'oauth2-pkce') {
+      if (!perfil.urlAutorizacao?.trim()) juntar('erro', `Perfil de autenticação "${perfil.nome}"`, 'Falta o endereço da página de login (autorização).');
+      else juntar('aviso', `Perfil de autenticação "${perfil.nome}"`, 'Usa login no browser: se não houver sessão guardada neste PC, abre-se o Edge para entrar (uma vez por execução).');
     }
   }
 

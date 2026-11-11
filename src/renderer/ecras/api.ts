@@ -21,6 +21,7 @@ import { confirmar, h, mensagemDeErro, mostrarCodigo, mostrarUsos, pedirFormular
 const NOMES_PERFIL: Record<TipoPerfil, string> = {
   'oauth2-cliente': 'OAuth 2.0 (client credentials)',
   'oauth2-password': 'OAuth 2.0 (utilizador e password)',
+  'oauth2-pkce': 'OAuth 2.0 com login no browser (Authorization Code + PKCE)',
   apikey: 'API Key',
   basic: 'Basic',
   bearer: 'Token fixo (Bearer)',
@@ -149,6 +150,23 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
         },
       );
     }
+    // Login no browser (PKCE): cliente público, sem client secret.
+    if (tipo === 'oauth2-pkce') {
+      campos.push(
+        { id: 'urlAutorizacao', rotulo: 'Página de login (autorização)', valor: existente?.urlAutorizacao, obrigatorio: true, ajuda: 'Por exemplo: http://localhost:4010/oauth/authorize' },
+        { id: 'urlToken', rotulo: 'Endereço do token', valor: existente?.urlToken, obrigatorio: true, ajuda: 'Por exemplo: http://localhost:4010/oauth/token' },
+        { id: 'clientId', rotulo: 'Client ID', valor: existente?.clientId, obrigatorio: true },
+        { id: 'ambito', rotulo: 'Âmbito (scope), opcional', valor: existente?.ambito },
+        {
+          id: 'redirectUri',
+          rotulo: 'Endereço de regresso (redirect URI)',
+          valor: existente?.redirectUri ?? 'http://127.0.0.1/uat-studio/callback',
+          obrigatorio: true,
+          ajuda: 'Tem de estar registado na aplicação. Não precisa de existir: o UAT Studio apanha-o no browser.',
+        },
+        { id: 'utilizador', rotulo: 'Utilizador (opcional: preenche o login sozinho)', valor: existente?.utilizador },
+      );
+    }
     if (tipo === 'oauth2-password' || tipo === 'basic') campos.push({ id: 'utilizador', rotulo: 'Utilizador', valor: existente?.utilizador, obrigatorio: true });
     if (tipo === 'apikey') campos.push({ id: 'cabecalho', rotulo: 'Nome do cabeçalho', valor: existente?.cabecalho ?? 'X-API-Key', obrigatorio: true });
     for (const segredo of SEGREDOS_DO_PERFIL[tipo]) {
@@ -173,6 +191,15 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
               clientId: valores.clientId.trim(),
               ...(valores.ambito.trim() ? { ambito: valores.ambito.trim() } : {}),
               envioCliente: valores.envioCliente === 'corpo' ? ('corpo' as const) : ('basic' as const),
+            }
+          : {}),
+        ...(tipo === 'oauth2-pkce'
+          ? {
+              urlAutorizacao: valores.urlAutorizacao.trim(),
+              urlToken: valores.urlToken.trim(),
+              clientId: valores.clientId.trim(),
+              redirectUri: valores.redirectUri.trim(),
+              ...(valores.ambito.trim() ? { ambito: valores.ambito.trim() } : {}),
             }
           : {}),
         ...(valores.utilizador !== undefined ? { utilizador: valores.utilizador.trim() } : {}),
@@ -204,7 +231,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
             'ul',
             { class: 'lista-itens' },
             perfis.map((perfil) => {
-              const emFalta = SEGREDOS_DO_PERFIL[perfil.tipo].filter((s) => !preenchidos[`${perfil.id}.${s.campo}`]);
+              const emFalta = SEGREDOS_DO_PERFIL[perfil.tipo].filter((s) => !s.opcional && !preenchidos[`${perfil.id}.${s.campo}`]);
               return h(
                 'li',
                 { class: 'item item-perfil' },
@@ -215,6 +242,21 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
                   h('span', { class: 'suave' }, NOMES_PERFIL[perfil.tipo]),
                   emFalta.length > 0 && h('span', { class: 'aviso-pequeno' }, `Falta: ${emFalta.map((s) => s.rotulo).join(', ')}`),
                 ),
+                // Login PKCE: a sessão (refresh token) fica no cofre; "esquecer" obriga a novo login na próxima execução.
+                perfil.tipo === 'oauth2-pkce' &&
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'botao botao-discreto-claro',
+                      title: 'Apaga a sessão guardada neste PC: na próxima execução abre-se o login outra vez.',
+                      onclick: async () => {
+                        await api.cofre.definir(`${perfil.id}.refreshToken`, '');
+                        await confirmar('Sessão esquecida', `Na próxima execução, o perfil "${perfil.nome}" pede login outra vez.`, 'Fechar');
+                      },
+                    },
+                    'Esquecer a sessão',
+                  ),
                 h(
                   'button',
                   {

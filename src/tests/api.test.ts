@@ -63,7 +63,7 @@ function correr(pedido: Partial<PedidoApi>, perfilId: string | undefined, variav
   const bloco: Bloco = { id: 'b', nome: 'Bloco de teste', tipo: 'API', passos: [], pedido: completo };
   const ctx = contextoDeExemplo(variaveis);
   return executarBlocoApi(
-    { bloco, urlBase: BASE, perfil: perfilId ? PERFIS[perfilId] : undefined, preencher: (texto, paraJson) => preencherTexto(texto, ctx, paraJson ? escaparJson : undefined) },
+    { bloco, urlBase: BASE, perfil: perfilId ? PERFIS[perfilId] : undefined, preencher: (texto, proteger) => preencherTexto(texto, ctx, proteger) },
     amb,
   );
 }
@@ -152,4 +152,64 @@ test('erros explicados: segredo em falta, segredo errado, tempo limite, servidor
   // Sem autenticação numa API protegida: não é erro do motor, é uma resposta 401 que se pode verificar.
   const semToken = await correr({ url: '/api/clientes', verificacoes: [{ id: 'v', alvo: 'estado', operador: 'igual', esperado: '401' }] }, undefined, {}, ambiente());
   assert.equal(semToken.verificacoes[0].ok, true);
+});
+
+test('OAuth 2.0 com login (Authorization Code + PKCE): login, troca do código, sessão guardada e renovada', { skip: !haServidor }, async () => {
+  const perfil: PerfilAutenticacao = {
+    id: 'pkce',
+    nome: 'Login PKCE',
+    tipo: 'oauth2-pkce',
+    urlAutorizacao: `${BASE}/oauth/authorize`,
+    urlToken: `${BASE}/oauth/token`,
+    clientId: 'uat-publico',
+    utilizador: 'qa.teste',
+  };
+  PERFIS.pkce = perfil;
+  const cofre: Record<string, string> = { 'pkce.password': 'password-de-teste' };
+  let logins = 0;
+  const amb: AmbienteApi = {
+    fetch,
+    segredo: (nome) => cofre[nome],
+    guardarSegredo: (nome, valor) => {
+      if (valor) cofre[nome] = valor;
+      else delete cofre[nome];
+    },
+    tokens: new Map(),
+    // Em vez do browser: o mesmo formulário de login, por HTTP.
+    loginInterativo: async (pedido) => {
+      logins += 1;
+      const pagina = await fetch(pedido.url);
+      assert.equal(pagina.status, 200);
+      assert.match(await pagina.text(), /Login de teste/);
+      const campos = new URLSearchParams(new URL(pedido.url).searchParams);
+      campos.set('utilizador', pedido.utilizador ?? '');
+      campos.set('password', pedido.password ?? '');
+      const resposta = await fetch(`${BASE}/oauth/authorize`, { method: 'POST', body: campos, redirect: 'manual' });
+      assert.equal(resposta.status, 302);
+      return resposta.headers.get('location') ?? '';
+    },
+  };
+  const verificar = { verificacoes: [{ id: 'v1', alvo: 'estado' as const, operador: 'igual' as const, esperado: '200' }] };
+  const primeiro = await correr({ url: '/api/clientes', ...verificar }, 'pkce', {}, amb);
+  assert.ok(primeiro.verificacoes[0].ok, 'com o token do login, a API deve responder 200');
+  assert.equal(logins, 1);
+  assert.ok(cofre['pkce.refreshToken'], 'a sessão (refresh token) fica no cofre');
+  assert.ok(!JSON.stringify(primeiro).includes(cofre['pkce.refreshToken']), 'o refresh token nunca aparece no resultado');
+
+  // Outra execução (sem tokens em memória): usa a sessão guardada, sem novo login.
+  const sessaoAntes = cofre['pkce.refreshToken'];
+  const segunda = await correr({ url: '/api/clientes', ...verificar }, 'pkce', {}, { ...amb, tokens: new Map() });
+  assert.ok(segunda.verificacoes[0].ok);
+  assert.equal(logins, 1, 'com sessão guardada não há novo login');
+  assert.notEqual(cofre['pkce.refreshToken'], sessaoAntes, 'a sessão é renovada (o refresh token só serve uma vez)');
+
+  // Sessão inválida: é esquecida e volta a pedir login.
+  cofre['pkce.refreshToken'] = 'sessao-que-ja-nao-serve';
+  const terceira = await correr({ url: '/api/clientes', ...verificar }, 'pkce', {}, { ...amb, tokens: new Map() });
+  assert.ok(terceira.verificacoes[0].ok);
+  assert.equal(logins, 2);
+
+  // Um "state" diferente no regresso é recusado.
+  const desconfiado = { ...amb, tokens: new Map(), segredo: (n: string) => (n === 'pkce.refreshToken' ? undefined : cofre[n]), loginInterativo: async () => `http://127.0.0.1/uat-studio/callback?code=x&state=outro` };
+  await assert.rejects(correr({ url: '/api/clientes', ...verificar }, 'pkce', {}, desconfiado), /state/);
 });

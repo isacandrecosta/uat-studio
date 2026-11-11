@@ -1,7 +1,8 @@
 // Liga o motor de API ao Electron: pedidos pela rede do Windows (proxy e certificados) e segredos do cofre.
 import { avaliarFormula, contextoDeExemplo, ErroFormula, preencherTexto } from '../../shared/formulas';
 import { Bloco, ResultadoApi } from '../../shared/modelo';
-import { lerSegredo } from '../cofre';
+import { definirSegredo, lerSegredo } from '../cofre';
+import { loginNoBrowser } from './login';
 import * as repo from '../projeto/repositorio';
 import { AmbienteApi, ErroApi, executarBlocoApi } from './pedidos';
 
@@ -14,6 +15,9 @@ export function criarAmbienteApi(pasta: string): AmbienteApi {
       return net.fetch(entrada as string, opcoes as RequestInit);
     }) as typeof fetch,
     segredo: (nome) => lerSegredo(pasta, nome),
+    // Sessão do login PKCE (refresh token): encriptada no cofre, nunca na pasta do projeto.
+    guardarSegredo: (nome, valor) => definirSegredo(pasta, nome, valor ?? ''),
+    loginInterativo: (pedido) => loginNoBrowser(pedido),
     tokens: new Map(),
   };
 }

@@ -2,6 +2,7 @@
 // (OAuth 2.0, API Key, Basic, Bearer), verifica a resposta e guarda valores em variáveis.
 // Não depende do Electron: recebe de fora o "fetch" e a forma de ler segredos, para poder ser testado.
 import { Bloco, OperadorApi, PedidoApi, PerfilAutenticacao, ResultadoApi, VerificacaoApi } from '../../shared/modelo';
+import { createHash, randomBytes } from 'node:crypto';
 import { escaparXml, lerXml, lerXPath, XML_EM_FALTA } from './xml';
 import { comparar, Decimal, lerNumero } from '../../shared/decimal';
 
@@ -21,7 +22,26 @@ export interface AmbienteApi {
   segredo(nome: string): string | undefined;
   /** Tokens já pedidos nesta execução (por perfil), para não pedir um novo em cada bloco. */
   tokens: Map<string, TokenGuardado>;
+  /** Guarda (ou apaga, com null) um segredo no cofre: usado para a sessão do login PKCE (refresh token). */
+  guardarSegredo?(nome: string, valor: string | null): void;
+  /**
+   * Login no browser (Authorization Code + PKCE): abre a página de login e devolve o endereço
+   * de regresso (com ?code=...&state=...). Sem isto, os perfis com login não funcionam.
+   */
+  loginInterativo?(pedido: LoginInterativo): Promise<string>;
 }
+
+export interface LoginInterativo {
+  url: string;
+  redirectUri: string;
+  perfilNome: string;
+  /** Para preencher o formulário de login sozinho (opcional). */
+  utilizador?: string;
+  password?: string;
+}
+
+/** Endereço de regresso por omissão (não precisa de existir: o UAT Studio apanha-o antes de lá chegar). */
+export const REDIRECT_POR_OMISSAO = 'http://127.0.0.1/uat-studio/callback';
 
 export interface PedidoBloco {
   bloco: Bloco;
@@ -56,6 +76,11 @@ function explicarRede(erro: unknown, limiteMs: number, oQue: string): ErroApi {
 async function pedirToken(amb: AmbienteApi, perfil: PerfilAutenticacao, renovacao?: string): Promise<TokenGuardado> {
   if (!perfil.urlToken) throw new ErroApi(`O perfil "${perfil.nome}" não tem o endereço do token.`);
   if (!perfil.clientId) throw new ErroApi(`O perfil "${perfil.nome}" não tem o client ID.`);
+  if (perfil.tipo === 'oauth2-pkce') {
+    return renovacao
+      ? enviarPedidoDeToken(amb, perfil, new URLSearchParams({ grant_type: 'refresh_token', refresh_token: renovacao, client_id: perfil.clientId }), {})
+      : loginPkce(amb, perfil);
+  }
   const segredoCliente = exigirSegredo(amb, perfil, 'clientSecret', 'Client secret');
   const corpo = new URLSearchParams();
   if (renovacao) {
@@ -69,17 +94,58 @@ async function pedirToken(amb: AmbienteApi, perfil: PerfilAutenticacao, renovaca
     corpo.set('grant_type', 'client_credentials');
   }
   if (perfil.ambito) corpo.set('scope', perfil.ambito);
-  const cabecalhos: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' };
+  const cabecalhos: Record<string, string> = {};
   if (perfil.envioCliente === 'corpo') {
     corpo.set('client_id', perfil.clientId);
     corpo.set('client_secret', segredoCliente);
   } else {
     cabecalhos.Authorization = `Basic ${Buffer.from(`${perfil.clientId}:${segredoCliente}`, 'utf8').toString('base64')}`;
   }
+  return enviarPedidoDeToken(amb, perfil, corpo, cabecalhos);
+}
 
+/**
+ * OAuth 2.0 Authorization Code + PKCE: abre a página de login no browser, apanha o código no regresso
+ * e troca-o por um token com o code_verifier (cliente público, sem client secret).
+ */
+async function loginPkce(amb: AmbienteApi, perfil: PerfilAutenticacao): Promise<TokenGuardado> {
+  if (!perfil.urlAutorizacao) throw new ErroApi(`O perfil "${perfil.nome}" não tem o endereço da página de login.`);
+  if (!amb.loginInterativo) throw new ErroApi(`O perfil "${perfil.nome}" precisa de login no browser, que não está disponível aqui.`);
+  const verificador = randomBytes(32).toString('base64url');
+  const desafio = createHash('sha256').update(verificador).digest('base64url');
+  const estado = randomBytes(12).toString('hex');
+  const redirectUri = perfil.redirectUri?.trim() || REDIRECT_POR_OMISSAO;
+  let url: URL;
+  try {
+    url = new URL(perfil.urlAutorizacao);
+  } catch {
+    throw new ErroApi(`O endereço da página de login do perfil "${perfil.nome}" não é válido.`);
+  }
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', perfil.clientId ?? '');
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('code_challenge', desafio);
+  url.searchParams.set('code_challenge_method', 'S256');
+  url.searchParams.set('state', estado);
+  if (perfil.ambito) url.searchParams.set('scope', perfil.ambito);
+  const regresso = new URL(
+    await amb.loginInterativo({ url: url.toString(), redirectUri, perfilNome: perfil.nome, utilizador: perfil.utilizador, password: amb.segredo(`${perfil.id}.password`) }),
+  );
+  const erro = regresso.searchParams.get('error');
+  if (erro) throw new ErroApi(`O login do perfil "${perfil.nome}" foi recusado (${[erro, regresso.searchParams.get('error_description')].filter(Boolean).join(': ')}).`);
+  if (regresso.searchParams.get('state') !== estado) throw new ErroApi(`O login do perfil "${perfil.nome}" voltou com um "state" diferente: por segurança, o código não foi usado.`);
+  const codigo = regresso.searchParams.get('code');
+  if (!codigo) throw new ErroApi(`O login do perfil "${perfil.nome}" não devolveu o código de autorização.`);
+  const corpo = new URLSearchParams({ grant_type: 'authorization_code', code: codigo, redirect_uri: redirectUri, client_id: perfil.clientId ?? '', code_verifier: verificador });
+  return enviarPedidoDeToken(amb, perfil, corpo, {});
+}
+
+/** Envia o pedido ao endereço do token e lê a resposta (sem nunca mostrar segredos nos erros). */
+async function enviarPedidoDeToken(amb: AmbienteApi, perfil: PerfilAutenticacao, corpo: URLSearchParams, extra: Record<string, string>): Promise<TokenGuardado> {
+  const cabecalhos: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', ...extra };
   let resposta: Response;
   try {
-    resposta = await amb.fetch(perfil.urlToken, { method: 'POST', headers: cabecalhos, body: corpo.toString(), signal: AbortSignal.timeout(30_000) });
+    resposta = await amb.fetch(perfil.urlToken ?? '', { method: 'POST', headers: cabecalhos, body: corpo.toString(), signal: AbortSignal.timeout(30_000) });
   } catch (erro) {
     throw explicarRede(erro, 30_000, `Pedido de token (perfil "${perfil.nome}")`);
   }
@@ -107,14 +173,34 @@ async function pedirToken(amb: AmbienteApi, perfil: PerfilAutenticacao, renovaca
   };
 }
 
+/** Pedidos de token em curso por perfil (vários workers ao mesmo tempo não abrem vários logins). */
+const emCurso = new WeakMap<Map<string, TokenGuardado>, Map<string, Promise<string>>>();
+
 async function obterToken(amb: AmbienteApi, perfil: PerfilAutenticacao, forcarNovo: boolean): Promise<string> {
   const guardado = amb.tokens.get(perfil.id);
   if (guardado && !forcarNovo && guardado.expira > Date.now()) return guardado.token;
-  let novo: TokenGuardado | null = null;
-  if (guardado?.renovacao) novo = await pedirToken(amb, perfil, guardado.renovacao).catch(() => null);
-  novo ??= await pedirToken(amb, perfil);
-  amb.tokens.set(perfil.id, novo);
-  return novo.token;
+  let doAmbiente = emCurso.get(amb.tokens);
+  if (!doAmbiente) emCurso.set(amb.tokens, (doAmbiente = new Map()));
+  const jaEmCurso = doAmbiente.get(perfil.id);
+  if (jaEmCurso) return jaEmCurso;
+  const pedido = (async (): Promise<string> => {
+    const nomeSessao = `${perfil.id}.refreshToken`;
+    // Login PKCE: a sessão (refresh token) fica no cofre, para não pedir login em todas as execuções.
+    const renovacao = guardado?.renovacao ?? (perfil.tipo === 'oauth2-pkce' ? amb.segredo(nomeSessao) : undefined);
+    let novo: TokenGuardado | null = null;
+    if (renovacao) novo = await pedirToken(amb, perfil, renovacao).catch(() => null);
+    if (!novo && perfil.tipo === 'oauth2-pkce' && renovacao) amb.guardarSegredo?.(nomeSessao, null);
+    novo ??= await pedirToken(amb, perfil);
+    amb.tokens.set(perfil.id, novo);
+    if (perfil.tipo === 'oauth2-pkce' && novo.renovacao) amb.guardarSegredo?.(nomeSessao, novo.renovacao);
+    return novo.token;
+  })();
+  doAmbiente.set(perfil.id, pedido);
+  try {
+    return await pedido;
+  } finally {
+    doAmbiente.delete(perfil.id);
+  }
 }
 
 /** Devolve os cabeçalhos de autenticação e os valores secretos a mascarar nos registos. */
@@ -122,7 +208,8 @@ async function autenticar(amb: AmbienteApi, perfil: PerfilAutenticacao | undefin
   if (!perfil) return { cabecalhos: {}, secretos: [] };
   switch (perfil.tipo) {
     case 'oauth2-cliente':
-    case 'oauth2-password': {
+    case 'oauth2-password':
+    case 'oauth2-pkce': {
       const token = await obterToken(amb, perfil, forcarNovo);
       return { cabecalhos: { Authorization: `Bearer ${token}` }, secretos: [token] };
     }
@@ -299,7 +386,7 @@ export async function executarBlocoApi(pedidoBloco: PedidoBloco, amb: AmbienteAp
       throw explicarRede(erro, limiteMs, `${pedido.metodo} ${url}`);
     }
     tempoMs = Date.now() - inicio;
-    const eOAuth = perfil?.tipo === 'oauth2-cliente' || perfil?.tipo === 'oauth2-password';
+    const eOAuth = perfil?.tipo === 'oauth2-cliente' || perfil?.tipo === 'oauth2-password' || perfil?.tipo === 'oauth2-pkce';
     if (!(resposta.status === 401 && eOAuth)) break;
   }
   if (!resposta) throw new ErroApi('O pedido não chegou a ser feito.');
