@@ -582,6 +582,16 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(escolhida.startsWith(estadoRun()?.id + ' '), `A lista devia mostrar a execução nova (${estadoRun()?.id}): ${escolhida}`);
         await new Promise((r) => setTimeout(r, 4_000));
         await tirarPrint(j, raiz, 'mapa-ao-vivo');
+        // Pausar só o worker 1: o caso dele deixa de avançar, o worker 2 continua.
+        await naPagina(j, "document.querySelector('.worker[data-worker=\"1\"] .botao-worker').click()");
+        await esperar(j, "document.querySelector('.worker[data-worker=\"1\"] .botao-worker')?.textContent === 'Continuar'");
+        const passosDoWorker1 = (): number => estadoRun()?.casos.find((c) => c.worker === 1 && c.estado === 'a-correr')?.passos.length ?? -1;
+        await new Promise((r) => setTimeout(r, 1_500));
+        const antes = passosDoWorker1();
+        await new Promise((r) => setTimeout(r, 2_500));
+        confirmar(antes >= 0 && passosDoWorker1() === antes, `Com o worker 1 em pausa, o caso dele não devia avançar (${antes} → ${passosDoWorker1()}).`);
+        await naPagina(j, "document.querySelector('.worker[data-worker=\"1\"] .botao-worker').click()");
+        await esperar(j, "document.querySelector('.worker[data-worker=\"1\"] .botao-worker')?.textContent === 'Pausar'");
         const miniatura = await naPagina<string>(j, "document.querySelector('#workers .worker img')?.src ?? ''");
         if (miniatura.startsWith('data:image/jpeg;base64,')) fs.writeFileSync(path.join(raiz, 'out', 'smoke-miniatura.jpg'), Buffer.from(miniatura.split(',')[1], 'base64'));
 
@@ -669,6 +679,42 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         const ko = run?.casos[1].diferencas[0];
         confirmar(ko?.passo === 'Confirmação manual' && ko.obtido === 'KO: O pedido não aparece', `A diferença do KO manual está errada: ${JSON.stringify(ko)}`);
         confirmar(run?.casos[1].blocos?.join(',') === 'ok,ko', `Estados dos blocos errados: ${run?.casos[1].blocos?.join(',')}`);
+      },
+    ],
+    [
+      'retomar a meio (a partir do passo manual, com o {PedidoId} guardado) e saltar o resto de uma jornada',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const anterior = estadoRun()?.casos.find((c) => c.casoId === 'TC0002');
+        const pedidoId = anterior?.variaveis.PedidoId;
+        confirmar(anterior?.estado === 'KO' && pedidoId, 'Falta o caso KO da execução anterior.');
+        await esperar(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .caso-topo')");
+        await naPagina(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .caso-topo').click()");
+        await esperar(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .botao-retomar')");
+        const sugerido = await naPagina<string>(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .retomar-bloco').value");
+        confirmar(sugerido === '1', `Devia sugerir retomar no bloco do KO (2.º), sugeriu ${Number(sugerido) + 1}.`);
+        await tirarPrint(j, raiz, 'retomar');
+        await naPagina(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .botao-retomar').click()");
+        await esperar(j, "document.querySelector('.caixa-manual[data-chave=\"com-passo-manual/TC0002\"]')", 60_000);
+        const instrucao = await naPagina<string>(j, "document.querySelector('.caixa-manual .manual-instrucao').textContent");
+        confirmar(instrucao.includes(`pedido ${pedidoId} `), `Ao retomar, a instrução devia usar o {PedidoId} guardado (${pedidoId}): ${instrucao}`);
+        await naPagina(j, "document.querySelector('.caixa-manual .botao-manual-ok').click()");
+        const retomado = await esperarFimDoRun(60_000);
+        const caso = retomado?.casos[0];
+        console.log(`[smoke]   ${retomado?.nome}: ${caso?.casoId}=${caso?.estado} [${caso?.blocos?.join(',')}]`);
+        confirmar(retomado?.retomadoDesde === 1 && retomado.casos.length === 1, 'A execução devia ter só o caso retomado, a partir do bloco 2.');
+        confirmar(caso?.estado === 'OK' && caso.blocos?.join(',') === 'ignorado,ok', `O caso retomado devia dar OK sem correr o bloco 1: ${caso?.estado} ${caso?.blocos?.join(',')}`);
+
+        // Saltar o resto de uma jornada pelo mapa: o 1.º caso pára no próximo passo e os outros nem começam.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"mapa\"]').click()");
+        await esperar(j, "document.getElementById('mapa-run')");
+        await iniciarRun(pasta, { jornadaIds: ['simular-credito'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        await esperar(j, "document.querySelector('.mapa-jornada[data-jornada=\"simular-credito\"] .botao-saltar-jornada')", 30_000);
+        await naPagina(j, "document.querySelector('.mapa-jornada[data-jornada=\"simular-credito\"] .botao-saltar-jornada').click()");
+        const saltado = await esperarFimDoRun(60_000);
+        const estados = (saltado?.casos ?? []).map((c) => c.estado);
+        console.log(`[smoke]   ${estados.join(', ')}`);
+        confirmar(estados.length === 6 && estados.slice(1).every((e) => e === 'SALTADO') && ['SALTADO', 'OK'].includes(estados[0]), `Os casos da jornada deviam ter sido saltados: ${estados.join(', ')}`);
       },
     ],
     [

@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('uatStudio', {
     saltar: chamar('run:saltar'),
     miniaturas: chamar('run:miniaturas'),
     responderManual: chamar('run:responder-manual'),
+    pausarWorker: chamar('run:pausar-worker'),
+    saltarJornada: chamar('run:saltar-jornada'),
     verificar: chamar('run:verificar'),
     historico: chamar('run:historico'),
     abrir: chamar('run:abrir'),

@@ -233,6 +233,8 @@ export interface AmbitoRun {
   chavesCasos?: string[];
   /** Só os casos (ou jornadas) com alguma destas etiquetas. */
   etiquetas?: string[];
+  /** Retomar a meio: corre só este caso, a partir deste bloco (posição, 0 = primeiro), com estas variáveis já guardadas. */
+  retomar?: { chave: string; desdeBloco: number; variaveis: Record<string, string> };
 }
 
 export interface EstadoRun {
@@ -244,6 +246,10 @@ export interface EstadoRun {
   aParar: boolean;
   /** Em pausa (os casos param entre passos, nunca a meio de uma ação). */
   emPausa: boolean;
+  /** Workers postos em pausa sozinhos (os outros continuam). */
+  workersEmPausa?: number[];
+  /** Retomar a meio: o caso recomeçou neste bloco (posição). */
+  retomadoDesde?: number;
   inicio: string;
   fim?: string;
   ambiente: string;

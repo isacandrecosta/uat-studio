@@ -32,6 +32,8 @@ let pararPedido = false;
 let pausado = false;
 /** Casos (idDaJornada/idDoCaso) que o utilizador mandou saltar. */
 const saltar = new Set<string>();
+/** Workers postos em pausa sozinhos (os outros continuam). */
+const workersEmPausa = new Set<number>();
 /** Passos manuais à espera do testador, por caso (`idDaJornada/idDoCaso`). */
 const pendentesManuais = new Map<string, { responder: (r: RespostaManual) => void; vigiar: ReturnType<typeof setInterval> }>();
 /** Página aberta por cada worker (para as miniaturas ao vivo do mapa de execução). */
@@ -62,7 +64,7 @@ export function planear(pasta: string, ambito: AmbitoRun): { itens: ItemPlano[];
   const conjuntos = new Map(repo.listar(pasta, 'casos').map((c) => [c.id, c]));
   const etiquetas = (ambito.etiquetas ?? []).map((e) => e.toLowerCase());
   const temEtiqueta = (lista: string[]): boolean => lista.some((e) => etiquetas.includes(e.toLowerCase()));
-  const chaves = ambito.chavesCasos ? new Set(ambito.chavesCasos) : null;
+  const chaves = ambito.retomar ? new Set([ambito.retomar.chave]) : ambito.chavesCasos ? new Set(ambito.chavesCasos) : null;
 
   const itens: ItemPlano[] = [];
   const nomesJornadas = new Set<string>();
@@ -126,6 +128,13 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   }
   const { itens, nome } = planear(pasta, ambito);
   if (itens.length === 0) throw new repo.ErroProjeto('Não há casos para correr com essa escolha.');
+  const retomar = ambito.retomar;
+  if (retomar) {
+    const blocosDaJornada = itens[0].jornada.blocos.length;
+    if (!Number.isInteger(retomar.desdeBloco) || retomar.desdeBloco < 0 || retomar.desdeBloco >= blocosDaJornada) {
+      throw new repo.ErroProjeto(`Não é possível retomar no bloco ${retomar.desdeBloco + 1}: a jornada tem ${blocosDaJornada} blocos.`);
+    }
+  }
 
   const paralelo = [1, 2, 4, 8].includes(opcoes.paralelo) ? opcoes.paralelo : 1;
   const inicio = new Date();
@@ -160,6 +169,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
       pasta: pastaDoCaso(item).replace(/\\/g, '/'),
     })),
     pasta: nomePasta,
+    ...(retomar ? { retomadoDesde: retomar.desdeBloco, nome: `${nome} (retomado no bloco ${retomar.desdeBloco + 1})` } : {}),
     jornadas: fotografarJornadas(
       repo.listar(pasta, 'jornadas').filter((j) => itens.some((i) => i.jornada.id === j.id)),
       repo.listar(pasta, 'epicos'),
@@ -169,6 +179,8 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   };
   runAtual = run;
   paginasDosWorkers.clear();
+  workersEmPausa.clear();
+  run.workersEmPausa = [];
   pararPedido = false;
   pausado = false;
   saltar.clear();
@@ -228,6 +240,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             caso: item.caso,
             runId: run.id,
             pasta: path.join(pastaRun, relativa),
+            ...(retomar ? { desdeBloco: retomar.desdeBloco, variaveisIniciais: { ...retomar.variaveis } } : {}),
             limiteMs: 15_000,
             trace: true,
             calculadas,
@@ -263,7 +276,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
               // Passo a passo: pára antes de cada passo, à espera de "Continuar".
               if (opcoes.velocidade === 'passo' && !pararPedido) definirPausa(true);
               else if (opcoes.velocidade === 'lenta') await new Promise((r) => setTimeout(r, 1000));
-              while (pausado && !pararPedido && !saltar.has(chave)) await new Promise((r) => setTimeout(r, 150));
+              while ((pausado || workersEmPausa.has(numeroWorker)) && !pararPedido && !saltar.has(chave)) await new Promise((r) => setTimeout(r, 150));
             },
           });
           run.casos[indice] = { ...resultado, pasta: relativa, worker: numeroWorker };
@@ -361,6 +374,28 @@ export function continuarRun(): EstadoRun | null {
   if (runAtual?.ativo) {
     pausado = false;
     runAtual.emPausa = false;
+    avisar(true);
+  }
+  return runAtual;
+}
+
+/** Pausa (ou continua) só um worker: os outros continuam a correr. */
+export function pausarWorker(numero: number, pausar: boolean): EstadoRun | null {
+  if (runAtual?.ativo) {
+    if (pausar) workersEmPausa.add(numero);
+    else workersEmPausa.delete(numero);
+    runAtual.workersEmPausa = [...workersEmPausa].sort((a, b) => a - b);
+    avisar(true);
+  }
+  return runAtual;
+}
+
+/** Salta todos os casos de uma jornada que ainda não terminaram (os que estão a correr param no próximo passo). */
+export function saltarJornada(jornadaId: string): EstadoRun | null {
+  if (runAtual?.ativo) {
+    for (const caso of runAtual.casos) {
+      if (caso.jornadaId === jornadaId && (caso.estado === 'por-correr' || caso.estado === 'a-correr')) saltar.add(caso.chave);
+    }
     avisar(true);
   }
   return runAtual;

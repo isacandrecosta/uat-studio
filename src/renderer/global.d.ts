@@ -61,6 +61,10 @@ declare global {
         /** Salta um caso (`idDaJornada/idDoCaso`), esteja por correr ou a correr. */
         saltar(chave: string): Promise<EstadoRun | null>;
         /** Miniaturas ao vivo do browser de cada worker (imagem "data:", ou null). */
+        /** Pausa (ou continua) só um worker. */
+        pausarWorker(numero: number, pausar: boolean): Promise<EstadoRun | null>;
+        /** Salta os casos de uma jornada que ainda não terminaram. */
+        saltarJornada(jornadaId: string): Promise<EstadoRun | null>;
         /** Resposta a um passo manual; com `anexar`, pede uma imagem ao testador (null se cancelar). */
         responderManual(chave: string, ok: boolean, nota: string, anexar: boolean): Promise<EstadoRun | null>;
         miniaturas(): Promise<Array<{ worker: number; chave: string; imagem: string | null }>>;

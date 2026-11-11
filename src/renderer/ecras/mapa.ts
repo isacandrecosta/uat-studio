@@ -202,7 +202,21 @@ export async function ecraMapa({ corpo, acoes, irPara }: Contexto): Promise<void
               h(
                 'figcaption',
                 {},
-                h('strong', {}, `Worker ${n}`),
+                h(
+                  'span',
+                  { class: 'worker-topo' },
+                  h('strong', {}, `Worker ${n}${(r.workersEmPausa ?? []).includes(n) ? ' (em pausa)' : ''}`),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'botao botao-pequeno-livre botao-worker',
+                      title: 'Pausa só este worker (pára entre passos); os outros continuam.',
+                      onclick: () => void api.pausarWorker(n, !(r.workersEmPausa ?? []).includes(n)),
+                    },
+                    (r.workersEmPausa ?? []).includes(n) ? 'Continuar' : 'Pausar',
+                  ),
+                ),
                 caso && h('span', {}, `${caso.jornadaNome} › ${caso.casoId}`),
                 caso?.passoAtual && h('span', { class: 'suave worker-passo' }, caso.passoAtual),
               ),
@@ -293,7 +307,25 @@ export async function ecraMapa({ corpo, acoes, irPara }: Contexto): Promise<void
             return h(
               'section',
               { class: 'cartao mapa-jornada', 'data-jornada': j.id, 'data-estado': estado },
-              h('header', { class: 'cartao-topo' }, h('h3', {}, j.nome), h('span', { class: 'suave' }, `${plural(casos.length, 'caso')} · ${resumo}`)),
+              h(
+                'header',
+                { class: 'cartao-topo' },
+                h('h3', {}, j.nome),
+                h('span', { class: 'suave' }, `${plural(casos.length, 'caso')} · ${resumo}`),
+                r.ativo &&
+                  r.pasta === vivo?.pasta &&
+                  casos.some((c) => c.estado === 'por-correr' || c.estado === 'a-correr') &&
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'botao botao-pequeno-livre botao-saltar-jornada',
+                      title: 'Os casos desta jornada que ainda não terminaram são saltados (os que estão a correr param no próximo passo).',
+                      onclick: () => void api.saltarJornada(j.id),
+                    },
+                    'Saltar o resto da jornada',
+                  ),
+              ),
               j.blocos.length === 0
                 ? h('p', { class: 'suave' }, 'Esta execução é antiga e não guardou o percurso dos blocos. Vê a vista "Casos".')
                 : h(

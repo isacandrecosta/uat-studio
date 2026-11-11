@@ -552,6 +552,61 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
         ),
       );
     }
+    const retomar = caixaRetomar(run, caso);
+    if (retomar) zona.append(retomar);
+  }
+
+  /**
+   * Retomar a meio: corre outra vez este caso a partir de um bloco, com as variáveis guardadas
+   * (por exemplo, o número do pedido criado no bloco 1). O browser começa vazio.
+   */
+  function caixaRetomar(run: EstadoRun, caso: ResultadoCaso): HTMLElement | null {
+    if (run.ativo || !['KO', 'ERRO', 'PARADO', 'SALTADO'].includes(caso.estado)) return null;
+    const jornada = jornadas.find((j) => j.id === caso.jornadaId);
+    if (!jornada || jornada.blocos.length < 2) return null;
+    // Por omissão, o bloco onde correu mal (o primeiro com erro/KO, ou o primeiro que não chegou a correr).
+    const estados = caso.blocos ?? [];
+    let sugerido = estados.findIndex((e) => e === 'erro' || e === 'ko');
+    if (sugerido < 0) sugerido = estados.findIndex((e) => e === 'nao-corrido');
+    const abreAplicacao = (i: number): boolean => {
+      const b = blocos.get(jornada.blocos[i].blocoId);
+      return b?.tipo === 'API' || b?.passos[0]?.acao === 'navegar';
+    };
+    const escolha = h(
+      'select',
+      { class: 'campo retomar-bloco', 'aria-label': 'Bloco onde recomeçar' },
+      jornada.blocos.map((item, i) =>
+        h('option', { value: i, selected: i === Math.max(0, sugerido) }, `${i + 1}. ${blocos.get(item.blocoId)?.nome ?? item.blocoId}${abreAplicacao(i) ? '' : ' (não abre a aplicação)'}`),
+      ),
+    );
+    const variaveis = Object.keys(caso.variaveis);
+    return h(
+      'div',
+      { class: 'caixa-retomar' },
+      h('strong', {}, 'Retomar a partir do bloco'),
+      escolha,
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'botao botao-pequeno-livre botao-retomar',
+          disabled: atualAtiva(),
+          onclick: async () => {
+            try {
+              await iniciar({ retomar: { chave: caso.chave, desdeBloco: Number(escolha.value), variaveis: { ...caso.variaveis } } }, { ...run.opcoes, confirmouProducao: false });
+            } catch (e) {
+              await confirmar('Não foi possível retomar', mensagemDeErro(e), 'Fechar');
+            }
+          },
+        },
+        'Retomar',
+      ),
+      h(
+        'p',
+        { class: 'ajuda-campo' },
+        `Os blocos anteriores não correm${variaveis.length > 0 ? ` e as variáveis guardadas são reutilizadas (${variaveis.map((v) => `{${v}}`).join(', ')})` : ''}. O browser começa vazio: escolhe um bloco que abra a aplicação.`,
+      ),
+    );
   }
 
   function desenharHistorico(runs: EstadoRun[]): void {

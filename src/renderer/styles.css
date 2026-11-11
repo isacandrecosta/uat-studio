@@ -600,3 +600,9 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .manual-instrucao { white-space: pre-wrap; font-size: 15px; padding: 10px 12px; background: #f4effc; border-radius: 6px; }
 .caixa-manual .acoes { display: flex; gap: 8px; margin-top: 8px; }
 .aviso-manual { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0 4px; padding: 10px 12px; border: 2px solid #7b4bd1; border-radius: 8px; background: #f4effc; }
+
+/* Retomar a meio e controlo por worker */
+.caixa-retomar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px dashed var(--borda); border-radius: 8px; }
+.caixa-retomar .retomar-bloco { width: auto; max-width: 360px; }
+.caixa-retomar .ajuda-campo { flex-basis: 100%; margin: 0; }
+.worker-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

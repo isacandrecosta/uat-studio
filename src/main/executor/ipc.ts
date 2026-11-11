@@ -9,7 +9,7 @@ import { exportarCasos, importarCasos } from '../excel/casosExcel';
 import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
 import { criarAmbienteApi } from '../api/ambiente';
-import { caminhoNaExecucao, responderManual, continuarRun, estadoRun, iniciarRun, listarHistorico, miniaturasDosWorkers, pararRun, pausarRun, saltarCaso } from './execucao';
+import { caminhoNaExecucao, pausarWorker, responderManual, saltarJornada, continuarRun, estadoRun, iniciarRun, listarHistorico, miniaturasDosWorkers, pararRun, pausarRun, saltarCaso } from './execucao';
 import { verificarAntesDeCorrer } from './verificar';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
@@ -40,6 +40,8 @@ export function registarIpcExecucoes(): void {
     }
     return responderManual(String(chave), { ok: Boolean(ok), nota: String(nota ?? ''), ...(anexo ? { anexo } : {}) });
   });
+  ipcMain.handle('run:pausar-worker', (_e, numero: number, pausar: boolean) => pausarWorker(Number(numero), Boolean(pausar)));
+  ipcMain.handle('run:saltar-jornada', (_e, jornadaId: string) => saltarJornada(String(jornadaId)));
   ipcMain.handle('run:saltar', (_e, chave: string) => saltarCaso(String(chave)));
   // Verificação antes de correr: o que falta ou está mal, sem abrir o browser.
   ipcMain.handle('run:verificar', (_e, ambito: AmbitoRun) => {

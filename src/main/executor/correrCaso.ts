@@ -60,6 +60,10 @@ export interface PedidoCaso {
   deveSaltar(): boolean;
   /** Chamado antes de cada passo: é aqui que a execução espera se estiver em pausa (ou em modo lento). */
   entrePassos(): Promise<void>;
+  /** Retomar a meio: os blocos antes desta posição não correm. */
+  desdeBloco?: number;
+  /** Retomar a meio: variáveis guardadas na execução anterior (por exemplo, {PedidoId}). */
+  variaveisIniciais?: Record<string, string>;
   /** Passo manual: mostra a instrução ao testador e espera pela resposta (OK/KO). */
   passoManual?(pedido: PedidoManual): Promise<RespostaManual>;
   /** A página do browser deste caso (para as miniaturas ao vivo); null quando fecha. */
@@ -138,6 +142,11 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   };
   const estadosBlocos = resultado.blocos as EstadoBlocoCaso[];
   const variaveis: Record<string, string> = { ...caso.dados, TESTE: caso.id, RUN: pedido.runId };
+  // Retomar a meio: as variáveis guardadas antes ficam disponíveis (e aparecem no resultado).
+  for (const [nome, valor] of Object.entries(pedido.variaveisIniciais ?? {})) {
+    variaveis[nome] = valor;
+    resultado.variaveis[nome] = valor;
+  }
 
   // Variáveis usadas em passos secretos (passwords): nunca aparecem em logs.
   const segredos = new Set<string>();
@@ -467,6 +476,12 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     let houveErro = false;
     for (const [indice, item] of jornada.blocos.entries()) {
       if (houveErro && !item.sempre) continue;
+      if (indice < (pedido.desdeBloco ?? 0)) {
+        const nome = pedido.blocos.get(item.blocoId)?.nome ?? item.blocoId;
+        registar(nome, 'Bloco não executado', 'ignorado', 0, `retomado a partir do bloco ${(pedido.desdeBloco ?? 0) + 1}`);
+        estadosBlocos[indice] = 'ignorado';
+        continue;
+      }
       const diferencasAntes = resultado.diferencas.length;
       try {
         await correrBloco(indice, item);
