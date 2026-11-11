@@ -10,10 +10,14 @@ Aplicação desktop portátil para Windows, **offline e sem IA**, para criar e c
 - Intercetar o pedido que a app envia (por exemplo, a um prestador de pagamentos) e simular respostas de APIs externas.
 - Sempre um botão **"Ver código (.ts)"** com o Playwright equivalente.
 
+Para experimentar: na lista **Projeto** (canto inferior esquerdo) escolha **"Projeto de exemplo (casos de uso)"**; usa duas apps OutSystems de teste (um simulador e um portal de crédito com Front Office e Backoffice).
+
 Estado: Fases 1 a 4 feitas (ver [docs/ROADMAP.md](docs/ROADMAP.md) para o que ficou pendente). Especificação em [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 
 ## Documentos
+- [Guia rápido para a equipa](docs/GUIA-RAPIDO.md)
 - [Guia de instalação e primeiros passos](docs/GUIA-INSTALACAO.md)
+- [Documentação técnica e de compliance](docs/DOCUMENTACAO-TECNICA.md)
 - [Ficha para a equipa de segurança](docs/FICHA-SEGURANCA.md) e [componentes e licenças](docs/LICENCAS.md)
 
 ## Em desenvolvimento
@@ -32,5 +36,6 @@ npm.cmd start
 | `npm.cmd run exe` / `npm.cmd run exe:verificar` | Gera o `UAT-Studio.exe` portátil e verifica-o. |
 | `npm.cmd run diagnostico:exe` | Gera o `.exe` de diagnóstico para o PC da empresa. |
 | `npm.cmd run licencas` | Atualiza a lista de componentes e licenças. |
+| `npm.cmd run exemplo:testar` | Corre as jornadas do projeto de exemplo contra os portais de teste (PortalCreditoPOC) e diz se deram todas OK. |
 
 Construído sobre Electron, TypeScript e Playwright.

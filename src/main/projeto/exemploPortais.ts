@@ -5,19 +5,21 @@
 // condicionais, verificações numéricas, API como preparação e como confirmação, intercetar e simular
 // serviços externos, limpeza e passo manual. Todos os dados são fictícios.
 import { Bloco, BlocoDaJornada, Caso, Passo, Valor } from '../../shared/modelo';
-import { guardar } from './repositorio';
+import { existe, guardar, ler } from './repositorio';
 
 export const URL_PORTAL = 'https://personal-e5m9c9gh-dev.outsystems.app/PortalCreditoPOC';
 
 interface Produto {
   codigo: string;
+  /** Texto da opção na lista do FO (a lista do OutSystems usa índices como valores). */
+  nome: string;
   taxa: number;
   comissao: number;
 }
 const PRODUTOS: Record<string, Produto> = {
-  CP: { codigo: 'CP', taxa: 7.5, comissao: 1.5 },
-  CA: { codigo: 'CA', taxa: 6.9, comissao: 1.0 },
-  CH: { codigo: 'CH', taxa: 3.9, comissao: 0.5 },
+  CP: { codigo: 'CP', nome: 'Crédito Pessoal', taxa: 7.5, comissao: 1.5 },
+  CA: { codigo: 'CA', nome: 'Crédito Automóvel', taxa: 6.9, comissao: 1.0 },
+  CH: { codigo: 'CH', nome: 'Crédito Habitação', taxa: 3.9, comissao: 0.5 },
 };
 
 /** Arredondamento "ao par" a 2 casas, como o Round() do OutSystems. */
@@ -63,6 +65,10 @@ const verificarNumero = (id: string, testId: string, descricao: string, coluna: 
 });
 
 export function criarExemploPortais(pasta: string): void {
+  // O épico do simulador (criado por criarExemplo) passa a ser o 1.º da sequência de aprendizagem.
+  if (existe(pasta, 'epicos', 'simulacoes')) {
+    guardar(pasta, 'epicos', { ...ler(pasta, 'epicos', 'simulacoes'), nome: '1. Básico: simulador (gravar, Excel, fórmulas, verificações)' });
+  }
   guardar(pasta, 'aplicacoes', { id: 'portal-fo', nome: 'Portal de Crédito: Front Office', tipo: 'FO', cor: '#2f6bed', urls: { dev: URL_PORTAL } });
   guardar(pasta, 'aplicacoes', { id: 'portal-bo', nome: 'Portal de Crédito: Backoffice', tipo: 'BO', cor: '#e07b00', urls: { dev: `${URL_PORTAL}/BOLogin` } });
   guardar(pasta, 'aplicacoes', { id: 'portal-api', nome: 'Portal de Crédito: APIs', tipo: 'API', cor: '#1a8f4c', urls: { dev: `${URL_PORTAL}/rest` } });
@@ -85,6 +91,8 @@ export function criarExemploPortais(pasta: string): void {
         escrever('p2', 'fo_inpUtilizador', 'Utilizador', variavel('Utilizador')),
         escrever('p3', 'fo_inpPassword', 'Password', variavel('Password'), true),
         clicar('p4', 'fo_btnEntrar', 'Entrar'),
+        // "Esperar até": na 1.ª vez do dia o ambiente ODC pode demorar a responder.
+        { id: 'p4b', acao: 'verificar', descricao: 'Esperar pelo ecrã do código', alvo: alvo('fo_inpCodigo', 'Campo Código'), verificacao: { tipo: 'visivel', esperaSeg: 30 } },
         escrever('p5', 'fo_inpCodigo', 'Código MFA (modo de teste)', variavel('CodigoMfa')),
         clicar('p6', 'fo_btnConfirmar', 'Confirmar o código'),
         { id: 'p7', acao: 'verificar', descricao: 'Ver o botão Novo pedido', alvo: alvo('fo_btnNovoPedido', 'Botão Novo pedido'), verificacao: { tipo: 'visivel', esperaSeg: 15 } },
@@ -155,7 +163,8 @@ export function criarExemploPortais(pasta: string): void {
       passos: [
         clicar('p1', 'fo_btnAtualizar', 'Atualizar o estado'),
         verificarTexto('p2', 'fo_resEstado', 'Verificar o estado no FO', variavel('EstadoDepoisBO')),
-        clicar('p3', 'fo_btnSeguinte', 'Seguinte (contrato)', '{EstadoDepoisBO} = "Aprovado"'),
+        // Tenta sempre avançar: com o pedido aprovado vai para o contrato; senão, o FO tem de recusar.
+        clicar('p3', 'fo_btnSeguinte', 'Tentar avançar (contrato)'),
         verificarTexto('p4', 'fo_msgErro', 'Verificar que não deixa avançar', fixo('O pedido ainda não foi aprovado pelo backoffice'), '{EstadoDepoisBO} = "Pendente aprovação"'),
       ],
     },
@@ -279,7 +288,7 @@ export function criarExemploPortais(pasta: string): void {
       nome: 'API: decisão sem motivo (regra de negócio)',
       tipo: 'API',
       aplicacaoId: 'portal-api',
-      descricao: 'Recusar sem motivo tem de dar erro 400 com a mensagem da regra.',
+      descricao: 'Recusar sem motivo tem de devolver a mensagem da regra no campo "erro" (a API responde 200 com {"erro": ...}).',
       passos: [],
       pedido: {
         metodo: 'POST',
@@ -289,7 +298,7 @@ export function criarExemploPortais(pasta: string): void {
         tipoCorpo: 'json',
         corpo: '{ "decisao": "Recusar", "motivo": "", "gestor": "aprovador" }',
         verificacoes: [
-          { id: 'v1', alvo: 'estado', operador: 'igual', esperado: '400' },
+          { id: 'v1', alvo: 'estado', operador: 'igual', esperado: '200' },
           { id: 'v2', alvo: 'corpo', caminho: 'erro', operador: 'contem', esperado: 'motivo' },
         ],
         guardar: [],
@@ -314,7 +323,7 @@ export function criarExemploPortais(pasta: string): void {
       Utilizador: 'ana.silva',
       Password: 'Teste#2026',
       CodigoMfa: '123456',
-      Produto: produto,
+      Produto: PRODUTOS[produto].nome,
       Montante: String(montante),
       Prazo: String(prazo),
       PrestacaoEsperada: ptPT(c.prestacao),

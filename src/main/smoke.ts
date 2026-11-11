@@ -128,6 +128,8 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         // 1. Escolher na lista (dropdown OutSystems), com o valor a vir de uma coluna.
         const lista = tid('ddVariante').locator('select');
         await lista.locator('option').nth(1).waitFor({ state: 'attached', timeout: 60_000 });
+        // Se a app estava parada, o ecrã ainda pode estar a carregar (um clique cairia na página, não na lista).
+        await p.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => undefined);
         await lista.click();
         await popup.waitFor();
         await popup.locator('input[value="variavel"]').check();

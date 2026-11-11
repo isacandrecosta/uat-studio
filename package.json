@@ -14,7 +14,8 @@
     "diagnostico:exe": "npm run build && electron-builder --config electron-builder.diagnostico.json",
     "exe": "npm run build && electron-builder --config electron-builder.json",
     "exe:verificar": "node scripts/verificar-exe.mjs",
-    "licencas": "node scripts/licencas.mjs"
+    "licencas": "node scripts/licencas.mjs",
+    "exemplo:testar": "npm run build && electron scripts/testar-exemplo.js"
   },
   "author": "isacandrecosta",
   "license": "UNLICENSED",
