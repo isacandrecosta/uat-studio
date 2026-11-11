@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('uatStudio', {
     criar: chamar('projeto:criar'),
     abrir: chamar('projeto:abrir'),
     fechar: chamar('projeto:fechar'),
+    abrirExemplo: chamar('projeto:abrir-exemplo'),
+    apagarExemplo: chamar('projeto:apagar-exemplo'),
     definirAmbiente: chamar('projeto:definir-ambiente'),
   },
   dados: {

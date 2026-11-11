@@ -30,6 +30,10 @@ declare global {
         criar(pasta: string, nome: string, comExemplo: boolean): Promise<EstadoProjeto>;
         abrir(pasta: string): Promise<EstadoProjeto>;
         fechar(): Promise<void>;
+        /** Abre o projeto de exemplo (cria-o na 1.ª vez). */
+        abrirExemplo(): Promise<EstadoProjeto>;
+        /** Apaga o projeto de exemplo aberto (e fecha-o). */
+        apagarExemplo(): Promise<void>;
         definirAmbiente(ambienteId: string): Promise<EstadoProjeto>;
       };
       dados: {

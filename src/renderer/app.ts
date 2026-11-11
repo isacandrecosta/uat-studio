@@ -1,7 +1,7 @@
 // Ponto de entrada da interface: decide entre "escolher projeto" e a aplicação,
 // e troca de ecrã no menu lateral.
 import type { EstadoProjeto } from '../shared/modelo.js';
-import { h, mensagemDeErro, obter } from './dom.js';
+import { confirmar, h, mensagemDeErro, obter } from './dom.js';
 import { mostrarBoasVindas } from './ecras/boasVindas.js';
 import { ecraApi } from './ecras/api.js';
 import { ecraDados } from './ecras/dados.js';
@@ -53,6 +53,7 @@ const menu = obter<HTMLElement>('menu');
 const corpo = obter<HTMLElement>('corpo-ecra');
 const acoes = obter<HTMLElement>('acoes-ecra');
 const escolhaAmbiente = obter<HTMLSelectElement>('escolha-ambiente');
+const escolhaProjeto = obter<HTMLSelectElement>('escolha-projeto');
 const tipoAmbiente = obter<HTMLElement>('tipo-ambiente');
 
 let estado: EstadoProjeto | null = null;
@@ -121,6 +122,7 @@ async function atualizar(): Promise<void> {
   }
   obter('nome-projeto').textContent = estado.projeto.nome;
   desenharAmbiente(estado);
+  void desenharProjetos(estado);
   mostrarVista('app');
   await desenharEcra();
 }
@@ -147,12 +149,74 @@ ECRAS.forEach((ecra, indice) => {
   );
 });
 
+/** Lista "Projeto" no canto: os projetos recentes, abrir outra pasta e criar/gerir projetos. */
+async function desenharProjetos(atual: EstadoProjeto): Promise<void> {
+  const recentes = await window.uatStudio.projeto.recentes().catch(() => []);
+  const outros = recentes.filter((r) => r.pasta !== atual.pasta);
+  escolhaProjeto.replaceChildren(
+    h('option', { value: atual.pasta, selected: true, title: atual.pasta }, atual.projeto.nome),
+    ...outros.map((r) => h('option', { value: r.pasta, title: r.pasta }, r.nome)),
+    ...(atual.projeto.exemplo || recentes.some((r) => r.exemplo) ? [] : [h('option', { value: '__exemplo' }, 'Projeto de exemplo (casos de uso)')]),
+    h('option', { value: '__abrir' }, 'Abrir outra pasta…'),
+    ...(atual.projeto.exemplo ? [h('option', { value: '__apagar-exemplo' }, 'Apagar este projeto de exemplo…')] : []),
+    h('option', { value: '__gerir' }, 'Criar ou gerir projetos…'),
+  );
+  escolhaProjeto.title = atual.pasta;
+}
+
+/** Não se muda de projeto a meio de uma execução ou de uma gravação (misturava dados de projetos diferentes). */
+async function podeMudarDeProjeto(): Promise<boolean> {
+  const [run, gravador] = await Promise.all([window.uatStudio.runs.estado(), window.uatStudio.gravador.estado()]);
+  if (!run?.ativo && !gravador.ativo) return true;
+  await confirmar('Não é possível mudar de projeto agora', run?.ativo ? 'Há uma execução a correr. Espere que termine (ou pare-a) antes de mudar de projeto.' : 'Há uma gravação em curso. Termine-a antes de mudar de projeto.', 'Fechar');
+  return false;
+}
+
+escolhaProjeto.addEventListener('change', async () => {
+  const escolha = escolhaProjeto.value;
+  const atual = estado?.pasta ?? '';
+  if (escolha === atual) return;
+  if (!(await podeMudarDeProjeto())) {
+    escolhaProjeto.value = atual;
+    return;
+  }
+  try {
+    if (escolha === '__gerir') {
+      await window.uatStudio.projeto.fechar();
+    } else if (escolha === '__exemplo') {
+      await window.uatStudio.projeto.abrirExemplo();
+    } else if (escolha === '__apagar-exemplo') {
+      const sim = await confirmar('Apagar o projeto de exemplo', 'O projeto de exemplo e as execuções dele são apagados deste PC (não pode ser desfeito). Pode voltar a criá-lo quando quiser na lista Projeto.', 'Apagar');
+      if (!sim) {
+        escolhaProjeto.value = atual;
+        return;
+      }
+      await window.uatStudio.projeto.apagarExemplo();
+    } else {
+      const pasta = escolha === '__abrir' ? await window.uatStudio.projeto.escolherPasta() : escolha;
+      if (!pasta) {
+        escolhaProjeto.value = atual;
+        return;
+      }
+      await window.uatStudio.projeto.abrir(pasta);
+    }
+    // Projeto novo: começa no ecrã Jornadas, sem seleções do anterior.
+    ecraAtual = ECRAS[0].id;
+    selecao = {};
+  } catch (erro) {
+    escolhaProjeto.value = atual;
+    await confirmar('Não foi possível abrir o projeto', mensagemDeErro(erro), 'Fechar');
+  }
+  await atualizar();
+});
+
 escolhaAmbiente.addEventListener('change', async () => {
   await window.uatStudio.projeto.definirAmbiente(escolhaAmbiente.value);
   await atualizar();
 });
 
 obter('btn-fechar-projeto').addEventListener('click', async () => {
+  if (!(await podeMudarDeProjeto())) return;
   await window.uatStudio.projeto.fechar();
   await atualizar();
 });

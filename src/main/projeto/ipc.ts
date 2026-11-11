@@ -6,6 +6,7 @@ import { EstadoReparo, repararLocalizador } from '../../shared/blocos';
 import { validarFormula } from '../../shared/formulas';
 import { EstadoProjeto, Localizador, NomeColecao, ProjetoRecente, SugestaoReparo, VariavelCalculada } from '../../shared/modelo';
 import { criarExemplo } from './exemplo';
+import { criarExemploPortais } from './exemploPortais';
 import * as repo from './repositorio';
 
 let pastaAtual: string | null = null;
@@ -23,10 +24,50 @@ function ficheiroRecentes(): string {
 function lerRecentes(): ProjetoRecente[] {
   try {
     const lista = JSON.parse(fs.readFileSync(ficheiroRecentes(), 'utf8')) as ProjetoRecente[];
-    return Array.isArray(lista) ? lista.filter((r) => repo.existeProjeto(r.pasta)) : [];
+    if (!Array.isArray(lista)) return [];
+    return lista
+      .filter((r) => repo.existeProjeto(r.pasta))
+      .map((r) => {
+        try {
+          return { ...r, ...(repo.lerProjeto(r.pasta).exemplo ? { exemplo: true } : {}) };
+        } catch {
+          return r;
+        }
+      });
   } catch {
     return [];
   }
+}
+
+/** Pasta do projeto de exemplo da ferramenta (dentro da pasta da app, não nos documentos do utilizador). */
+function pastaDoExemplo(): string {
+  return path.join(app.getPath('userData'), 'exemplos', 'projeto-de-exemplo');
+}
+
+/** Abre o projeto de exemplo, criando-o na 1.ª vez (ou depois de ter sido apagado). */
+export function abrirExemplo(): EstadoProjeto {
+  const pasta = pastaDoExemplo();
+  if (!repo.existeProjeto(pasta)) {
+    repo.criarProjeto(pasta, 'Projeto de exemplo');
+    criarExemplo(pasta);
+    criarExemploPortais(pasta);
+    repo.gravarProjeto(pasta, { ...repo.lerProjeto(pasta), exemplo: true });
+  }
+  return abrirProjeto(pasta);
+}
+
+/** Apaga o projeto de exemplo aberto (só projetos marcados como exemplo; os outros nunca se apagam por aqui). */
+export function apagarExemplo(): void {
+  const pasta = pastaDoProjeto();
+  if (!repo.lerProjeto(pasta).exemplo) throw new repo.ErroProjeto('Só é possível apagar o projeto de exemplo da ferramenta.');
+  pastaAtual = null;
+  const outros = lerRecentes().filter((r) => r.pasta !== pasta);
+  try {
+    fs.writeFileSync(ficheiroRecentes(), JSON.stringify(outros, null, 2), 'utf8');
+  } catch {
+    // A lista de recentes é só uma comodidade.
+  }
+  fs.rmSync(pasta, { recursive: true, force: true });
 }
 
 function registarRecente(estado: EstadoProjeto): void {
@@ -50,10 +91,12 @@ export function abrirProjeto(pasta: string): EstadoProjeto {
   return estado;
 }
 
-export function criarProjeto(pasta: string, nome: string, comExemplo: boolean): EstadoProjeto {
+/** Cria um projeto. Com "comPortais", o exemplo inclui também os casos de uso com os dois portais de crédito. */
+export function criarProjeto(pasta: string, nome: string, comExemplo: boolean, comPortais = false): EstadoProjeto {
   const destino = path.resolve(pasta);
   repo.criarProjeto(destino, nome);
   if (comExemplo) criarExemplo(destino);
+  if (comExemplo && comPortais) criarExemploPortais(destino);
   return abrirProjeto(destino);
 }
 
@@ -70,9 +113,11 @@ export function registarIpcProjeto(): void {
     return resultado.canceled ? null : resultado.filePaths[0];
   });
   ipcMain.handle('projeto:criar', (_e, pasta: string, nome: string, comExemplo: boolean) =>
-    criarProjeto(String(pasta), String(nome), Boolean(comExemplo)),
+    criarProjeto(String(pasta), String(nome), Boolean(comExemplo), true),
   );
   ipcMain.handle('projeto:abrir', (_e, pasta: string) => abrirProjeto(String(pasta)));
+  ipcMain.handle('projeto:abrir-exemplo', () => abrirExemplo());
+  ipcMain.handle('projeto:apagar-exemplo', () => apagarExemplo());
   ipcMain.handle('projeto:fechar', () => {
     pastaAtual = null;
   });

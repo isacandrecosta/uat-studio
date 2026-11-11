@@ -633,3 +633,6 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .print-elemento:hover, .print-elemento:focus-visible { background: rgba(47, 107, 237, 0.22); border-color: var(--primario); outline: none; }
 .print-elemento[data-especie="botao"] { border-color: rgba(26, 143, 76, 0.6); }
 .print-elemento[data-especie="outro"] { border-style: dashed; border-color: rgba(102, 112, 133, 0.6); }
+
+/* Escolha de projeto no canto */
+.escolha-projeto { width: 100%; margin-bottom: 10px; }

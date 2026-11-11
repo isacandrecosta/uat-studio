@@ -1,5 +1,7 @@
 // Processo principal do Electron: cria a janela e liga a interface ao resto.
 import { app, BrowserWindow, ipcMain } from 'electron';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   aoMudarGravador,
@@ -22,6 +24,8 @@ const RAIZ = path.join(__dirname, '..', '..');
 const MODO_SMOKE = process.argv.includes('--smoke');
 
 if (MODO_SMOKE) {
+  // O teste automático não mexe nos projetos recentes nem no cofre do utilizador: usa uma pasta própria.
+  app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'uat-studio-smoke-dados-')));
   // Nos testes automáticos a janela pode estar tapada ou o ecrã bloqueado:
   // sem isto, o Chromium deixa de desenhar e os testes ficam à espera.
   app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');

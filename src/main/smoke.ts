@@ -11,7 +11,7 @@ import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from './c
 import * as repo from './projeto/repositorio';
 import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
-import { criarProjeto } from './projeto/ipc';
+import { abrirProjeto, criarProjeto } from './projeto/ipc';
 
 type Passo = (janela: BrowserWindow) => Promise<void>;
 
@@ -1312,6 +1312,39 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
 
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');
+      },
+    ],
+    [
+      'mudar de projeto no canto: projeto de exemplo, voltar ao anterior e apagar o exemplo',
+      async (j) => {
+        const pastaSmoke = path.join(pastaProjeto, 'exemplo');
+        const escolher = (valor: string): Promise<void> =>
+          naPagina(j, `(() => { const e = document.getElementById('escolha-projeto'); e.value = ${JSON.stringify(valor)}; e.dispatchEvent(new Event('change')); })()`);
+        const projetoAberto = (): Promise<string> => naPagina<string>(j, "document.getElementById('escolha-projeto').value");
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('#escolha-projeto option[value=\"__exemplo\"]')");
+        await escolher('__exemplo');
+        await esperar(j, `document.getElementById('escolha-projeto').value !== ${JSON.stringify(pastaSmoke)} && document.querySelector('#escolha-projeto option[value="__apagar-exemplo"]') && document.querySelector('.cartao-epico')`, 30_000);
+        const pastaExemplo = await projetoAberto();
+        const epicos = await naPagina<number>(j, "document.querySelectorAll('.cartao-epico').length");
+        confirmar(epicos >= 2, `O projeto de exemplo devia ter vários épicos (tem ${epicos}).`);
+        await tirarPrint(j, raiz, 'projeto-exemplo');
+        // Voltar ao projeto anterior pela lista (está nos recentes) e de novo ao exemplo.
+        await escolher(pastaSmoke);
+        await esperar(j, `document.getElementById('escolha-projeto').value === ${JSON.stringify(pastaSmoke)} && !document.querySelector('#escolha-projeto option[value="__apagar-exemplo"]')`, 30_000);
+        confirmar(!(await naPagina<boolean>(j, "Boolean(document.querySelector('#escolha-projeto option[value=\"__exemplo\"]'))")), 'Com o exemplo nos recentes, a opção "Projeto de exemplo" não devia aparecer em duplicado.');
+        await escolher(pastaExemplo);
+        await esperar(j, "document.querySelector('#escolha-projeto option[value=\"__apagar-exemplo\"]')", 30_000);
+        // Apagar o exemplo (com confirmação): a app volta ao ecrã inicial e a pasta desaparece.
+        await escolher('__apagar-exemplo');
+        await esperar(j, "[...document.querySelectorAll('dialog[open] button')].some((b) => b.textContent === 'Apagar')");
+        await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Apagar').click()");
+        await esperar(j, "document.body.dataset.vista === 'boas-vindas'", 30_000);
+        confirmar(!fs.existsSync(pastaExemplo), 'A pasta do projeto de exemplo devia ter sido apagada.');
+        // Volta ao projeto do smoke.
+        abrirProjeto(pastaSmoke);
+        j.reload();
+        await esperar(j, "document.body.dataset.vista === 'app'", 30_000);
       },
     ],
   ];

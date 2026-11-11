@@ -20,6 +20,8 @@ export interface Projeto {
   ambientes: Ambiente[];
   /** Id do ambiente escolhido para gravar e correr. */
   ambienteAtivo: string;
+  /** Projeto de exemplo da ferramenta: pode ser apagado pela interface. */
+  exemplo?: boolean;
 }
 
 export type TipoAplicacao = 'FO' | 'BO' | 'API' | 'EMAIL';
@@ -583,6 +585,8 @@ export interface ProjetoRecente {
   pasta: string;
   nome: string;
   abertoEm: string;
+  /** É o projeto de exemplo da ferramenta. */
+  exemplo?: boolean;
 }
 
 /** Um problema encontrado na verificação antes de correr. */
