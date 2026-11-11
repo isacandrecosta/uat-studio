@@ -17,7 +17,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Motor de fórmulas (decimal exato, arredondamento selecionável), marcadores, contadores persistentes e geradores.
 - [x] Blocos de API: construtor de pedidos, perfis OAuth 2.0 (client credentials, password, renovação) / API Key / Basic / Bearer, verificações, guardar da resposta, teste individual.
 - [x] Blocos de API: verificações e "guardar" em XML (XPath), SOAP, importar cURL/OpenAPI (JSON)/Postman.
-- [ ] Blocos de API, o que falta: certificado de cliente (mTLS), OAuth Authorization Code + PKCE.
+- [x] Blocos de API: OAuth Authorization Code + PKCE (login no browser, sessão guardada no cofre) e certificado de cliente (mTLS).
 - [x] Cofre local de segredos; segredos fora do trace (desligado ou limpo no login e nos pedidos de token).
 - [x] Passos e blocos condicionais ("só se `{Produto}` = X").
 - [x] Bloco "esperar até" e ação "encontrar linha na tabela".
