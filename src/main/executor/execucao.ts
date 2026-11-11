@@ -261,6 +261,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             perfis,
             api,
             sessoesGuardadas,
+            pastaProjeto: pasta,
             proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
             passoManual: () =>
               new Promise<RespostaManual>((resolve) => {

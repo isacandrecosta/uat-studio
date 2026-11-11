@@ -15,6 +15,10 @@ const NOMES_ACAO: Record<Passo['acao'], string> = {
   esperar: 'Esperar',
   simular: 'Simular API',
   intercetar: 'Intercetar',
+  carregar: 'Carregar ficheiro',
+  descarregar: 'Descarregar',
+  separador: 'Separador',
+  dialogo: 'Pergunta do browser',
 };
 
 let deixarDeOuvir: (() => void) | null = null;
@@ -525,6 +529,59 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         });
         await guardar(true);
       };
+      /** Passos que não se gravam com um clique: carregar e descarregar ficheiros, mudar de separador, perguntas do browser. */
+      const acrescentarPassoEspecial = async (): Promise<void> => {
+        const valores = await pedirFormulario(
+          'Outro passo',
+          [
+            {
+              id: 'acao',
+              rotulo: 'O que fazer',
+              tipo: 'escolha',
+              valor: 'carregar',
+              opcoes: [
+                { valor: 'carregar', texto: 'Carregar um ficheiro (upload)' },
+                { valor: 'descarregar', texto: 'Descarregar um ficheiro (clica e guarda)' },
+                { valor: 'separador', texto: 'Passar para outro separador do browser' },
+                { valor: 'dialogo', texto: 'Responder à próxima pergunta do browser (confirmar)' },
+              ],
+            },
+            { id: 'testid', rotulo: 'Elemento: data-testid (para carregar e descarregar)', ajuda: 'O data-testid do campo de upload ou do botão de download, por exemplo uplDocumento.' },
+            {
+              id: 'valor',
+              rotulo: 'Valor',
+              ajuda: 'Carregar: caminho do ficheiro (relativo à pasta do projeto, por exemplo ficheiros/cc.pdf). Descarregar: texto que o ficheiro tem de conter (opcional). Separador: novo ou principal. Pergunta: aceitar ou recusar.',
+            },
+            { id: 'variavel', rotulo: 'Descarregar: guardar o nome do ficheiro na variável (opcional)' },
+            { id: 'descricao', rotulo: 'Descrição (opcional)' },
+          ],
+          'Acrescentar',
+        );
+        if (!valores) return;
+        const acao = valores.acao as Passo['acao'];
+        const precisaElemento = acao === 'carregar' || acao === 'descarregar';
+        if (precisaElemento && !valores.testid.trim()) {
+          await confirmar('Falta o elemento', 'Para carregar ou descarregar, indique o data-testid do campo ou do botão.', 'Fechar');
+          return;
+        }
+        const valorTexto = valores.valor.trim() || (acao === 'separador' ? 'novo' : acao === 'dialogo' ? 'aceitar' : '');
+        const descricoes: Record<string, string> = {
+          carregar: `Carregar o ficheiro ${valorTexto}`,
+          descarregar: 'Descarregar o ficheiro',
+          separador: `Passar para o separador ${valorTexto}`,
+          dialogo: `Responder "${valorTexto}" à próxima pergunta do browser`,
+        };
+        const numeros = bloco.passos.map((p) => Number(/^p(\d+)$/.exec(p.id)?.[1] ?? 0));
+        bloco.passos.push({
+          id: `p${Math.max(0, ...numeros) + 1}`,
+          acao,
+          descricao: valores.descricao.trim() || descricoes[acao],
+          ...(precisaElemento ? { alvo: { descricao: valores.testid.trim(), localizadores: [{ tipo: 'testid' as const, valor: valores.testid.trim() }] } } : {}),
+          ...(valorTexto ? { valor: { tipo: 'fixo' as const, valor: valorTexto } } : {}),
+          ...(acao === 'descarregar' && valores.variavel.trim() ? { variavel: valores.variavel.trim() } : {}),
+        });
+        await guardar(true);
+      };
       const mover = (indice: number, delta: number): void => {
         const destino = indice + delta;
         if (destino < 0 || destino >= bloco.passos.length) return;
@@ -664,7 +721,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
           h('span', {}),
         ),
         h('ol', { class: 'lista-passos' }, linhas),
-        h('div', { class: 'acoes' }, h('button', { id: 'btn-passo-rede', type: 'button', class: 'botao botao-pequeno-livre', title: 'Simular a resposta de uma API externa ou intercetar o pedido que a app envia.', onclick: () => void acrescentarPassoDeRede() }, 'Acrescentar passo de rede')),
+        h('div', { class: 'acoes' }, h('button', { id: 'btn-passo-rede', type: 'button', class: 'botao botao-pequeno-livre', title: 'Simular a resposta de uma API externa ou intercetar o pedido que a app envia.', onclick: () => void acrescentarPassoDeRede() }, 'Acrescentar passo de rede'), h('button', { id: 'btn-passo-especial', type: 'button', class: 'botao botao-pequeno-livre', title: 'Carregar ou descarregar ficheiros, mudar de separador, responder a perguntas do browser.', onclick: () => void acrescentarPassoEspecial() }, 'Acrescentar outro passo')),
       );
     };
     desenharBlocos();

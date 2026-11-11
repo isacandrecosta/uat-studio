@@ -22,6 +22,8 @@ export interface Projeto {
   ambienteAtivo: string;
   /** Projeto de exemplo da ferramenta: pode ser apagado pela interface. */
   exemplo?: boolean;
+  /** A Wiki de componentes OutSystems (também é um projeto de exemplo, que se pode apagar). */
+  wiki?: boolean;
 }
 
 export type TipoAplicacao = 'FO' | 'BO' | 'API' | 'EMAIL';
@@ -70,6 +72,8 @@ export interface Alvo {
    * (por exemplo, o número do pedido). Os localizadores são então relativos a essa linha.
    */
   linha?: { valor: Valor };
+  /** O elemento está dentro de um iframe: seletor do iframe na página (por exemplo [data-testid="ifrPagamento"]). */
+  iframe?: string;
 }
 
 export type AcaoPasso =
@@ -84,7 +88,15 @@ export type AcaoPasso =
   /** Simular a resposta de uma API externa (a partir daqui, nesta sessão do browser). */
   | 'simular'
   /** Intercetar o pedido que a app enviou (por exemplo, ao clicar em Pagar) e verificar os dados. */
-  | 'intercetar';
+  | 'intercetar'
+  /** Carregar um ficheiro num campo de upload (o valor é o caminho do ficheiro). */
+  | 'carregar'
+  /** Clicar num botão/link que descarrega um ficheiro e guardá-lo (o valor, se houver, é um texto que o ficheiro tem de conter). */
+  | 'descarregar'
+  /** Passar a trabalhar noutro separador do browser (valor: "novo" ou "principal"). */
+  | 'separador'
+  /** Responder à próxima pergunta do browser (alert/confirm/prompt): valor "aceitar" ou "recusar". */
+  | 'dialogo';
 
 /** Passos de rede: que pedidos apanhar e o que fazer com eles. */
 export interface PassoRede {
@@ -587,6 +599,8 @@ export interface ProjetoRecente {
   abertoEm: string;
   /** É o projeto de exemplo da ferramenta. */
   exemplo?: boolean;
+  /** É a Wiki de componentes. */
+  wiki?: boolean;
 }
 
 /** Um problema encontrado na verificação antes de correr. */

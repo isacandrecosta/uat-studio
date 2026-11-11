@@ -1,9 +1,10 @@
 // Corre as jornadas automáticas do exemplo dos portais (PortalCreditoPOC) com o executor do UAT Studio,
-// dentro do Electron (para os blocos de API usarem a rede do Windows). Uso: npm.cmd run exemplo:testar
+// dentro do Electron (para os blocos de API usarem a rede do Windows). Uso: npm.cmd run exemplo:testar (ou wiki:testar, para a Wiki de componentes)
 const path = require('path'), fs = require('fs'), os = require('os');
 const raiz = path.resolve(__dirname, '..');
 const pedidas = process.argv.slice(2).filter((a) => !a.startsWith('-') && !a.endsWith('.js'));
-const jornadas = pedidas.length ? pedidas : ['pc-pedido-entre-portais', 'pc-pagamento-simulado', 'pc-apis'];
+const wiki = process.argv.includes('--wiki');
+let jornadas = pedidas.length ? pedidas : ['pc-pedido-entre-portais', 'pc-pagamento-simulado', 'pc-apis'];
 const repo = require(raiz + '/dist/main/projeto/repositorio');
 const { criarExemplo } = require(raiz + '/dist/main/projeto/exemplo');
 const { criarExemploPortais } = require(raiz + '/dist/main/projeto/exemploPortais');
@@ -11,7 +12,11 @@ const { iniciarRun, esperarFimDoRun } = require(raiz + '/dist/main/executor/exec
 (async () => {
   if (process.versions.electron) await require('electron').app.whenReady();
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'uat-portais-'));
-  repo.criarProjeto(pasta, 'P'); criarExemplo(pasta); criarExemploPortais(pasta);
+  repo.criarProjeto(pasta, 'P');
+  if (wiki) {
+    require(raiz + '/dist/main/projeto/wiki').criarWiki(pasta);
+    if (!pedidas.length) jornadas = repo.listar(pasta, 'jornadas').map((j) => j.id);
+  } else { criarExemplo(pasta); criarExemploPortais(pasta); }
   let todosOk = true;
   for (const j of jornadas) {
     await iniciarRun(pasta, { jornadaIds: [j] }, { canal: 'msedge', visivel: false, paralelo: 1 });

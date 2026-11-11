@@ -7,6 +7,7 @@ import { validarFormula } from '../../shared/formulas';
 import { EstadoProjeto, Localizador, NomeColecao, ProjetoRecente, SugestaoReparo, VariavelCalculada } from '../../shared/modelo';
 import { criarExemplo } from './exemplo';
 import { criarExemploPortais } from './exemploPortais';
+import { criarWiki } from './wiki';
 import * as repo from './repositorio';
 
 let pastaAtual: string | null = null;
@@ -29,7 +30,8 @@ function lerRecentes(): ProjetoRecente[] {
       .filter((r) => repo.existeProjeto(r.pasta))
       .map((r) => {
         try {
-          return { ...r, ...(repo.lerProjeto(r.pasta).exemplo ? { exemplo: true } : {}) };
+          const p = repo.lerProjeto(r.pasta);
+          return { ...r, ...(p.exemplo ? { exemplo: true } : {}), ...(p.wiki ? { wiki: true } : {}) };
         } catch {
           return r;
         }
@@ -52,6 +54,17 @@ export function abrirExemplo(): EstadoProjeto {
     criarExemplo(pasta);
     criarExemploPortais(pasta);
     repo.gravarProjeto(pasta, { ...repo.lerProjeto(pasta), exemplo: true });
+  }
+  return abrirProjeto(pasta);
+}
+
+/** Abre a Wiki de componentes OutSystems, criando-a na 1.ª vez (ou depois de ter sido apagada). */
+export function abrirWiki(): EstadoProjeto {
+  const pasta = path.join(app.getPath('userData'), 'exemplos', 'wiki-componentes');
+  if (!repo.existeProjeto(pasta)) {
+    repo.criarProjeto(pasta, 'Wiki de componentes OutSystems');
+    criarWiki(pasta);
+    repo.gravarProjeto(pasta, { ...repo.lerProjeto(pasta), exemplo: true, wiki: true });
   }
   return abrirProjeto(pasta);
 }
@@ -118,6 +131,7 @@ export function registarIpcProjeto(): void {
   ipcMain.handle('projeto:abrir', (_e, pasta: string) => abrirProjeto(String(pasta)));
   ipcMain.handle('projeto:abrir-exemplo', () => abrirExemplo());
   ipcMain.handle('projeto:apagar-exemplo', () => apagarExemplo());
+  ipcMain.handle('projeto:abrir-wiki', () => abrirWiki());
   ipcMain.handle('projeto:fechar', () => {
     pastaAtual = null;
   });

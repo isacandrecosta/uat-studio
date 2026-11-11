@@ -44,5 +44,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Relatório PDF para assinatura do UAT, com ID do requisito.
 - [x] Exportar/importar pacotes de blocos.
 - [x] Executável portátil (`npm.cmd run exe`, verificado com `npm.cmd run exe:verificar`), ficha da ferramenta para a equipa de segurança (`docs/FICHA-SEGURANCA.md`, `docs/LICENCAS.md`) e guia de instalação (`docs/GUIA-INSTALACAO.md`).
+- [x] Wiki de componentes OutSystems (projeto apagável na lista Projeto): receitas com jornadas de prova (`npm.cmd run wiki:testar`) e ações novas: carregar e descarregar ficheiros, perguntas do browser, separadores e iframes.
+- [ ] Wiki: receitas dos widgets do OutSystems UI (Date Picker, Dropdown Search/Tags, Range Slider, Rating, Tabs, Accordion, Popup, Wizard, Paginação) sobre a app de teste `CatalogoComponentesPOC` (por publicar: o Mentor ficou sem créditos) e suporte da ferramenta para os que precisarem.
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

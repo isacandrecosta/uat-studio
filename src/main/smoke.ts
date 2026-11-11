@@ -1312,6 +1312,46 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(comEmail?.estado === 'OK' && comEmail.variaveis.CodigoMfa === '654321', 'O bloco de email devia dar OK e guardar o código 654321.');
         confirmar((comEmail?.evidencias ?? []).includes('email/02_codigo-por-email.json'), `Falta a evidência do email: ${(comEmail?.evidencias ?? []).join(', ')}`);
 
+        // Ações do browser na página de teste do servidor local: upload, download, pergunta do browser, iframe e separadores.
+        fs.mkdirSync(path.join(pasta, 'ficheiros'), { recursive: true });
+        fs.writeFileSync(path.join(pasta, 'ficheiros', 'documento.txt'), 'conteúdo de teste');
+        repo.guardar(pasta, 'aplicacoes', { id: 'pagina-de-teste', nome: 'Página de teste', tipo: 'FO', cor: '#2f6bed', urls: { dev: `${base}/pagina-de-teste` } });
+        const tid = (testid: string, descricao: string, iframe?: string) => ({ descricao, localizadores: [{ tipo: 'testid' as const, valor: testid }], ...(iframe ? { iframe } : {}) });
+        const fixoS = (valor: string) => ({ tipo: 'fixo' as const, valor });
+        const ifr = '[data-testid="ifrInterno"]';
+        repo.guardar(pasta, 'blocos', {
+          id: 'acoes-do-browser',
+          nome: 'Ações do browser',
+          tipo: 'UI',
+          aplicacaoId: 'pagina-de-teste',
+          passos: [
+            { id: 'p1', acao: 'navegar', descricao: 'Abrir', valor: fixoS('') },
+            { id: 'p2', acao: 'carregar', descricao: 'Carregar o documento', alvo: tid('uplFicheiro', 'Upload'), valor: fixoS('ficheiros/documento.txt') },
+            { id: 'p3', acao: 'verificar', descricao: 'Ver o ficheiro carregado', alvo: tid('resFicheiro', 'Resultado'), valor: fixoS('documento.txt (18 bytes)'), verificacao: { tipo: 'texto' } },
+            { id: 'p4', acao: 'descarregar', descricao: 'Descarregar o relatório', alvo: tid('lnkDownload', 'Download'), valor: fixoS('Ana;Lisboa'), variavel: 'Ficheiro' },
+            { id: 'p5', acao: 'dialogo', descricao: 'Aceitar a próxima pergunta', valor: fixoS('aceitar') },
+            { id: 'p6', acao: 'clicar', descricao: 'Apagar (confirm)', alvo: tid('btnConfirmar', 'Apagar') },
+            { id: 'p7', acao: 'verificar', descricao: 'Confirmou', alvo: tid('resConfirmar', 'Resposta'), valor: fixoS('sim'), verificacao: { tipo: 'texto' } },
+            { id: 'p8', acao: 'clicar', descricao: 'Apagar outra vez (sem passo: recusa)', alvo: tid('btnConfirmar', 'Apagar') },
+            { id: 'p9', acao: 'verificar', descricao: 'Recusou', alvo: tid('resConfirmar', 'Resposta'), valor: fixoS('não'), verificacao: { tipo: 'texto' } },
+            { id: 'p10', acao: 'escrever', descricao: 'Escrever no iframe', alvo: tid('inpIframe', 'Campo no iframe', ifr), valor: fixoS('olá') },
+            { id: 'p11', acao: 'clicar', descricao: 'Enviar no iframe', alvo: tid('btnIframe', 'Enviar', ifr) },
+            { id: 'p12', acao: 'verificar', descricao: 'Resultado no iframe', alvo: tid('resIframe', 'Resultado', ifr), valor: fixoS('Recebido: olá'), verificacao: { tipo: 'texto' } },
+            { id: 'p13', acao: 'clicar', descricao: 'Abrir em novo separador', alvo: tid('lnkNovoSeparador', 'Link') },
+            { id: 'p14', acao: 'separador', descricao: 'Passar para o separador novo', valor: fixoS('novo') },
+            { id: 'p15', acao: 'verificar', descricao: 'No separador novo', alvo: tid('resSeparador', 'Resultado'), valor: fixoS('Estou no separador novo'), verificacao: { tipo: 'texto' } },
+            { id: 'p16', acao: 'separador', descricao: 'Voltar ao principal', valor: fixoS('principal') },
+            { id: 'p17', acao: 'verificar', descricao: 'De volta ao principal', alvo: tid('uplFicheiro', 'Upload'), verificacao: { tipo: 'visivel' } },
+          ],
+        });
+        repo.guardar(pasta, 'jornadas', { id: 'acoes-do-browser', nome: 'Ações do browser', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'acoes-do-browser' }] });
+        repo.guardar(pasta, 'casos', { id: 'acoes-do-browser', colunas: [], casos: [{ id: 'NAV01', etiquetas: [], dados: {} }] });
+        await iniciarRun(pasta, { jornadaIds: ['acoes-do-browser'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const acoes = (await esperarFimDoRun(120_000))?.casos[0];
+        const linhasAcoes = (acoes?.passos ?? []).map((p) => `${p.estado} | ${p.descricao} | ${p.detalhe ?? ''}`);
+        console.log(`[smoke]   ${acoes?.casoId}=${acoes?.estado}`);
+        confirmar(acoes?.estado === 'OK' && (acoes.evidencias ?? []).includes('downloads/relatorio.csv') && acoes.variaveis.Ficheiro === 'relatorio.csv', `As ações do browser deviam dar OK:\n${linhasAcoes.join('\n')}`);
+
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');
       },
@@ -1343,6 +1383,23 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Apagar').click()");
         await esperar(j, "document.body.dataset.vista === 'boas-vindas'", 30_000);
         confirmar(!fs.existsSync(pastaExemplo), 'A pasta do projeto de exemplo devia ter sido apagada.');
+        // A Wiki de componentes: abre-se pela lista do canto e apaga-se da mesma forma.
+        abrirProjeto(pastaSmoke);
+        j.reload();
+        await esperar(j, "document.body.dataset.vista === 'app' && document.querySelector('#escolha-projeto option[value=\"__wiki\"]')", 30_000);
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await escolher('__wiki');
+        await esperar(j, "document.querySelector('#escolha-projeto option[value=\"__apagar-exemplo\"]') && document.querySelector('.cartao-epico')", 30_000);
+        const pastaWiki = await projetoAberto();
+        const textoWiki = await naPagina<string>(j, 'document.body.innerText');
+        confirmar(/Campos de formulário/.test(textoWiki) && /Situações típicas/.test(textoWiki), 'A Wiki devia mostrar os épicos das receitas.');
+        confirmar(/Apagar esta Wiki/.test(await naPagina<string>(j, "document.querySelector('#escolha-projeto option[value=\"__apagar-exemplo\"]').textContent")), 'A opção de apagar devia dizer "Apagar esta Wiki".');
+        await tirarPrint(j, raiz, 'wiki');
+        await escolher('__apagar-exemplo');
+        await esperar(j, "[...document.querySelectorAll('dialog[open] button')].some((b) => b.textContent === 'Apagar')");
+        await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Apagar').click()");
+        await esperar(j, "document.body.dataset.vista === 'boas-vindas'", 30_000);
+        confirmar(!fs.existsSync(pastaWiki), 'A pasta da Wiki devia ter sido apagada.');
         // Volta ao projeto do smoke.
         abrirProjeto(pastaSmoke);
         j.reload();

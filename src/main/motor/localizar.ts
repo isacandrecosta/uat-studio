@@ -1,11 +1,11 @@
 // Encontrar elementos na página. Cada elemento tem vários localizadores, por ordem de
 // preferência: se o primeiro falhar, usa-se o seguinte (e isso fica registado no log).
-import { Locator, Page } from 'playwright-core';
+import { FrameLocator, Locator, Page } from 'playwright-core';
 import { descreverLocalizador } from '../../shared/blocos';
 import { Alvo, Localizador } from '../../shared/modelo';
 
 /** Onde procurar: a página inteira, ou dentro de outro elemento (por exemplo, a linha de uma tabela). */
-type Raiz = Page | Locator;
+type Raiz = Page | Locator | FrameLocator;
 
 export function paraLocator(raiz: Raiz, loc: Localizador): Locator {
   switch (loc.tipo) {
@@ -87,7 +87,9 @@ export async function encontrar(pagina: Page, alvo: Alvo, opcoes: OpcoesEncontra
   let numeroDeLinhas = 0;
   for (;;) {
     const decorrido = Date.now() - inicio;
-    let raiz: Raiz | null = pagina;
+    // Elemento dentro de um iframe: os localizadores procuram dentro dele.
+    const base: Raiz = alvo.iframe?.trim() ? pagina.frameLocator(alvo.iframe.trim()) : pagina;
+    let raiz: Raiz | null = base;
     if (naLinha) {
       const linhas = linhasCom(pagina, textoLinha);
       numeroDeLinhas = await contar(linhas);

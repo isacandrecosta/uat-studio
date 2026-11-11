@@ -107,6 +107,18 @@ function linhasDoPasso(passo: Passo, parametros: BlocoDaJornada['parametros'], u
       else linhas.push(`await page.route(${padrao}, (rota) => rota.fulfill({ status: ${rede?.estado ?? 200}, body: ${modelo(rede?.corpo ?? '')} }));`);
       break;
     }
+    case 'carregar':
+      linhas.push(`await ${alvo}.setInputFiles(${valor});`);
+      break;
+    case 'descarregar':
+      linhas.push(`const [download] = await Promise.all([page.waitForEvent('download'), ${alvo}.click()]);`, `await download.saveAs(\`downloads/\${download.suggestedFilename()}\`);`);
+      break;
+    case 'separador':
+      linhas.push(`// Separador: no UAT Studio, os passos seguintes passam para o separador ${valor}.`, 'page = page.context().pages().at(-1) ?? page;');
+      break;
+    case 'dialogo':
+      linhas.push(`page.once('dialog', (d) => (/recusar|n[aã]o|cancelar/i.test(${valor}) ? d.dismiss() : d.accept()));`);
+      break;
     case 'intercetar': {
       const rede = passo.rede;
       linhas.push(`// Intercetar: o pedido a ${rede?.url ?? ''} enviado pela app (no UAT Studio, procura-se desde o início do bloco).`);

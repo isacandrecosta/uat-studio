@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { verificarAntesDeCorrer } from '../main/executor/verificar';
 import { criarExemplo } from '../main/projeto/exemplo';
 import * as repo from '../main/projeto/repositorio';
+import { criarWiki } from '../main/projeto/wiki';
 
 function projetoDeExemplo(): string {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'uat-studio-verificar-'));
@@ -20,6 +21,22 @@ test('o projeto de exemplo passa na verificação', async () => {
   const resultado = await verificarAntesDeCorrer(pasta, {}, semSegredos);
   assert.equal(resultado.casos, 8);
   assert.deepEqual(resultado.problemas, []);
+  fs.rmSync(pasta, { recursive: true, force: true });
+});
+
+test('a Wiki de componentes passa na verificação e cada receita explica como se faz', async () => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'uat-studio-wiki-'));
+  repo.criarProjeto(pasta, 'Wiki');
+  criarWiki(pasta);
+  const resultado = await verificarAntesDeCorrer(pasta, {}, semSegredos);
+  assert.deepEqual(resultado.problemas.filter((p) => p.gravidade === 'erro'), []);
+  const receitas = repo.listar(pasta, 'blocos').filter((b) => b.id.startsWith('receita-'));
+  assert.ok(receitas.length >= 5);
+  for (const r of receitas) assert.match(r.descricao ?? '', /COMO:.*ARMADILHA/s, r.id);
+  // Cada receita tem uma jornada de prova com um caso.
+  const jornadas = repo.listar(pasta, 'jornadas');
+  for (const r of receitas) assert.ok(jornadas.some((j) => j.blocos.some((b) => b.blocoId === r.id)), r.id);
+  assert.equal(resultado.casos, receitas.length);
   fs.rmSync(pasta, { recursive: true, force: true });
 });
 

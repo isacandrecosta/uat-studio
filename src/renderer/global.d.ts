@@ -34,6 +34,8 @@ declare global {
         abrirExemplo(): Promise<EstadoProjeto>;
         /** Apaga o projeto de exemplo aberto (e fecha-o). */
         apagarExemplo(): Promise<void>;
+        /** Abre a Wiki de componentes OutSystems (cria-a na 1.ª vez). */
+        abrirWiki(): Promise<EstadoProjeto>;
         definirAmbiente(ambienteId: string): Promise<EstadoProjeto>;
       };
       dados: {

@@ -156,9 +156,10 @@ async function desenharProjetos(atual: EstadoProjeto): Promise<void> {
   escolhaProjeto.replaceChildren(
     h('option', { value: atual.pasta, selected: true, title: atual.pasta }, atual.projeto.nome),
     ...outros.map((r) => h('option', { value: r.pasta, title: r.pasta }, r.nome)),
-    ...(atual.projeto.exemplo || recentes.some((r) => r.exemplo) ? [] : [h('option', { value: '__exemplo' }, 'Projeto de exemplo (casos de uso)')]),
+    ...((atual.projeto.exemplo && !atual.projeto.wiki) || recentes.some((r) => r.exemplo && !r.wiki) ? [] : [h('option', { value: '__exemplo' }, 'Projeto de exemplo (casos de uso)')]),
+    ...(atual.projeto.wiki || recentes.some((r) => r.wiki) ? [] : [h('option', { value: '__wiki' }, 'Wiki de componentes OutSystems')]),
     h('option', { value: '__abrir' }, 'Abrir outra pasta…'),
-    ...(atual.projeto.exemplo ? [h('option', { value: '__apagar-exemplo' }, 'Apagar este projeto de exemplo…')] : []),
+    ...(atual.projeto.exemplo ? [h('option', { value: '__apagar-exemplo' }, atual.projeto.wiki ? 'Apagar esta Wiki…' : 'Apagar este projeto de exemplo…')] : []),
     h('option', { value: '__gerir' }, 'Criar ou gerir projetos…'),
   );
   escolhaProjeto.title = atual.pasta;
@@ -183,6 +184,8 @@ escolhaProjeto.addEventListener('change', async () => {
   try {
     if (escolha === '__gerir') {
       await window.uatStudio.projeto.fechar();
+    } else if (escolha === '__wiki') {
+      await window.uatStudio.projeto.abrirWiki();
     } else if (escolha === '__exemplo') {
       await window.uatStudio.projeto.abrirExemplo();
     } else if (escolha === '__apagar-exemplo') {

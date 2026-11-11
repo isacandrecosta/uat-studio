@@ -38,7 +38,7 @@ function problemasDoBloco(bloco: Bloco, perfis: Map<string, PerfilAutenticacao>)
         if (erro) problemas.push(`o passo "${passo.descricao}" tem uma fórmula com erro: ${erro}`);
       }
       if ((passo.acao === 'simular' || passo.acao === 'intercetar') && !passo.rede?.url.trim()) problemas.push(`o passo "${passo.descricao}" não diz que pedidos apanhar`);
-      if (!['navegar', 'esperar', 'simular', 'intercetar'].includes(passo.acao) && (passo.alvo?.localizadores.length ?? 0) === 0) {
+      if (!['navegar', 'esperar', 'simular', 'intercetar', 'separador', 'dialogo'].includes(passo.acao) && (passo.alvo?.localizadores.length ?? 0) === 0) {
         problemas.push(`o passo "${passo.descricao}" não tem elemento gravado`);
       }
       if (passo.acao === 'guardar' && !passo.variavel) problemas.push(`o passo "${passo.descricao}" não diz em que variável guardar`);

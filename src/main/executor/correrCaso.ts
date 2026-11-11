@@ -33,7 +33,7 @@ import { avaliarCondicao, avaliarFormula, ErroFormula, preencherTexto } from '..
 import { AmbienteApi, ErroApi, executarBlocoApi, lerCaminho } from '../api/pedidos';
 import { lerEmail } from '../email/email';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
-import { descreverLocalizador, ErroElemento } from '../motor/localizar';
+import { controloDe, descreverLocalizador, encontrar, ErroElemento } from '../motor/localizar';
 import { criarSlug } from '../projeto/repositorio';
 import { compararComTolerancia, formatar, lerNumero } from './numeros';
 
@@ -69,6 +69,8 @@ export interface PedidoCaso {
   desdeBloco?: number;
   /** Retomar a meio: variáveis guardadas na execução anterior (por exemplo, {PedidoId}). */
   variaveisIniciais?: Record<string, string>;
+  /** Pasta do projeto (os ficheiros a carregar podem ter caminhos relativos a ela). */
+  pastaProjeto?: string;
   /** Passo manual: mostra a instrução ao testador e espera pela resposta (OK/KO). */
   passoManual?(pedido: PedidoManual): Promise<RespostaManual>;
   /**
@@ -398,6 +400,24 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
    * Passa para a sessão do browser `nome` (cria-a na 1.ª vez; com `estado`, cria-a já com o login feito).
    * Cada sessão é um contexto limpo e separado: pessoas diferentes na mesma jornada.
    */
+  /** Próxima resposta a uma pergunta do browser (passo "dialogo"); sem esse passo, as perguntas são recusadas. */
+  let respostaDialogo: 'aceitar' | 'recusar' | null = null;
+  const monitores = new Map<Page, MonitorDePedidos>();
+  /** Prepara uma página (também os separadores que a app abre): monitor de pedidos e perguntas do browser. */
+  const prepararPagina = (p: Page): MonitorDePedidos => {
+    const existente = monitores.get(p);
+    if (existente) return existente;
+    p.on('dialog', (d) => {
+      const resposta = respostaDialogo ?? 'recusar';
+      respostaDialogo = null;
+      escrever(`  Pergunta do browser (${d.type()}): "${d.message()}" → ${resposta === 'aceitar' ? 'aceite' : 'recusada'}`);
+      void (resposta === 'aceitar' ? d.accept() : d.dismiss()).catch(() => undefined);
+    });
+    const m = new MonitorDePedidos(p);
+    monitores.set(p, m);
+    return m;
+  };
+
   const usarSessao = async (nome: string, estado?: SessaoGuardada['estado']): Promise<void> => {
     if (sessaoAtual === nome && contexto && !estado) return;
     // O trace é por sessão: fecha-se o pedaço da sessão que se deixa.
@@ -415,7 +435,8 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       const novo = await pedido.browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'pt-PT', ...(estado ? { storageState: estado } : {}) });
       if (pedido.trace) await novo.tracing.start({ screenshots: true, snapshots: true });
       const novaPagina = await novo.newPage();
-      sessao = { contexto: novo, pagina: novaPagina, monitor: new MonitorDePedidos(novaPagina) };
+      novo.on('page', (aberta) => void prepararPagina(aberta));
+      sessao = { contexto: novo, pagina: novaPagina, monitor: prepararPagina(novaPagina) };
       sessoes.set(nome, sessao);
       if (sessoes.size > 1 || nome !== SESSAO_PRINCIPAL) escrever(`  Sessão do browser "${nome}"${estado ? ' (com o login guardado)' : ''}`);
     }
@@ -628,13 +649,14 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           continue;
         }
         const t0 = Date.now();
-        await mon.esperarCalma(pag, 10_000);
+        // A página em uso pode mudar a meio do bloco (passo "separador").
+        await (monitor ?? mon).esperarCalma(pagina ?? pag, 10_000);
         const nota = await executarPasso(passo, item, aplicacao, bloco.nome);
         if (nota.estado === 'ko' && nota.diferenca) resultado.diferencas.push(nota.diferenca);
         registar(bloco.nome, passo.descricao, nota.estado, Date.now() - t0, nota.detalhe);
       }
 
-      await mon.esperarCalma(pag, 5_000);
+      await (monitor ?? mon).esperarCalma(pagina ?? pag, 5_000);
       // Login feito sem diferenças: a sessão fica guardada (só em memória) para os casos seguintes.
       if (chaveLogin && !resultado.diferencas.some((d) => d.bloco === bloco.nome)) {
         pedido.sessoesGuardadas?.set(chaveLogin, { estado: await ctx.storageState(), url: pag.url(), caso: caso.id });
@@ -736,6 +758,81 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
             await p.waitForTimeout(Number.isFinite(numero) ? Math.min(numero, 300) * 1000 : 1000);
           }
           return { estado: 'ok' };
+        }
+        case 'carregar': {
+          // Upload: escolhe o ficheiro no campo (ou na janela de escolha que o botão abre).
+          const caminho = resolver(passo.valor, item).texto.trim();
+          const completo = path.isAbsolute(caminho) ? caminho : path.join(pedido.pastaProjeto ?? '', caminho);
+          if (!caminho || !fs.existsSync(completo)) throw new ErroDados(`O ficheiro a carregar não existe: ${completo || '(sem caminho)'}`);
+          if (!passo.alvo) throw new ErroDados(`O passo "${passo.descricao}" não tem elemento.`);
+          const enc = await encontrar(p, passo.alvo, { limiteMs, linha });
+          const campo = await controloDe(enc.locator, 'input[type="file"]');
+          if (await campo.evaluate((el) => el instanceof HTMLInputElement && el.type === 'file')) {
+            await campo.setInputFiles(completo, { timeout: limiteMs });
+          } else {
+            const [escolha] = await Promise.all([p.waitForEvent('filechooser', { timeout: limiteMs }), enc.locator.click({ timeout: limiteMs })]);
+            await escolha.setFiles(completo);
+          }
+          ecraAssente = false;
+          return { estado: 'ok', detalhe: juntar(`ficheiro "${path.basename(completo)}"`, alternativa(enc)) };
+        }
+        case 'descarregar': {
+          // Clica e espera pelo download; o ficheiro fica nas evidências do caso.
+          if (!passo.alvo) throw new ErroDados(`O passo "${passo.descricao}" não tem elemento.`);
+          const enc = await encontrar(p, passo.alvo, { limiteMs, linha });
+          const [download] = await Promise.all([p.waitForEvent('download', { timeout: limiteMs }), enc.locator.click({ timeout: limiteMs })]);
+          const nome = download.suggestedFilename().replace(/[\\/:*?"<>|]/g, '_') || 'ficheiro';
+          fs.mkdirSync(path.join(pedido.pasta, 'downloads'), { recursive: true });
+          const destino = path.join(pedido.pasta, 'downloads', nome);
+          await download.saveAs(destino);
+          resultado.evidencias?.push(`downloads/${nome}`);
+          if (passo.variavel) {
+            variaveis[passo.variavel] = nome;
+            resultado.variaveis[passo.variavel] = nome;
+          }
+          const tamanho = fs.statSync(destino).size;
+          const esperado = passo.valor ? resolver(passo.valor, item).texto : '';
+          if (esperado.trim()) {
+            const conteudo = fs.readFileSync(destino, 'utf8');
+            if (!conteudo.includes(esperado)) {
+              return {
+                estado: 'ko',
+                detalhe: `o ficheiro "${nome}" não contém "${esperado}"`,
+                diferenca: { bloco: nomeBloco, passo: passo.descricao, esperado: `contém "${esperado}"`, obtido: compactar(conteudo).slice(0, 200) },
+              };
+            }
+          }
+          return { estado: 'ok', detalhe: juntar(`ficheiro "${nome}" (${tamanho} bytes)`, esperado.trim() ? `contém "${esperado}"` : undefined, alternativa(enc)) };
+        }
+        case 'separador': {
+          // "novo": o separador que a app acabou de abrir; "principal": o primeiro.
+          const qual = (resolver(passo.valor, item).texto.trim() || 'novo').toLowerCase();
+          const ctx = contexto as BrowserContext;
+          let destino: Page | undefined;
+          if (qual === 'principal') destino = ctx.pages()[0];
+          else {
+            const fim = Date.now() + limiteMs;
+            while (!destino && Date.now() < fim) {
+              const paginas = ctx.pages();
+              const ultima = paginas[paginas.length - 1];
+              if (paginas.length > 1 && ultima !== pagina) destino = ultima;
+              else await p.waitForTimeout(200);
+            }
+          }
+          if (!destino) throw new ErroDados(qual === 'principal' ? 'Não há separador principal.' : 'A aplicação não abriu nenhum separador novo.');
+          await destino.waitForLoadState('domcontentloaded').catch(() => undefined);
+          await destino.bringToFront().catch(() => undefined);
+          pagina = destino;
+          monitor = prepararPagina(destino);
+          sessoes.set(sessaoAtual, { contexto: ctx, pagina: destino, monitor });
+          pedido.aoAbrirPagina?.(destino);
+          ecraAssente = false;
+          return { estado: 'ok', detalhe: `agora no separador ${qual} (${destino.url()})` };
+        }
+        case 'dialogo': {
+          const resposta = resolver(passo.valor, item).texto.trim().toLowerCase();
+          respostaDialogo = /^(recusar|nao|não|cancelar|n)$/.test(resposta) ? 'recusar' : 'aceitar';
+          return { estado: 'ok', detalhe: `a próxima pergunta do browser vai ser ${respostaDialogo === 'aceitar' ? 'aceite' : 'recusada'}` };
         }
         case 'simular': {
           // A partir daqui, nesta sessão do browser, os pedidos a este endereço recebem a resposta simulada.
