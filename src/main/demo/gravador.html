@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<title>Gravador da demo</title>
+</head>
+<body>
+<!-- Janela escondida, só do modo demo: junta a imagem de uma janela (a app ou o Edge), o título do capítulo
+     e as legendas numa tela de 1280x800 e grava-a em vídeo .webm com o MediaRecorder (sem ffmpeg). -->
+<canvas id="tela" width="1280" height="800"></canvas>
+<video id="video" muted></video>
+<script>
+(() => {
+  const L = 1280, A = 800;
+  const tela = document.getElementById('tela');
+  const ctx = tela.getContext('2d');
+  const video = document.getElementById('video');
+  let fluxo = null, gravador = null, pedacos = [];
+  let legenda = '', titulo = null;
+
+  function linhas(texto, largura) {
+    const palavras = texto.split(/\s+/);
+    const res = [];
+    let atual = '';
+    for (const p of palavras) {
+      const tentativa = atual ? atual + ' ' + p : p;
+      if (ctx.measureText(tentativa).width > largura && atual) { res.push(atual); atual = p; } else atual = tentativa;
+    }
+    if (atual) res.push(atual);
+    return res;
+  }
+
+  function desenhar() {
+    ctx.fillStyle = '#1d2330';
+    ctx.fillRect(0, 0, L, A);
+    if (video.videoWidth) {
+      const e = Math.min(L / video.videoWidth, A / video.videoHeight);
+      const w = video.videoWidth * e, h = video.videoHeight * e;
+      ctx.drawImage(video, (L - w) / 2, (A - h) / 2, w, h);
+    }
+    if (titulo) {
+      ctx.fillStyle = 'rgba(20, 30, 50, 0.94)';
+      ctx.fillRect(0, 0, L, A);
+      ctx.fillStyle = '#7fb0ff';
+      ctx.font = '600 22px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('UAT Studio', L / 2, A / 2 - 90);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 46px "Segoe UI", sans-serif';
+      ctx.fillText(titulo.texto, L / 2, A / 2 - 20);
+      ctx.fillStyle = '#c9d4e8';
+      ctx.font = '400 24px "Segoe UI", sans-serif';
+      linhas(titulo.sub || '', 900).forEach((l, i) => ctx.fillText(l, L / 2, A / 2 + 40 + i * 34));
+      ctx.textAlign = 'left';
+    }
+    if (legenda && !titulo) {
+      ctx.font = '500 25px "Segoe UI", sans-serif';
+      const ls = linhas(legenda, L - 160);
+      const alt = 26 + ls.length * 34;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+      ctx.beginPath();
+      ctx.roundRect(60, A - alt - 28, L - 120, alt, 12);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ls.forEach((l, i) => ctx.fillText(l, L / 2, A - alt - 28 + 40 + i * 34));
+      ctx.textAlign = 'left';
+    }
+  }
+  setInterval(desenhar, 50);
+
+  window.demo = {
+    async fonte(id) {
+      const novo = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: id, maxWidth: 2560, maxHeight: 1600, maxFrameRate: 20 } },
+      });
+      video.srcObject = novo;
+      await video.play();
+      if (fluxo) fluxo.getTracks().forEach((t) => t.stop());
+      fluxo = novo;
+      return true;
+    },
+    legenda(texto) { legenda = texto || ''; },
+    titulo(texto, sub) { titulo = texto ? { texto, sub } : null; },
+    iniciar() {
+      pedacos = [];
+      gravador = new MediaRecorder(tela.captureStream(20), { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 3000000 });
+      gravador.ondataavailable = (e) => { if (e.data.size) pedacos.push(e.data); };
+      gravador.start(1000);
+      return true;
+    },
+    async parar() {
+      if (!gravador) return '';
+      await new Promise((r) => { gravador.onstop = r; gravador.stop(); });
+      gravador = null;
+      const bytes = new Uint8Array(await new Blob(pedacos, { type: 'video/webm' }).arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    },
+  };
+})();
+</script>
+</body>
+</html>

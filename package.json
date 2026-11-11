@@ -9,6 +9,7 @@
     "test": "npm run build && node --test dist/tests",
     "start": "npm run build && electron .",
     "smoke": "npm run build && electron . --smoke",
+    "demo": "npm run build && electron . --demo",
     "diagnostico": "npm run build && electron dist/diagnostico/main.js",
     "diagnostico:smoke": "npm run build && electron dist/diagnostico/main.js --smoke",
     "diagnostico:exe": "npm run build && electron-builder --config electron-builder.diagnostico.json",

@@ -17,13 +17,16 @@ import { registarIpcExecucoes } from './executor/ipc';
 import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
 import { registarIpcPacotes } from './projeto/pacotes';
 import { correrSmoke } from './smoke';
+import { correrDemo } from './demo/demo';
 import { ficheiroDeVerificacao, verificarArranque } from './arranque';
 import { PassoSobrePrint, PedidoGravacao } from '../shared/modelo';
 
 const RAIZ = path.join(__dirname, '..', '..');
 const MODO_SMOKE = process.argv.includes('--smoke');
+/** Modo demo (npm.cmd run demo): grava os vídeos e o guia em out/demo. Usa uma pasta de dados própria, como o smoke. */
+const MODO_DEMO = process.argv.includes('--demo');
 
-if (MODO_SMOKE) {
+if (MODO_SMOKE || MODO_DEMO) {
   // O teste automático não mexe nos projetos recentes nem no cofre do utilizador: usa uma pasta própria.
   app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'uat-studio-smoke-dados-')));
   // Nos testes automáticos a janela pode estar tapada ou o ecrã bloqueado:
@@ -73,6 +76,7 @@ void app.whenReady().then(() => {
     if (!janela.isDestroyed()) janela.webContents.send('run:atualizado', estado);
   });
   if (MODO_SMOKE) void correrSmoke(janela, RAIZ);
+  if (MODO_DEMO) void correrDemo(janela, RAIZ);
   const verificacao = ficheiroDeVerificacao();
   if (verificacao) janela.webContents.once('did-finish-load', () => void verificarArranque(janela, verificacao));
 });

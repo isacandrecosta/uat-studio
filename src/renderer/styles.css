@@ -545,6 +545,8 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .no-estado { font-size: 12px; }
 .no-marcas { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
 
+/* Quadrados da matriz do mapa (antes das cores de estado, para estas ganharem). */
+.mapa-matriz .celula { display: inline-block; width: 28px; height: 18px; border: 2px solid #c9ced8; border-radius: 5px; }
 .no[data-estado="ok"], .legenda-cor[data-estado="ok"], .celula[data-estado="ok"], .celula-estado[data-estado="ok"] { border-color: var(--ok); background: var(--ok-fundo); }
 .no[data-estado="parcial"], .legenda-cor[data-estado="parcial"] { border-color: #7cc79a; background: #f2fbf5; }
 .no[data-estado="ko"], .legenda-cor[data-estado="ko"], .celula[data-estado="ko"], .celula-estado[data-estado="ko"] { border-color: var(--erro); background: var(--erro-fundo); }
@@ -562,7 +564,6 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .mapa-matriz { width: auto; }
 .mapa-matriz th, .mapa-matriz td { white-space: nowrap; text-align: left; }
 .mapa-matriz .coluna-bloco span { display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; font-weight: 500; font-size: 12px; }
-.celula { display: inline-block; width: 28px; height: 18px; border: 2px solid #c9ced8; border-radius: 5px; }
 .celula-estado { display: inline-block; padding: 1px 8px; border: 1px solid #c9ced8; border-radius: 10px; font-size: 12px; }
 
 /* Workers ao vivo */

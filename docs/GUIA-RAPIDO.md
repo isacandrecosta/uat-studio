@@ -26,6 +26,9 @@ Uma página para começar. Não é preciso saber programar.
 3. Em **Runs**, escolher uma jornada e carregar em **Correr**. Abrir um caso para ver os passos, os prints e o porquê de um KO.
 4. Quando já não precisar dele: na lista **Projeto**, **"Apagar este projeto de exemplo…"**. Pode voltar a criá-lo quando quiser.
 
+## Vídeos e guia ilustrado
+Há vídeos curtos (um por tema, com legendas) e um guia com imagens, gerados pela própria ferramenta com as apps de teste: pedir a quem mantém a ferramenta a pasta `out/demo` (ou gerá-la com `npm.cmd run demo`). Abrir `guia.html` no Edge; os vídeos `.webm` abrem no Edge, no VLC ou no Teams.
+
 ## A Wiki de componentes: "como é que testo isto?"
 1. Na lista **Projeto**, escolher **"Wiki de componentes OutSystems"**.
 2. Cada bloco **"Receita: ..."** mostra como se testa um componente ou uma situação típica (campos, password, listas, números, botões e resultados, linha de tabela, MFA de teste, dados que chegam depois do ecrã). A descrição diz **COMO** se faz e as **ARMADILHAS**.

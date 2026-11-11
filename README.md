@@ -37,5 +37,7 @@ npm.cmd start
 | `npm.cmd run diagnostico:exe` | Gera o `.exe` de diagnóstico para o PC da empresa. |
 | `npm.cmd run licencas` | Atualiza a lista de componentes e licenças. |
 | `npm.cmd run exemplo:testar` | Corre as jornadas do projeto de exemplo contra os portais de teste (PortalCreditoPOC) e diz se deram todas OK. |
+| `npm.cmd run wiki:testar` | Corre as provas da Wiki de componentes contra as apps de teste. |
+| `npm.cmd run demo` | Grava os vídeos da demo (com legendas) e o guia ilustrado em `out/demo/` (`-- --capitulos=gravar,correr` para alguns). |
 
 Construído sobre Electron, TypeScript e Playwright.

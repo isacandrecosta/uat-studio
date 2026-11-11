@@ -48,6 +48,8 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
       ),
     );
   }
+  // Por nome, com números por ordem natural ("2. ..." antes de "10. ...").
+  epicos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt', { numeric: true }));
   for (const epico of epicos) {
     const doEpico = jornadas.filter((j) => j.epicoId === epico.id);
     corpo.append(
