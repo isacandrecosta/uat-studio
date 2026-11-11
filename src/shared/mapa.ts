@@ -12,6 +12,7 @@ export function fotografarJornadas(jornadas: Jornada[], epicos: Epico[], blocos:
     nome: j.nome,
     epicoId: j.epicoId,
     epicoNome: epicoPorId.get(j.epicoId)?.nome ?? j.epicoId,
+    ...(j.requisitoId?.trim() ? { requisitoId: j.requisitoId.trim() } : {}),
     blocos: j.blocos.map((item) => {
       const bloco = blocoPorId.get(item.blocoId);
       const aplicacao = bloco?.aplicacaoId ? aplicacaoPorId.get(bloco.aplicacaoId) : undefined;

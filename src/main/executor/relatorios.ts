@@ -11,7 +11,7 @@ function duracao(ms: number): string {
   return s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
 }
 
-function resumoDoCaso(caso: ResultadoCaso): string {
+export function resumoDoCaso(caso: ResultadoCaso): string {
   if (caso.estado === 'ERRO' && caso.erro) {
     const onde = [caso.erro.bloco, caso.erro.passo].filter(Boolean).join(' › ');
     return `${onde ? `${onde}: ` : ''}${caso.erro.mensagem}`;

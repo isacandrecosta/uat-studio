@@ -208,6 +208,8 @@ export interface JornadaDoRun {
   nome: string;
   epicoId: string;
   epicoNome: string;
+  /** ID do requisito (para o relatório de assinatura). */
+  requisitoId?: string;
   blocos: Array<{ nome: string; tipo: TipoBloco; aplicacaoNome?: string; cor?: string; condicional?: boolean; limpeza?: boolean }>;
 }
 
@@ -267,6 +269,8 @@ export interface EstadoRun {
   casos: ResultadoCaso[];
   /** Pasta da execução (dentro de `execucoes/`). */
   pasta?: string;
+  /** Utilizador do Windows que correu a execução (registo básico de quem correu). */
+  utilizador?: string;
   /** As jornadas envolvidas, como estavam no início (para o mapa de execução). */
   jornadas?: JornadaDoRun[];
 }
@@ -409,6 +413,11 @@ export interface Bloco {
   pedido?: PedidoApi;
   /** Passo manual: a execução pára, mostra a instrução e o testador confirma OK ou KO. */
   manual?: { instrucao: string };
+  /**
+   * Bloco de login (UI): depois de correr bem, a sessão (cookies) fica guardada em memória durante a
+   * execução e os casos seguintes com os mesmos dados de entrada não repetem o login.
+   */
+  login?: boolean;
 }
 
 /** A resposta do testador a um passo manual. */
@@ -438,7 +447,15 @@ export interface BlocoDaJornada {
   condicao?: string;
   /** Bloco de limpeza: corre sempre, mesmo que um bloco anterior tenha dado erro. */
   sempre?: boolean;
+  /**
+   * Sessão do browser onde o bloco corre (por omissão, "principal"). Sessões diferentes são pessoas
+   * diferentes na mesma jornada (por exemplo, "cliente" no Front Office e "aprovador" no Backoffice).
+   */
+  sessao?: string;
 }
+
+/** Nome da sessão do browser por omissão. */
+export const SESSAO_PRINCIPAL = 'principal';
 
 export interface Jornada {
   id: string;

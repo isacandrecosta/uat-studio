@@ -147,6 +147,107 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
     await atualizar();
   };
 
+  /** Exportar: escolher os blocos e gravar um pacote (.uatpack) com eles, as aplicações e os perfis que usam (sem segredos). */
+  const exportarPacote = async (): Promise<void> => {
+    const caixas = blocos.map((b) => h('input', { type: 'checkbox', checked: true, 'data-exportar': b.id }) as HTMLInputElement);
+    const escolhidos = await new Promise<string[] | null>((resolve) => {
+      const terminar = (ids: string[] | null): void => {
+        dialogo.close();
+        dialogo.remove();
+        resolve(ids);
+      };
+      const dialogo = h(
+        'dialog',
+        { class: 'dialogo dialogo-pacote', oncancel: () => terminar(null) },
+        h(
+          'div',
+          { class: 'dialogo-corpo' },
+          h('h2', {}, 'Exportar blocos'),
+          h('p', { class: 'suave' }, 'O pacote leva os blocos escolhidos e as aplicações e perfis de autenticação que eles usam. Os segredos nunca vão no pacote: no outro PC é preciso preenchê-los.'),
+          h('ul', { class: 'lista-itens lista-pacote' }, blocos.map((b, i) => h('li', { class: 'item' }, h('label', { class: 'opcao' }, caixas[i], h('span', { class: 'tipo-bloco', 'data-tipo': b.tipo }, NOMES_TIPO_BLOCO[b.tipo] ?? b.tipo), ` ${b.nome}`)))),
+          h(
+            'div',
+            { class: 'dialogo-botoes' },
+            h('button', { type: 'button', class: 'botao', onclick: () => terminar(null) }, 'Cancelar'),
+            h('button', { id: 'exportar-confirmar', type: 'button', class: 'botao botao-primario', onclick: () => terminar(caixas.filter((c) => c.checked).map((c) => c.dataset.exportar ?? '')) }, 'Exportar'),
+          ),
+        ),
+      );
+      document.body.append(dialogo);
+      dialogo.showModal();
+    });
+    if (!escolhidos) return;
+    try {
+      const ficheiro = await window.uatStudio.pacotes.exportar(escolhidos);
+      if (ficheiro) await confirmar('Pacote exportado', `${plural(escolhidos.length, 'bloco')} em ${ficheiro}.`, 'Fechar');
+    } catch (e) {
+      await confirmar('Não foi possível exportar', e instanceof Error ? e.message : String(e), 'Fechar');
+    }
+  };
+
+  /** Importar: escolher o pacote, ver o que é novo/igual/diferente e decidir o que fazer aos diferentes. */
+  const importarPacote = async (): Promise<void> => {
+    let lido: Awaited<ReturnType<typeof window.uatStudio.pacotes.abrir>>;
+    try {
+      lido = await window.uatStudio.pacotes.abrir();
+    } catch (e) {
+      await confirmar('Não foi possível ler o pacote', e instanceof Error ? e.message : String(e), 'Fechar');
+      return;
+    }
+    if (!lido) return;
+    const { pacote, plano } = lido;
+    const nomesEstado = { novo: 'novo', igual: 'já existe, igual', diferente: 'já existe, diferente' } as const;
+    const diferentes = plano.filter((p) => p.estado === 'diferente').length;
+    const conflito = h(
+      'select',
+      { id: 'importar-conflito', class: 'campo' },
+      h('option', { value: 'copia' }, 'Criar uma cópia "(importado)"'),
+      h('option', { value: 'substituir' }, 'Substituir o bloco do projeto'),
+      h('option', { value: 'saltar' }, 'Não importar'),
+    );
+    const resposta = await new Promise<string | null>((resolve) => {
+      const terminar = (valor: string | null): void => {
+        dialogo.close();
+        dialogo.remove();
+        resolve(valor);
+      };
+      const dialogo = h(
+        'dialog',
+        { class: 'dialogo dialogo-pacote', oncancel: () => terminar(null) },
+        h(
+          'div',
+          { class: 'dialogo-corpo' },
+          h('h2', {}, 'Importar pacote'),
+          h('p', { class: 'suave' }, `${plural(plano.length, 'bloco')}${pacote.origem ? ` do projeto "${pacote.origem}"` : ''}. Aplicações e perfis que já existam ficam como estão.`),
+          h(
+            'ul',
+            { class: 'lista-itens lista-pacote' },
+            plano.map((p) =>
+              h('li', { class: 'item', 'data-estado-pacote': p.estado }, h('span', { class: 'tipo-bloco', 'data-tipo': p.tipo }, NOMES_TIPO_BLOCO[p.tipo] ?? p.tipo), h('span', { class: 'item-nome' }, p.nome), h('span', { class: 'item-meta' }, nomesEstado[p.estado])),
+            ),
+          ),
+          diferentes > 0 && h('label', { class: 'campo-grupo' }, `O que fazer aos blocos diferentes (${diferentes})?`, conflito),
+          h(
+            'div',
+            { class: 'dialogo-botoes' },
+            h('button', { type: 'button', class: 'botao', onclick: () => terminar(null) }, 'Cancelar'),
+            h('button', { id: 'importar-pacote-confirmar', type: 'button', class: 'botao botao-primario', onclick: () => terminar(conflito.value) }, 'Importar'),
+          ),
+        ),
+      );
+      document.body.append(dialogo);
+      dialogo.showModal();
+    });
+    if (!resposta) return;
+    const feito = await window.uatStudio.pacotes.importar(pacote, resposta as 'copia' | 'substituir' | 'saltar');
+    const partes = [plural(feito.blocos, 'bloco importado', 'blocos importados')];
+    if (feito.saltados) partes.push(`${feito.saltados} sem alterações`);
+    if (feito.aplicacoes) partes.push(plural(feito.aplicacoes, 'aplicação nova', 'aplicações novas'));
+    if (feito.perfis) partes.push(`${plural(feito.perfis, 'perfil novo', 'perfis novos')} (preencha os segredos no ecrã Blocos de API)`);
+    await confirmar('Pacote importado', `${partes.join(', ')}.`, 'Fechar');
+    await atualizar();
+  };
+
   // Blocos partilhados
   corpo.append(
     h(
@@ -156,7 +257,13 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
         'header',
         { class: 'cartao-topo' },
         h('h2', {}, 'Blocos partilhados'),
-        h('button', { id: 'btn-novo-manual', type: 'button', class: 'botao', title: 'A execução pára neste bloco e o testador confirma OK ou KO.', onclick: () => void editarManual() }, 'Novo passo manual'),
+        h(
+          'div',
+          { class: 'acoes' },
+          h('button', { id: 'btn-importar-pacote', type: 'button', class: 'botao', title: 'Trazer blocos de outro projeto (ficheiro .uatpack).', onclick: () => void importarPacote() }, 'Importar pacote'),
+          blocos.length > 0 && h('button', { id: 'btn-exportar-pacote', type: 'button', class: 'botao', title: 'Levar blocos para outro projeto ou partilhar com a equipa.', onclick: () => void exportarPacote() }, 'Exportar blocos'),
+          h('button', { id: 'btn-novo-manual', type: 'button', class: 'botao', title: 'A execução pára neste bloco e o testador confirma OK ou KO.', onclick: () => void editarManual() }, 'Novo passo manual'),
+        ),
       ),
       blocos.length === 0
         ? h('p', { class: 'suave' }, 'Ainda não há blocos. Os blocos de UI são criados no ecrã Gravar.')

@@ -1,5 +1,6 @@
 // O que o preload expõe à interface (ver src/main/preload.ts).
 import type { EstadoReparo } from '../shared/blocos';
+import type { Conflito, Pacote } from '../shared/pacotes';
 import type {
   AmbitoRun,
   EstadoRun,
@@ -41,6 +42,14 @@ declare global {
         /** Reparar com um clique: o localizador que funcionou passa a ser o preferido do passo. */
         reparar(sugestao: SugestaoReparo): Promise<EstadoReparo>;
       };
+      /** Pacotes de blocos (exportar/importar para outro projeto). */
+      pacotes: {
+        /** Pede onde gravar; devolve o caminho, ou null se cancelar. */
+        exportar(blocoIds: string[]): Promise<string | null>;
+        /** Pede o ficheiro; devolve o pacote e o que é novo/igual/diferente neste projeto, ou null se cancelar. */
+        abrir(): Promise<{ pacote: Pacote; plano: Array<{ id: string; nome: string; tipo: string; estado: 'novo' | 'igual' | 'diferente' }> } | null>;
+        importar(pacote: Pacote, conflito: Conflito): Promise<{ blocos: number; aplicacoes: number; perfis: number; saltados: number }>;
+      };
       gravador: {
         estado(): Promise<EstadoGravador>;
         iniciar(pedido: PedidoGravacao): Promise<EstadoGravador>;
@@ -76,6 +85,8 @@ declare global {
         lerTexto(...partes: string[]): Promise<string>;
         /** Abre um trace (.zip) numa janela com o visualizador do Playwright. */
         abrirTrace(...partes: string[]): Promise<'janela' | 'pasta'>;
+        /** Faz o relatório de UAT para assinatura (PDF) de uma execução terminada e abre-o. Devolve o caminho. */
+        pdf(pastaRun: string): Promise<string>;
         /** Um print em formato "data:", ou null se não existir. */
         imagem(...partes: string[]): Promise<string | null>;
         aoAtualizar(callback: (estado: EstadoRun) => void): () => void;

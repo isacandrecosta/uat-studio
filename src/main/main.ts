@@ -11,6 +11,7 @@ import {
 import { aoMudarRun, pararRun } from './executor/execucao';
 import { registarIpcExecucoes } from './executor/ipc';
 import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
+import { registarIpcPacotes } from './projeto/pacotes';
 import { correrSmoke } from './smoke';
 import { PedidoGravacao } from '../shared/modelo';
 
@@ -47,6 +48,7 @@ function criarJanela(): BrowserWindow {
 
 registarIpcProjeto();
 registarIpcExecucoes();
+registarIpcPacotes();
 
 ipcMain.handle('gravador:estado', () => estadoGravador());
 ipcMain.handle('gravador:iniciar', (_e, pedido: PedidoGravacao) => iniciarGravacao(pastaDoProjeto(), pedido));

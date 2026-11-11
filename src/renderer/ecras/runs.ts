@@ -333,6 +333,28 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
         h('button', { type: 'button', class: 'botao', onclick: () => void api.runs.abrir(pasta) }, 'Abrir pasta'),
         h('button', { type: 'button', class: 'botao', onclick: () => void api.runs.abrir(pasta, 'relatorio.xlsx') }, 'Relatório Excel'),
         h('button', { type: 'button', class: 'botao', onclick: () => void api.runs.abrir(pasta, 'relatorio.html') }, 'Relatório HTML'),
+        h(
+          'button',
+          {
+            id: 'btn-pdf',
+            type: 'button',
+            class: 'botao',
+            title: 'Relatório de UAT em PDF, com o ID do requisito, a decisão e as linhas para assinar.',
+            onclick: async (evento: Event) => {
+              const botao = evento.currentTarget as HTMLButtonElement;
+              botao.disabled = true;
+              try {
+                await api.runs.pdf(pasta);
+                botao.dataset.feito = 'sim';
+              } catch (e) {
+                await confirmar('Não foi possível fazer o PDF', mensagemDeErro(e), 'Fechar');
+              } finally {
+                botao.disabled = false;
+              }
+            },
+          },
+          'PDF para assinatura',
+        ),
       );
     }
     const total = (rotulo: string, valor: number, tipo: string): HTMLElement => h('div', { class: 'total', 'data-tipo': tipo }, h('strong', {}, valor), rotulo);

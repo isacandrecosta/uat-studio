@@ -1,6 +1,6 @@
 // Teste rápido automático (npm run smoke): usa a janela como um utilizador,
 // escreve o resultado na consola e fecha tudo. Os prints ficam em out/.
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -630,6 +630,12 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(iguais === '3', `A comparação devia ter 3 casos iguais (tem ${iguais}).`);
         const celula = await naPagina<string>(j, "document.querySelector('#matriz-cobertura tr[data-variante=\"CP12\"] td[data-jornada=\"simular-e-validar\"] .celula-cobertura')?.dataset.estado ?? ''");
         confirmar(celula === 'OK', `Na matriz, CP12 × "Simular e validar" devia estar OK (está "${celula}").`);
+        // Relatório de UAT para assinatura (PDF) da execução mostrada.
+        await naPagina(j, "document.getElementById('btn-pdf').click()");
+        await esperar(j, "document.getElementById('btn-pdf')?.dataset.feito === 'sim'", 60_000);
+        const pdf = path.join(pastaProjeto, 'exemplo', 'execucoes', estadoRun()?.pasta ?? '', 'relatorio-assinatura.pdf');
+        confirmar(fs.existsSync(pdf) && fs.readFileSync(pdf).subarray(0, 4).toString() === '%PDF', 'O PDF para assinatura não foi criado.');
+        fs.copyFileSync(pdf, path.join(raiz, 'out', 'smoke-relatorio-assinatura.pdf'));
         await naPagina(j, "document.getElementById('cobertura').scrollIntoView()");
         await tirarPrint(j, raiz, 'cobertura');
         await naPagina(j, "(() => { const e = document.getElementById('cobertura-linhas'); e.value = 'caso'; e.dispatchEvent(new Event('change')); })()");
@@ -818,6 +824,49 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await esperarNova(antesDeRepetir);
         const repetido = await esperarFimDoRun(120_000);
         confirmar(repetido?.casos.length === 1 && repetido.casos[0].estado === 'OK', `Repetir só este caso devia dar OK: ${repetido?.casos.map((c) => c.estado).join(',')}`);
+      },
+    ],
+    [
+      'exportar e importar um pacote de blocos pela interface',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const ficheiro = path.join(pastaProjeto, 'blocos.uatpack');
+        // As janelas de ficheiros do Windows não se podem usar num teste automático: respondem sozinhas aqui.
+        const originais = { guardar: dialog.showSaveDialog, abrir: dialog.showOpenDialog };
+        dialog.showSaveDialog = (async () => ({ canceled: false, filePath: ficheiro })) as typeof dialog.showSaveDialog;
+        dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [ficheiro] })) as typeof dialog.showOpenDialog;
+        try {
+          const fecharAviso = async (titulo: string): Promise<void> => {
+            await esperar(j, `[...document.querySelectorAll('dialog[open] h2')].some((t) => t.textContent === ${JSON.stringify(titulo)})`);
+            await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Fechar').click()");
+            await esperar(j, "!document.querySelector('dialog[open]')");
+          };
+          await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+          await esperar(j, "document.getElementById('btn-exportar-pacote')");
+          await naPagina(j, "document.getElementById('btn-exportar-pacote').click()");
+          await esperar(j, "document.querySelector('dialog[open] [data-exportar]')");
+          // Só 2 blocos: o simulador e o de API.
+          await naPagina(j, "document.querySelectorAll('dialog[open] [data-exportar]').forEach((c) => (c.checked = ['simular-credito', 'consultar-pedido-api'].includes(c.dataset.exportar)))");
+          await naPagina(j, "document.getElementById('exportar-confirmar').click()");
+          await fecharAviso('Pacote exportado');
+          const exportado = JSON.parse(fs.readFileSync(ficheiro, 'utf8')) as { blocos: Array<{ id: string }>; aplicacoes: Array<{ id: string }> };
+          confirmar(exportado.blocos.map((b) => b.id).sort().join(',') === 'consultar-pedido-api,simular-credito', `O pacote tem os blocos errados: ${exportado.blocos.map((b) => b.id).join(',')}`);
+          confirmar(exportado.aplicacoes.length === 2, 'O pacote devia levar as 2 aplicações usadas.');
+
+          // O bloco muda no projeto; ao importar, fica como "diferente" e cria-se uma cópia.
+          const bloco = repo.ler(pasta, 'blocos', 'simular-credito');
+          repo.guardar(pasta, 'blocos', { ...bloco, descricao: 'alterado depois de exportar' });
+          await naPagina(j, "document.getElementById('btn-importar-pacote').click()");
+          await esperar(j, "document.querySelector('dialog[open] [data-estado-pacote=\"diferente\"]') && document.getElementById('importar-conflito')");
+          await tirarPrint(j, raiz, 'importar-pacote');
+          await naPagina(j, "(() => { document.getElementById('importar-conflito').value = 'copia'; document.getElementById('importar-pacote-confirmar').click(); })()");
+          await fecharAviso('Pacote importado');
+          confirmar(repo.listar(pasta, 'blocos').some((b) => b.nome === 'Simular crédito (importado)'), 'A importação devia ter criado a cópia "(importado)".');
+          confirmar(repo.ler(pasta, 'blocos', 'simular-credito').descricao === 'alterado depois de exportar', 'Com "cópia", o bloco do projeto não devia mudar.');
+        } finally {
+          dialog.showSaveDialog = originais.guardar;
+          dialog.showOpenDialog = originais.abrir;
+        }
       },
     ],
     [

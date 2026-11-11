@@ -11,6 +11,7 @@ import * as repo from '../projeto/repositorio';
 import { criarAmbienteApi } from '../api/ambiente';
 import { caminhoNaExecucao, pausarWorker, responderManual, saltarJornada, continuarRun, estadoRun, iniciarRun, listarHistorico, miniaturasDosWorkers, pararRun, pausarRun, saltarCaso } from './execucao';
 import { abrirTrace } from './trace';
+import { htmlParaAssinatura } from './assinatura';
 import { verificarAntesDeCorrer } from './verificar';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
@@ -65,6 +66,24 @@ export function registarIpcExecucoes(): void {
     const destino = caminhoNaExecucao(pastaDoProjeto(), ...partes.map(String));
     if (!destino.endsWith('.zip') || !fs.existsSync(destino)) throw new repo.ErroProjeto('Esse trace já não existe.');
     return abrirTrace(caminhoNaExecucao(pastaDoProjeto()), destino);
+  });
+  // Relatório de UAT para assinatura (PDF A4), gravado na pasta da execução e aberto no Windows.
+  ipcMain.handle('run:pdf', async (_e, pastaRun: string) => {
+    const pasta = pastaDoProjeto();
+    const run = listarHistorico(pasta).find((r) => r.pasta === String(pastaRun));
+    if (!run || run.ativo) throw new repo.ErroProjeto('Só é possível fazer o relatório de uma execução terminada.');
+    const html = htmlParaAssinatura(run, { projeto: repo.lerProjeto(pasta).nome, jornadas: repo.listar(pasta, 'jornadas') });
+    const janela = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+    try {
+      await janela.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      const pdf = await janela.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true });
+      const destino = caminhoNaExecucao(pasta, String(pastaRun), 'relatorio-assinatura.pdf');
+      fs.writeFileSync(destino, pdf);
+      if (!process.argv.includes('--smoke')) await shell.openPath(destino);
+      return destino;
+    } finally {
+      janela.destroy();
+    }
   });
   ipcMain.handle('run:ler-texto', (_e, ...partes: string[]) => {
     const destino = caminhoNaExecucao(pastaDoProjeto(), ...partes.map(String));

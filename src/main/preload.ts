@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld('uatStudio', {
   blocos: {
     reparar: chamar('blocos:reparar'),
   },
+  pacotes: {
+    exportar: chamar('pacotes:exportar'),
+    abrir: chamar('pacotes:abrir'),
+    importar: chamar('pacotes:importar'),
+  },
   gravador: {
     estado: chamar('gravador:estado'),
     iniciar: chamar('gravador:iniciar'),
@@ -55,6 +60,7 @@ contextBridge.exposeInMainWorld('uatStudio', {
     abrir: chamar('run:abrir'),
     lerTexto: chamar('run:ler-texto'),
     abrirTrace: chamar('run:abrir-trace'),
+    pdf: chamar('run:pdf'),
     imagem: chamar('run:imagem'),
     aoAtualizar: ouvir('run:atualizado'),
   },

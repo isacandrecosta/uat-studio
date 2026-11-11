@@ -1,6 +1,7 @@
 // Gere uma execução (run): decide que casos correm, lança o browser, distribui os casos
 // por "workers" em paralelo e escreve a pasta da execução (logs, evidências, relatórios).
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { Browser, chromium, Page } from 'playwright-core';
 import { fotografarJornadas } from '../../shared/mapa';
@@ -112,6 +113,15 @@ function carimbo(data: Date): string {
   return `${data.getFullYear()}-${d2(data.getMonth() + 1)}-${d2(data.getDate())}_${d2(data.getHours())}${d2(data.getMinutes())}`;
 }
 
+/** Nome do utilizador do Windows (para o registo de quem correu). */
+function utilizadorDoWindows(): string | undefined {
+  try {
+    return os.userInfo().username;
+  } catch {
+    return process.env.USERNAME;
+  }
+}
+
 function gravarRunJson(pastaRun: string, run: EstadoRun): void {
   fs.writeFileSync(path.join(pastaRun, 'run.json'), `${JSON.stringify(run, null, 2)}\n`, 'utf8');
 }
@@ -152,6 +162,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
     aParar: false,
     emPausa: false,
     inicio: inicio.toISOString(),
+    utilizador: utilizadorDoWindows(),
     ambiente: ambiente.nome,
     tipoAmbiente: ambiente.tipo,
     opcoes: { canal: opcoes.canal, visivel: opcoes.visivel, paralelo, velocidade: opcoes.velocidade ?? 'normal', pausarNoErro: Boolean(opcoes.pausarNoErro) },
@@ -194,6 +205,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   const log = (linha: string): void =>
     fs.appendFileSync(ficheiroLog, `[${new Date().toLocaleTimeString('pt-PT', { hour12: false })}] ${linha}\n`, 'utf8');
   log(`Execução ${run.id}: ${nome} | ${itens.length} caso(s) | Ambiente: ${ambiente.nome} (${ambiente.tipo})`);
+  log(`Utilizador: ${run.utilizador ?? '?'}`);
   log(`Browser: ${opcoes.canal === 'msedge' ? 'Edge' : 'Chrome'} | ${opcoes.visivel ? 'visível' : 'em background'} | ${paralelo} em paralelo`);
   gravarRunJson(pastaRun, run);
 

@@ -40,7 +40,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [ ] Blocos de Email (IMAP / Microsoft Graph).
 - [ ] Intercetar e simular respostas de APIs externas.
 - [ ] Modo print híbrido.
-- [ ] Relatório PDF para assinatura do UAT, com ID do requisito.
-- [ ] Exportar/importar pacotes de blocos.
+- [x] Relatório PDF para assinatura do UAT, com ID do requisito.
+- [x] Exportar/importar pacotes de blocos.
 - [ ] Executável portátil assinado, ficha da ferramenta para a equipa de segurança e guia de instalação para o PC da empresa.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.
