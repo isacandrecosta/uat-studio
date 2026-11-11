@@ -1,4 +1,5 @@
 // Pequenas ajudas para construir a interface sem bibliotecas.
+import type { UsoDoBloco } from '../shared/blocos.js';
 
 type Filho = Node | string | number | null | undefined | false;
 type Atributos = Record<string, string | number | boolean | null | undefined | ((evento: Event) => void)>;
@@ -212,4 +213,68 @@ export function confirmar(titulo: string, texto: string, botao = 'Apagar'): Prom
     document.body.append(dialogo);
     dialogo.showModal();
   });
+}
+
+/**
+ * Janela "Onde é usado": as jornadas que usam um bloco. Carregar numa jornada abre-a no editor
+ * (através de `abrirJornada`).
+ */
+export function mostrarUsos(nomeBloco: string, usos: UsoDoBloco[], abrirJornada: (jornadaId: string) => void): void {
+  const fechar = (): void => {
+    dialogo.close();
+    dialogo.remove();
+  };
+  const totalCasos = usos.reduce((soma, u) => soma + u.casos * u.posicoes.length, 0);
+  const dialogo = h(
+    'dialog',
+    { class: 'dialogo dialogo-usos', oncancel: fechar },
+    h(
+      'div',
+      { class: 'dialogo-corpo' },
+      h('h2', {}, `Onde é usado: "${nomeBloco}"`),
+      usos.length === 0
+        ? h('p', {}, 'Este bloco ainda não é usado em nenhuma jornada. Pode ser apagado sem afetar nada.')
+        : h(
+            'p',
+            { class: 'suave' },
+            `Usado em ${plural(usos.length, 'jornada')} (corre ${plural(totalCasos, 'vez', 'vezes')} numa execução completa). Uma alteração ao bloco vale para todas.`,
+          ),
+      usos.length > 0 &&
+        h(
+          'ul',
+          { class: 'lista-itens lista-usos' },
+          usos.map((u) =>
+            h(
+              'li',
+              { class: 'item', 'data-uso': u.jornadaId },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  class: 'ligacao item-nome',
+                  title: 'Abrir a jornada no editor',
+                  onclick: () => {
+                    fechar();
+                    abrirJornada(u.jornadaId);
+                  },
+                },
+                u.jornadaNome,
+              ),
+              h(
+                'span',
+                { class: 'item-meta' },
+                u.epicoNome && h('span', {}, u.epicoNome),
+                h('span', {}, `${u.posicoes.length > 1 ? 'posições' : 'posição'} ${u.posicoes.join(', ')}`),
+                u.condicional && h('span', { class: 'etiqueta' }, 'só se…'),
+                u.limpeza && h('span', { class: 'etiqueta' }, 'limpeza'),
+                h('span', {}, plural(u.casos, 'caso')),
+              ),
+            ),
+          ),
+        ),
+      h('div', { class: 'dialogo-botoes' }, h('button', { type: 'button', class: 'botao botao-primario', autofocus: true, onclick: fechar }, 'Fechar')),
+    ),
+  );
+  document.body.append(dialogo);
+  dialogo.showModal();
 }

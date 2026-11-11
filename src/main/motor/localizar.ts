@@ -1,6 +1,7 @@
 // Encontrar elementos na página. Cada elemento tem vários localizadores, por ordem de
 // preferência: se o primeiro falhar, usa-se o seguinte (e isso fica registado no log).
 import { Locator, Page } from 'playwright-core';
+import { descreverLocalizador } from '../../shared/blocos';
 import { Alvo, Localizador } from '../../shared/modelo';
 
 /** Onde procurar: a página inteira, ou dentro de outro elemento (por exemplo, a linha de uma tabela). */
@@ -28,19 +29,8 @@ export function paraLocator(raiz: Raiz, loc: Localizador): Locator {
   }
 }
 
-/** Texto curto para logs: testid "inpValor". */
-export function descreverLocalizador(loc: Localizador): string {
-  const nomes: Record<Localizador['tipo'], string> = {
-    testid: 'data-testid',
-    etiqueta: 'etiqueta',
-    role: 'tipo e nome',
-    placeholder: 'texto de ajuda',
-    texto: 'texto',
-    id: 'id',
-    css: 'posição na página',
-  };
-  return `${nomes[loc.tipo]} "${loc.tipo === 'role' ? `${loc.valor}: ${loc.nome ?? ''}` : loc.valor}"`;
-}
+// Texto curto para logs: vive em src/shared para a interface também o usar.
+export { descreverLocalizador };
 
 export class ErroElemento extends Error {}
 

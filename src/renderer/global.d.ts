@@ -1,4 +1,5 @@
 // O que o preload expõe à interface (ver src/main/preload.ts).
+import type { EstadoReparo } from '../shared/blocos';
 import type {
   AmbitoRun,
   EstadoRun,
@@ -12,6 +13,7 @@ import type {
   ProjetoRecente,
   ResultadoApi,
   ResultadoVerificacao,
+  SugestaoReparo,
   VariavelCalculada,
 } from '../shared/modelo';
 
@@ -34,6 +36,10 @@ declare global {
           item: Omit<Colecoes[C], 'id'> & { id?: string },
         ): Promise<Colecoes[C]>;
         apagar(colecao: NomeColecao, id: string): Promise<void>;
+      };
+      blocos: {
+        /** Reparar com um clique: o localizador que funcionou passa a ser o preferido do passo. */
+        reparar(sugestao: SugestaoReparo): Promise<EstadoReparo>;
       };
       gravador: {
         estado(): Promise<EstadoGravador>;

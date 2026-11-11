@@ -1,5 +1,6 @@
 // Ecrã Runs e resultados: escolher o que correr, acompanhar ao vivo e ver o histórico e os detalhes.
-import type { AmbitoRun, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
+import { descreverLocalizador, estadoDoReparo, juntarReparos } from '../../shared/blocos.js';
+import type { AmbitoRun, Bloco, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { confirmar, h, mensagemDeErro, plural } from '../dom.js';
 
@@ -35,13 +36,16 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
   deixarDeOuvir?.();
   deixarDeOuvir = null;
 
-  const [epicos, jornadas, conjuntos, atual, historico] = await Promise.all([
+  const [epicos, jornadas, conjuntos, atual, historico, listaBlocos] = await Promise.all([
     api.dados.listar('epicos'),
     api.dados.listar('jornadas'),
     api.dados.listar('casos'),
     api.runs.estado(),
     api.runs.historico(),
+    api.dados.listar('blocos'),
   ]);
+  /** Blocos do projeto (para saber se um localizador já foi reparado). */
+  const blocos = new Map<string, Bloco>(listaBlocos.map((b) => [b.id, b]));
   const ambiente = estado.projeto.ambientes.find((a) => a.id === estado.projeto.ambienteAtivo);
   const zonaFormulario = h('div', {});
   /** Há uma execução a correr neste momento (mesmo que se esteja a ver uma antiga)? */
@@ -305,12 +309,75 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
           totais.PARADO > 0 && total('parados', totais.PARADO, ''),
           (totais.SALTADO ?? 0) > 0 && total('saltados', totais.SALTADO, ''),
         ),
+        cartaoReparos(run),
         h(
           'ul',
           { class: 'lista-casos' },
           run.casos.map((caso) => linhaCaso(run, caso)),
         ),
       ),
+    );
+  }
+
+  /**
+   * "Localizadores a reparar": passos onde o localizador preferido falhou e uma alternativa funcionou.
+   * Reparar com um clique põe a alternativa em primeiro lugar no bloco (vale para todas as jornadas).
+   */
+  function cartaoReparos(run: EstadoRun): HTMLElement | false {
+    if (run.ativo) return false;
+    const sugestoes = juntarReparos(run.casos.map((c) => c.reparos));
+    if (sugestoes.length === 0) return false;
+    const linhas = sugestoes.map((s, i) => {
+      const estadoAtual = estadoDoReparo(blocos.get(s.blocoId), s);
+      const botao = h(
+        'button',
+        {
+          type: 'button',
+          class: 'botao botao-pequeno-livre botao-reparar',
+          disabled: estadoAtual !== 'por-reparar',
+          'data-reparo': i,
+          onclick: async () => {
+            botao.setAttribute('disabled', '');
+            try {
+              const resultado = await api.blocos.reparar(s);
+              botao.textContent = resultado === 'nao-encontrado' ? 'Passo já não existe' : 'Reparado';
+              const atualizados = await api.dados.listar('blocos');
+              blocos.clear();
+              for (const b of atualizados) blocos.set(b.id, b);
+            } catch (e) {
+              botao.removeAttribute('disabled');
+              await confirmar('Não foi possível reparar', mensagemDeErro(e), 'Fechar');
+            }
+          },
+        },
+        estadoAtual === 'ja-reparado' ? 'Reparado' : estadoAtual === 'nao-encontrado' ? 'Passo já não existe' : 'Reparar',
+      );
+      return h(
+        'li',
+        { class: 'item item-reparo' },
+        h(
+          'div',
+          { class: 'item-nome' },
+          h('strong', {}, `${s.blocoNome} › ${s.passoDescricao}`),
+          h(
+            'p',
+            { class: 'suave' },
+            `Falhou: ${descreverLocalizador(s.falhou)}. Funcionou: ${descreverLocalizador(s.usado)} (${plural(s.casos, 'caso')}).`,
+          ),
+        ),
+        botao,
+      );
+    });
+    return h(
+      'div',
+      { class: 'caixa-reparos', id: 'reparos' },
+      h('h3', {}, `Localizadores a reparar (${sugestoes.length})`),
+      h(
+        'p',
+        { class: 'suave' },
+        'Nestes passos o localizador preferido já não encontrou o elemento (o ecrã mudou?) e foi usada uma alternativa. "Reparar" passa a usar a alternativa em primeiro lugar; o antigo fica como último recurso. A alteração vale para todas as jornadas que usam o bloco.',
+      ),
+      h('ul', { class: 'lista-itens' }, linhas),
     );
   }
 

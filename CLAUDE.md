@@ -118,4 +118,10 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
   - Fica por fazer do item de controlo: controlo por jornada/worker e **retomar a meio** (recomeçar uma jornada a partir de um bloco, com as variáveis guardadas).
   - O smoke acorda a app POC antes de começar (pedido a `/rest/PedidosAPI/variantes`).
   - **Armadilha ao editar código pelo PowerShell:** dentro de aspas duplas, `${...}` e os acentos graves são interpretados pelo PowerShell e estragam o TypeScript. Usar a ferramenta de edição, ou aspas simples.
-- **Próximo passo:** Fase 3, pela ordem: "onde é usado" de cada bloco e reparar localizadores com um clique → mapa de execução ao vivo → matriz de cobertura e comparação com a execução anterior → bloco "passo manual" → retomar a meio.
+- 2026-11-11: **Fase 3: "onde é usado" e reparar localizadores com um clique.**
+  - `src/shared/blocos.ts` (sem Electron, usado pelos dois lados): `ondeEUsado` (jornadas, épico, posições, só se/limpeza, nº de casos), `repararLocalizador` / `estadoDoReparo` / `juntarReparos` e `descreverLocalizador` (mudou de `motor/localizar.ts` para aqui; `localizar.ts` reexporta-o).
+  - "Onde é usado": botão "Usado em N jornadas" / "Não usado" em cada bloco do ecrã Jornadas e "Onde é usado" no ecrã Blocos de API; a janela (`mostrarUsos` em `dom.ts`) abre a jornada no editor com um clique.
+  - Reparar: quando o localizador preferido falha e uma alternativa funciona, o executor guarda `ResultadoCaso.reparos` (`SugestaoReparo`: bloco, passo, o que falhou, o que funcionou). No fim da execução, o ecrã Runs mostra o cartão "Localizadores a reparar" (juntado por passo); "Reparar" (IPC `blocos:reparar`) põe a alternativa em 1.º lugar e o que falhou no fim (último recurso). Vale para todas as jornadas que usam o bloco.
+  - Testado: 33 testes unitários e smoke completo (novo passo: "onde é usado" com ligação ao editor; localizador estragado de propósito → caso OK pela alternativa → reparado com um clique).
+  - Fica por fazer do item de erros: explicação por regras com sugestões e "regravar o elemento" quando nenhum localizador serve.
+- **Próximo passo:** Fase 3, pela ordem: mapa de execução ao vivo → matriz de cobertura e comparação com a execução anterior → bloco "passo manual" → retomar a meio → log de erro com sugestões.

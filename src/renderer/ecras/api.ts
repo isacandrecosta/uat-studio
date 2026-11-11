@@ -1,4 +1,5 @@
 // Ecrã Blocos de API: construir pedidos, perfis de autenticação (com segredos no cofre) e teste individual.
+import { ondeEUsado } from '../../shared/blocos.js';
 import {
   SEGREDOS_DO_PERFIL,
   type Bloco,
@@ -14,7 +15,7 @@ import {
 } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { codigoDoBloco } from '../../shared/codigo.js';
-import { confirmar, h, mensagemDeErro, mostrarCodigo, pedirFormulario, pedirTexto, type CampoFormulario } from '../dom.js';
+import { confirmar, h, mensagemDeErro, mostrarCodigo, mostrarUsos, pedirFormulario, pedirTexto, type CampoFormulario } from '../dom.js';
 
 const NOMES_PERFIL: Record<TipoPerfil, string> = {
   'oauth2-cliente': 'OAuth 2.0 (client credentials)',
@@ -80,14 +81,15 @@ function paraPares(texto: string, separador: RegExp): ParNomeValor[] {
 }
 
 export async function ecraApi(contexto: Contexto): Promise<void> {
-  const { corpo, acoes, estado, irPara } = contexto;
+  const { corpo, acoes, estado, irPara, selecao } = contexto;
   const api = window.uatStudio;
-  const [blocos, aplicacoes, perfis, jornadas, conjuntos] = await Promise.all([
+  const [blocos, aplicacoes, perfis, jornadas, conjuntos, epicos] = await Promise.all([
     api.dados.listar('blocos'),
     api.dados.listar('aplicacoes'),
     api.dados.listar('perfis'),
     api.dados.listar('jornadas'),
     api.dados.listar('casos'),
+    api.dados.listar('epicos'),
   ]);
   const blocosApi = blocos.filter((b) => b.tipo === 'API');
   const aplicacoesApi = aplicacoes.filter((a) => a.tipo === 'API');
@@ -450,6 +452,20 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
               },
             },
             'Apagar bloco',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao',
+              id: 'btn-usos-api',
+              onclick: () =>
+                mostrarUsos(original.nome, ondeEUsado(original.id, jornadas, epicos, conjuntos), (jornadaId) => {
+                  selecao.jornadaId = jornadaId;
+                  irPara('editor');
+                }),
+            },
+            'Onde é usado',
           ),
           h(
             'button',

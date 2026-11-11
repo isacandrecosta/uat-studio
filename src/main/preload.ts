@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('uatStudio', {
     guardar: chamar('dados:guardar'),
     apagar: chamar('dados:apagar'),
   },
+  blocos: {
+    reparar: chamar('blocos:reparar'),
+  },
   gravador: {
     estado: chamar('gravador:estado'),
     iniciar: chamar('gravador:iniciar'),

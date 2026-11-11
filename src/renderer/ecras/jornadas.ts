@@ -1,7 +1,8 @@
 // Ecrã Jornadas: épicos com as suas jornadas, blocos partilhados e aplicações.
 import type { Contexto } from '../app.js';
 import { codigoDoBloco } from '../../shared/codigo.js';
-import { confirmar, h, mostrarCodigo, pedirFormulario, pedirTexto, plural } from '../dom.js';
+import { ondeEUsado } from '../../shared/blocos.js';
+import { confirmar, h, mostrarCodigo, mostrarUsos, pedirFormulario, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -141,6 +142,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
             { class: 'lista-itens' },
             blocos.map((bloco) => {
               const aplicacao = bloco.aplicacaoId ? aplicacaoPorId.get(bloco.aplicacaoId) : undefined;
+              const usos = ondeEUsado(bloco.id, jornadas, epicos, conjuntos);
               return h(
                 'li',
                 { class: 'item' },
@@ -150,7 +152,23 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                   'span',
                   { class: 'item-meta' },
                   aplicacao && h('span', {}, aplicacao.nome),
-                  h('span', {}, plural(bloco.passos.length, 'passo')),
+                  bloco.tipo !== 'API' && h('span', {}, plural(bloco.passos.length, 'passo')),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'botao botao-pequeno-livre',
+                      'data-usos': bloco.id,
+                      'data-sem-uso': String(usos.length === 0),
+                      title: 'Ver as jornadas que usam este bloco',
+                      onclick: () =>
+                        mostrarUsos(bloco.nome, usos, (jornadaId) => {
+                          selecao.jornadaId = jornadaId;
+                          irPara('editor');
+                        }),
+                    },
+                    usos.length === 0 ? 'Não usado' : `Usado em ${plural(usos.length, 'jornada')}`,
+                  ),
                   bloco.tipo === 'UI' &&
                     h(
                       'button',

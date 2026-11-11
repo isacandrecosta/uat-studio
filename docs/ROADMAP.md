@@ -28,10 +28,11 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Controlo: pausar, continuar, parar, saltar um caso, velocidade (lenta, passo a passo), pausar no erro, repetir só KO/ERRO.
 - [ ] Controlo, o que falta: por jornada ou worker; retomar a meio (recomeçar uma jornada a partir de um bloco).
 - [ ] Mapa de execução ao vivo (grafo, cores, miniaturas de workers).
-- [ ] Log de erro com explicação por regras e sugestões; reparar localizadores com um clique.
+- [x] Reparar localizadores com um clique (quando o preferido falha e uma alternativa funciona).
+- [ ] Log de erro com explicação por regras e sugestões (por exemplo, "regravar o elemento" quando nenhum localizador serve).
 - [ ] Matriz de cobertura e comparação com a execução anterior.
 - [ ] Bloco "passo manual".
-- [ ] "Onde é usado" de cada bloco.
+- [x] "Onde é usado" de cada bloco.
 
 ## Fase 4: avançado
 - [ ] Login com sessão reutilizada e MFA (modo de teste / email / TOTP); várias sessões na mesma jornada.

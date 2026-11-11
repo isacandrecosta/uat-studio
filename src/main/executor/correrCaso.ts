@@ -12,6 +12,7 @@ import {
   Diferenca,
   EstadoPasso,
   Jornada,
+  Localizador,
   Passo,
   RegistoPasso,
   ResultadoCaso,
@@ -20,6 +21,7 @@ import {
   Valor,
   VariavelCalculada,
 } from '../../shared/modelo';
+import { mesmoLocalizador } from '../../shared/blocos';
 import { avaliarCondicao, avaliarFormula, ErroFormula, preencherTexto } from '../../shared/formulas';
 import { AmbienteApi, ErroApi, escaparJson, executarBlocoApi } from '../api/pedidos';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
@@ -439,8 +441,16 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       nomeBloco: string,
     ): Promise<{ estado: EstadoPasso; detalhe?: string; diferenca?: Diferenca }> {
       const p = pagina as Page;
-      const alternativa = (enc?: { alternativa: boolean; usado: Parameters<typeof descreverLocalizador>[0] }): string =>
-        enc?.alternativa ? `encontrado por uma alternativa (${descreverLocalizador(enc.usado)}): o localizador preferido falhou` : '';
+      const alternativa = (enc?: { alternativa: boolean; usado: Localizador }): string => {
+        const falhou = passo.alvo?.localizadores[0];
+        if (!enc?.alternativa || !falhou) return '';
+        // Fica como sugestão "reparar com um clique" (uma por passo e localizador).
+        const reparos = (resultado.reparos ??= []);
+        if (!reparos.some((r) => r.blocoId === item.blocoId && r.passoId === passo.id && mesmoLocalizador(r.usado, enc.usado))) {
+          reparos.push({ blocoId: item.blocoId, blocoNome: nomeBloco, passoId: passo.id, passoDescricao: passo.descricao, falhou, usado: enc.usado });
+        }
+        return `encontrado por uma alternativa (${descreverLocalizador(enc.usado)}): o localizador preferido (${descreverLocalizador(falhou)}) falhou`;
+      };
       const juntar = (...partes: Array<string | undefined>): string | undefined => partes.filter(Boolean).join('; ') || undefined;
       // "Encontrar linha na tabela": o texto que identifica a linha, com os dados deste caso.
       const linha = passo.alvo?.linha ? resolver(passo.alvo.linha.valor, item, 'linha da tabela').texto : undefined;

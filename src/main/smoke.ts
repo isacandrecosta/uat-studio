@@ -522,6 +522,50 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      '"onde é usado" de um bloco e reparar um localizador com um clique',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        // "Onde é usado" na lista de blocos do ecrã Jornadas, com ligação para o editor.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('[data-usos=\"simular-credito\"]')");
+        await naPagina(j, "document.querySelector('[data-usos=\"simular-credito\"]').click()");
+        await esperar(j, "document.querySelector('dialog[open] .lista-usos')");
+        const usos = await naPagina<string>(j, "document.querySelector('dialog[open]').innerText");
+        confirmar(usos.includes('Simular crédito') && usos.includes('Simular e validar no Backoffice'), `"Onde é usado" devia mostrar as 2 jornadas: ${usos}`);
+        await tirarPrint(j, raiz, 'onde-e-usado');
+        await naPagina(j, "document.querySelector('dialog[open] [data-uso=\"simular-e-validar\"] .item-nome').click()");
+        await esperar(j, "document.getElementById('editor-jornada')?.value === 'simular-e-validar'");
+
+        // O localizador preferido do campo Valor "deixa de funcionar" (como se o ecrã tivesse mudado).
+        const bloco = repo.ler(pasta, 'blocos', 'simular-credito');
+        const alvo = bloco.passos.find((p) => p.id === 'p3')?.alvo;
+        if (!alvo) throw new Error('O passo p3 do exemplo não tem alvo.');
+        alvo.localizadores = [{ tipo: 'testid', valor: 'inpValorAntigo' }, ...alvo.localizadores];
+        repo.guardar(pasta, 'blocos', bloco);
+
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-correr') && !document.getElementById('btn-correr').disabled");
+        await naPagina(
+          j,
+          "(() => { const a = document.getElementById('run-ambito'); a.value = 'jornada:simular-credito'; a.dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('run-casos').value = 'TC0001'; document.getElementById('run-velocidade').value = 'normal'; document.getElementById('btn-correr').click(); })()",
+        );
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"true\"]')", 60_000);
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"false\"]')", 180_000);
+        const caso = estadoRun()?.casos[0];
+        console.log(`[smoke]   ${caso?.casoId} ${caso?.estado} ${caso?.erro?.mensagem ?? ''}`);
+        confirmar(caso?.estado === 'OK', 'Com o localizador preferido estragado, a alternativa devia ter funcionado (OK).');
+        confirmar(caso?.reparos?.length === 1 && caso.reparos[0].usado.valor === 'inpValor', `Devia haver 1 sugestão de reparo: ${JSON.stringify(caso?.reparos)}`);
+
+        // Reparar com um clique.
+        await esperar(j, "document.querySelector('#reparos .botao-reparar:not([disabled])')");
+        await tirarPrint(j, raiz, 'reparar');
+        await naPagina(j, "document.querySelector('#reparos .botao-reparar').click()");
+        await esperar(j, "document.querySelector('#reparos .botao-reparar').textContent === 'Reparado'");
+        const reparado = repo.ler(pasta, 'blocos', 'simular-credito').passos.find((p) => p.id === 'p3')?.alvo?.localizadores.map((l) => l.valor);
+        confirmar(reparado?.join(',') === 'inpValor,inpValorAntigo', `O localizador não foi reparado: ${reparado?.join(',')}`);
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {

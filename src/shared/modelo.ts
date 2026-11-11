@@ -180,6 +180,18 @@ export interface ResultadoCaso {
   pasta?: string;
   /** Ficheiros de evidência (prints, trace), relativos à pasta do caso. */
   evidencias?: string[];
+  /** Passos onde o localizador preferido falhou e uma alternativa funcionou (para reparar com um clique). */
+  reparos?: SugestaoReparo[];
+}
+
+/** O localizador preferido de um passo falhou, mas outro encontrou o elemento. */
+export interface SugestaoReparo {
+  blocoId: string;
+  blocoNome: string;
+  passoId: string;
+  passoDescricao: string;
+  falhou: Localizador;
+  usado: Localizador;
 }
 
 export interface OpcoesRun {

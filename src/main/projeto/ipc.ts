@@ -2,8 +2,9 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { EstadoReparo, repararLocalizador } from '../../shared/blocos';
 import { validarFormula } from '../../shared/formulas';
-import { EstadoProjeto, NomeColecao, ProjetoRecente, VariavelCalculada } from '../../shared/modelo';
+import { EstadoProjeto, Localizador, NomeColecao, ProjetoRecente, SugestaoReparo, VariavelCalculada } from '../../shared/modelo';
 import { criarExemplo } from './exemplo';
 import * as repo from './repositorio';
 
@@ -102,4 +103,16 @@ export function registarIpcProjeto(): void {
   ipcMain.handle('dados:apagar', (_e, colecao: NomeColecao, id: string) =>
     repo.apagar(pastaDoProjeto(), colecao, String(id)),
   );
+  // Reparar com um clique: o localizador que funcionou passa a ser o preferido do passo.
+  ipcMain.handle('blocos:reparar', (_e, sugestao: SugestaoReparo): EstadoReparo => {
+    const ehLocalizador = (l: unknown): l is Localizador =>
+      typeof l === 'object' && l !== null && typeof (l as Localizador).tipo === 'string' && typeof (l as Localizador).valor === 'string';
+    if (!sugestao || !ehLocalizador(sugestao.usado) || !ehLocalizador(sugestao.falhou)) throw new repo.ErroProjeto('Dados inválidos.');
+    const pasta = pastaDoProjeto();
+    if (!repo.existe(pasta, 'blocos', String(sugestao.blocoId))) return 'nao-encontrado';
+    const bloco = repo.ler(pasta, 'blocos', String(sugestao.blocoId));
+    const estado = repararLocalizador(bloco, { passoId: String(sugestao.passoId), usado: sugestao.usado, falhou: sugestao.falhou });
+    if (estado === 'reparado') repo.guardar(pasta, 'blocos', bloco);
+    return estado;
+  });
 }
