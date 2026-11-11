@@ -32,6 +32,12 @@ export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
     const doPasso = [...variaveisDoValor(passo.alvo?.linha?.valor), ...variaveisDoValor(passo.valor), ...variaveisDaFormula(passo.condicao ?? '')];
     for (const nome of doPasso) if (!produz.includes(nome)) juntar(usa, nome);
     if (passo.acao === 'guardar' && passo.variavel) juntar(produz, passo.variavel);
+    // Passos de rede: {variáveis} do corpo simulado e dos valores esperados; o "intercetar" pode guardar uma.
+    if (passo.rede) {
+      const textos = [passo.rede.corpo ?? '', ...(passo.rede.verificacoes ?? []).map((v) => v.esperado)];
+      for (const texto of textos) for (const nome of variaveisDoTexto(texto)) if (!produz.includes(nome)) juntar(usa, nome);
+      if (passo.rede.guardar?.variavel.trim()) juntar(produz, passo.rede.guardar.variavel.trim());
+    }
   }
   // Blocos de API: as {variáveis} do endereço, parâmetros, cabeçalhos, corpo e valores esperados.
   const pedido = bloco.pedido;
@@ -45,6 +51,12 @@ export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
     ];
     for (const texto of textos) for (const nome of variaveisDoTexto(texto ?? '')) juntar(usa, nome);
     for (const guardar of pedido.guardar) juntar(produz, guardar.variavel);
+  }
+  // Bloco de email: as {variáveis} da caixa, dos filtros e dos textos a verificar; as extraídas são produzidas.
+  const email = bloco.email;
+  if (email) {
+    for (const texto of [email.caixa, email.para ?? '', email.assunto ?? '', ...(email.corpoContem ?? [])]) for (const nome of variaveisDoTexto(texto)) juntar(usa, nome);
+    for (const e of email.extrair ?? []) if (e.variavel.trim()) juntar(produz, e.variavel.trim());
   }
   // Passo manual: as {variáveis} da instrução.
   for (const nome of variaveisDoTexto(bloco.manual?.instrucao ?? '')) juntar(usa, nome);

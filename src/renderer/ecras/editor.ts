@@ -1,5 +1,6 @@
 // Editor de jornada: compor o percurso com blocos da biblioteca, definir parâmetros e editar os casos.
 import type { Aplicacao, Bloco, BlocoDaJornada, Caso, ConjuntoCasos, Jornada, Valor } from '../../shared/modelo.js';
+import { SESSAO_PRINCIPAL } from '../../shared/modelo.js';
 import { variaveisDaJornada, variaveisDoBloco } from '../../shared/variaveis.js';
 import type { Contexto } from '../app.js';
 import { codigoDaJornada } from '../../shared/codigo.js';
@@ -223,10 +224,36 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       item.sempre = sempre.checked || undefined;
       void guardarJornada(false);
     });
+    // Sessão do browser: pessoas diferentes na mesma jornada (só para blocos de UI).
+    const eUi = blocos.find((b) => b.id === item.blocoId)?.tipo === 'UI';
+    const usadas = [...new Set([SESSAO_PRINCIPAL, ...jornada.blocos.map((b) => b.sessao?.trim()).filter((s): s is string => Boolean(s))])];
+    const idLista = `sessoes-${indice}`;
+    const sessao = h('input', {
+      type: 'text',
+      class: 'campo campo-sessao',
+      value: item.sessao ?? '',
+      placeholder: SESSAO_PRINCIPAL,
+      list: idLista,
+      'aria-label': `Sessão do browser do bloco ${indice + 1}`,
+      spellcheck: 'false',
+    });
+    sessao.addEventListener('change', () => {
+      const nome = sessao.value.trim();
+      item.sessao = nome && nome !== SESSAO_PRINCIPAL ? nome : undefined;
+      void guardarJornada(true);
+    });
     return h(
       'div',
       { class: 'opcoes-bloco' },
       h('label', { class: 'opcao-condicao' }, h('span', {}, 'Só se'), condicao),
+      eUi &&
+        h(
+          'label',
+          { class: 'opcao-condicao', title: 'Blocos com sessões diferentes correm em browsers separados (por exemplo "cliente" e "aprovador"), cada um com o seu login.' },
+          h('span', {}, 'Sessão'),
+          sessao,
+          h('datalist', { id: idLista }, usadas.map((s) => h('option', { value: s }))),
+        ),
       h('label', { class: 'opcao', title: 'Para blocos de limpeza: correm mesmo que um bloco anterior tenha dado erro.' }, sempre, 'Limpeza: corre sempre'),
       erro,
     );

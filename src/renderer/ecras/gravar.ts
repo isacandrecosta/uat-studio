@@ -2,7 +2,7 @@
 import type { Bloco, EstadoGravador, Passo } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { validarFormula } from '../../shared/formulas.js';
-import { confirmar, h, mensagemDeErro, plural } from '../dom.js';
+import { confirmar, h, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
 
 const NOMES_ACAO: Record<Passo['acao'], string> = {
   navegar: 'Abrir',
@@ -13,6 +13,8 @@ const NOMES_ACAO: Record<Passo['acao'], string> = {
   verificar: 'Verificar',
   guardar: 'Guardar',
   esperar: 'Esperar',
+  simular: 'Simular API',
+  intercetar: 'Intercetar',
 };
 
 let deixarDeOuvir: (() => void) | null = null;
@@ -298,6 +300,82 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         }
         if (redesenhar) desenharBlocos();
       };
+      /** Passos de rede (não se gravam no browser): simular a resposta de uma API externa ou intercetar o pedido enviado. */
+      const acrescentarPassoDeRede = async (): Promise<void> => {
+        const valores = await pedirFormulario(
+          'Passo de rede',
+          [
+            {
+              id: 'acao',
+              rotulo: 'O que fazer',
+              tipo: 'escolha',
+              valor: 'intercetar',
+              opcoes: [
+                { valor: 'intercetar', texto: 'Intercetar: verificar o pedido que a app enviou (põe-se depois do clique)' },
+                { valor: 'simular', texto: 'Simular: responder no lugar de uma API externa (põe-se antes do clique)' },
+              ],
+            },
+            { id: 'url', rotulo: 'Endereço do pedido (ou parte dele)', obrigatorio: true, ajuda: 'Por exemplo: easypay.pt/api/pagamentos, ou um padrão com * (https://*/api/*).' },
+            { id: 'metodo', rotulo: 'Método (opcional)', ajuda: 'Por exemplo POST. Vazio = qualquer.' },
+            { id: 'descricao', rotulo: 'Descrição (opcional)' },
+            {
+              id: 'verificacoes',
+              rotulo: 'Intercetar: campos a verificar (um por linha: campo=valor)',
+              tipo: 'area',
+              ajuda: 'O campo é um caminho no corpo JSON (inputParameters.Valor), num formulário ou no endereço. Use * para "o corpo contém o valor". O valor pode ter {variáveis}.',
+            },
+            { id: 'guardar', rotulo: 'Intercetar: guardar um campo (Variavel=caminho), opcional' },
+            {
+              id: 'modo',
+              rotulo: 'Simular: resposta',
+              tipo: 'escolha',
+              valor: 'responder',
+              opcoes: [
+                { valor: 'responder', texto: 'Responder com o código e o corpo abaixo' },
+                { valor: 'falhar', texto: 'Falhar (sem ligação)' },
+                { valor: 'demorar', texto: 'Demorar e falhar por tempo' },
+              ],
+            },
+            { id: 'estado', rotulo: 'Simular: código HTTP', valor: '200' },
+            { id: 'corpo', rotulo: 'Simular: corpo da resposta (pode ter {variáveis})', tipo: 'area' },
+            { id: 'demora', rotulo: 'Simular: segundos a demorar', valor: '30' },
+          ],
+          'Acrescentar',
+        );
+        if (!valores?.url.trim()) return;
+        const acao = valores.acao === 'simular' ? 'simular' : 'intercetar';
+        const paraPares = (texto: string): Array<{ caminho: string; esperado: string }> =>
+          texto
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => l.includes('='))
+            .map((l) => ({ caminho: l.slice(0, l.indexOf('=')).trim(), esperado: l.slice(l.indexOf('=') + 1).trim() }));
+        const [variavelGuardar, caminhoGuardar] = valores.guardar.includes('=') ? [valores.guardar.slice(0, valores.guardar.indexOf('=')).trim(), valores.guardar.slice(valores.guardar.indexOf('=') + 1).trim()] : ['', ''];
+        const numeros = bloco.passos.map((p) => Number(/^p(\d+)$/.exec(p.id)?.[1] ?? 0));
+        const url = valores.url.trim();
+        bloco.passos.push({
+          id: `p${Math.max(0, ...numeros) + 1}`,
+          acao,
+          descricao: valores.descricao.trim() || (acao === 'simular' ? `Simular a resposta de ${url}` : `Intercetar o pedido a ${url}`),
+          rede:
+            acao === 'simular'
+              ? {
+                  url,
+                  ...(valores.metodo.trim() ? { metodo: valores.metodo.trim().toUpperCase() } : {}),
+                  modo: valores.modo === 'falhar' || valores.modo === 'demorar' ? valores.modo : 'responder',
+                  estado: Number(valores.estado) || 200,
+                  corpo: valores.corpo,
+                  demoraSeg: Number(valores.demora) || 30,
+                }
+              : {
+                  url,
+                  ...(valores.metodo.trim() ? { metodo: valores.metodo.trim().toUpperCase() } : {}),
+                  verificacoes: paraPares(valores.verificacoes),
+                  ...(variavelGuardar && caminhoGuardar ? { guardar: { variavel: variavelGuardar, caminho: caminhoGuardar } } : {}),
+                },
+        });
+        await guardar(true);
+      };
       const mover = (indice: number, delta: number): void => {
         const destino = indice + delta;
         if (destino < 0 || destino >= bloco.passos.length) return;
@@ -311,6 +389,18 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         bloco.nome = nome.value.trim();
         void guardar(true);
       });
+      // Bloco de login: depois do 1.º caso, os seguintes com os mesmos dados reutilizam a sessão.
+      const login = h('input', { type: 'checkbox', id: 'bloco-login', checked: Boolean(bloco.login) });
+      login.addEventListener('change', () => {
+        bloco.login = login.checked || undefined;
+        void guardar(false);
+      });
+      const opcaoLogin = h(
+        'label',
+        { class: 'opcao', title: 'A sessão (cookies) fica guardada só em memória durante a execução; os casos seguintes com o mesmo utilizador não repetem o login.' },
+        login,
+        'Bloco de login: reutilizar a sessão entre casos',
+      );
       const linhas = bloco.passos.map((passo, indice) => {
         const erro = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
         const descricao = h('input', { type: 'text', class: 'campo', value: passo.descricao, 'aria-label': `Descrição do passo ${indice + 1}` });
@@ -392,7 +482,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         h(
           'header',
           { class: 'cartao-topo' },
-          h('div', { class: 'campo-grupo' }, h('h2', {}, 'Passos do bloco'), nome, h('p', { class: 'ajuda-campo' }, usos.length > 0 ? `Usado em: ${usos.join(', ')}. As alterações valem para todas.` : 'Ainda não é usado em nenhuma jornada.')),
+          h('div', { class: 'campo-grupo' }, h('h2', {}, 'Passos do bloco'), nome, opcaoLogin, h('p', { class: 'ajuda-campo' }, usos.length > 0 ? `Usado em: ${usos.join(', ')}. As alterações valem para todas.` : 'Ainda não é usado em nenhuma jornada.')),
           h(
             'div',
             { class: 'acoes' },
@@ -425,6 +515,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
           h('span', {}),
         ),
         h('ol', { class: 'lista-passos' }, linhas),
+        h('div', { class: 'acoes' }, h('button', { id: 'btn-passo-rede', type: 'button', class: 'botao botao-pequeno-livre', title: 'Simular a resposta de uma API externa ou intercetar o pedido que a app envia.', onclick: () => void acrescentarPassoDeRede() }, 'Acrescentar passo de rede')),
       );
     };
     desenharBlocos();

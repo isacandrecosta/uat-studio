@@ -3,6 +3,7 @@
 //   ARRED.PAR({Valor} * {Taxa} / 100; 2)
 // Regras: os argumentos separam-se com ";", os textos ficam entre aspas, as variáveis entre chavetas.
 // Todos os cálculos são decimais exatos (ver decimal.ts).
+import { codigoTotp } from './totp.js';
 import {
   absoluto,
   arredondar,
@@ -264,6 +265,15 @@ const FUNCOES: Record<string, Funcao> = {
     if (maximo < minimo) throw new ErroFormula('ALEATORIOENTRE: o máximo tem de ser maior ou igual ao mínimo.');
     return num(deInteiro(minimo + Math.floor(ctx.aleatorio() * (maximo - minimo + 1))));
   },
+  /** MFA: código TOTP (app autenticadora) a partir da chave em base32. TOTP({ChaveMfa}) → "123456" */
+  TOTP: (a, ctx) => {
+    if (a.length < 1 || a.length > 2) throw new ErroFormula('TOTP precisa da chave (e, opcionalmente, do número de algarismos).');
+    try {
+      return txt(codigoTotp(comoTexto(a[0]), ctx.agora, a.length === 2 ? comoInteiro(a[1], 'TOTP') : 6));
+    } catch (erro) {
+      throw new ErroFormula(erro instanceof Error ? erro.message : String(erro));
+    }
+  },
   /** Email único por caso e execução: EMAIL("cliente"; "exemplo.pt") → qa+cliente.TC0001.run12@exemplo.pt */
   EMAIL: (a, ctx) => {
     exigir('EMAIL', a, 2);
@@ -284,6 +294,7 @@ export const AJUDA_FORMULAS: Array<{ exemplo: string; descricao: string }> = [
   { exemplo: 'SE({Valor} > 1000; "Alto"; "Baixo")', descricao: 'Condições com =, <>, <, >, <=, >=.' },
   { exemplo: 'TEXTO({Total}; 2)   PONTO({Total})', descricao: 'TEXTO fixa as casas decimais ("86,40"); PONTO usa ponto decimal ("86.4").' },
   { exemplo: 'NIF()   IBAN()   ALEATORIOENTRE(1; 100)', descricao: 'Geradores: NIF e IBAN de teste válidos, número entre mínimo e máximo.' },
+  { exemplo: 'TOTP({ChaveMfa})', descricao: 'MFA: o código de 6 algarismos da app autenticadora, a partir da chave secreta (base32) da conta de teste.' },
   { exemplo: 'EMAIL("cliente"; "exemplo.pt")', descricao: 'Email único: qa+cliente.<caso>.<run>@exemplo.pt' },
   { exemplo: 'MAIUSCULAS  MINUSCULAS  ESQUERDA  DIREITA  COMPR  ABS  MIN  MAX  POTENCIA', descricao: 'Outras funções.' },
 ];

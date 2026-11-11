@@ -8,12 +8,13 @@ const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 
 
 export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, irPara }: Contexto): Promise<void> {
   const dados = window.uatStudio.dados;
-  const [epicos, jornadas, blocos, aplicacoes, conjuntos] = await Promise.all([
+  const [epicos, jornadas, blocos, aplicacoes, conjuntos, perfis] = await Promise.all([
     dados.listar('epicos'),
     dados.listar('jornadas'),
     dados.listar('blocos'),
     dados.listar('aplicacoes'),
     dados.listar('casos'),
+    dados.listar('perfis'),
   ]);
   const numeroDeCasos = (jornadaId: string): number => conjuntos.find((c) => c.id === jornadaId)?.casos.length ?? 0;
   const aplicacaoPorId = new Map(aplicacoes.map((a) => [a.id, a]));
@@ -128,6 +129,65 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
       ),
     );
   }
+
+  /** Criar ou alterar um bloco de email (Microsoft Graph ou compatível): esperar, verificar e extrair valores. */
+  const editarEmail = async (existente?: (typeof blocos)[number]): Promise<void> => {
+    const caixas = aplicacoes.filter((a) => a.tipo === 'EMAIL');
+    if (caixas.length === 0) {
+      await confirmar(
+        'Falta uma aplicação de email',
+        'Cria primeiro uma aplicação do tipo "Caixa de email" (cartão Aplicações, mais abaixo) com o endereço da API de email neste ambiente, por exemplo https://graph.microsoft.com/v1.0.',
+        'Fechar',
+      );
+      return;
+    }
+    const def = existente?.email;
+    const linhas = (lista: string[] | undefined): string => (lista ?? []).join('\n');
+    const valores = await pedirFormulario(existente ? `Bloco de email "${existente.nome}"` : 'Novo bloco de email', [
+      { id: 'nome', rotulo: 'Nome', valor: existente?.nome, obrigatorio: true, ajuda: 'Por exemplo: Código de MFA por email' },
+      { id: 'aplicacao', rotulo: 'Caixa de email (aplicação)', tipo: 'escolha', valor: existente?.aplicacaoId ?? caixas[0].id, opcoes: caixas.map((a) => ({ valor: a.id, texto: a.nome })) },
+      { id: 'perfil', rotulo: 'Perfil de autenticação', tipo: 'escolha', valor: def?.perfilId ?? '', opcoes: [{ valor: '', texto: '(sem autenticação)' }, ...perfis.map((p) => ({ valor: p.id, texto: p.nome }))] },
+      { id: 'caixa', rotulo: 'Endereço da caixa de testes', valor: def?.caixa, obrigatorio: true, ajuda: 'Por exemplo qa.uat@empresa.pt. Pode ter {variáveis}.' },
+      { id: 'para', rotulo: 'Só emails para (contém), opcional', valor: def?.para, ajuda: 'Por exemplo {EmailCliente}, ou qa+{TESTE}' },
+      { id: 'assunto', rotulo: 'Só emails com o assunto (contém), opcional', valor: def?.assunto },
+      { id: 'espera', rotulo: 'Esperar até (segundos)', valor: String(def?.esperaSeg ?? 60) },
+      { id: 'contem', rotulo: 'O corpo tem de conter (um texto por linha), opcional', tipo: 'area', valor: linhas(def?.corpoContem), ajuda: 'Por exemplo: Pedido {PedidoId}. Cada texto em falta dá KO.' },
+      {
+        id: 'extrair',
+        rotulo: 'Guardar em variáveis (um por linha: Variavel=expressão), opcional',
+        tipo: 'area',
+        valor: linhas(def?.extrair?.map((e) => `${e.variavel}${e.de === 'assunto' ? '@assunto' : ''}=${e.padrao}`)),
+        ajuda: 'Expressão regular; fica o 1.º grupo entre parênteses. Exemplos: CodigoMfa=(\\d{6})   Link=(https://\\S+)   Pedido@assunto=pedido (\\d+)',
+      },
+    ]);
+    if (!valores?.nome.trim() || !valores.caixa.trim()) return;
+    const extrair = valores.extrair
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.includes('='))
+      .map((l) => {
+        const igual = l.indexOf('=');
+        const nome = l.slice(0, igual).trim();
+        const doAssunto = nome.endsWith('@assunto');
+        return { variavel: doAssunto ? nome.slice(0, -'@assunto'.length) : nome, de: doAssunto ? ('assunto' as const) : ('corpo' as const), padrao: l.slice(igual + 1).trim() };
+      });
+    await dados.guardar('blocos', {
+      ...(existente ?? { passos: [] }),
+      nome: valores.nome.trim(),
+      tipo: 'EMAIL',
+      aplicacaoId: valores.aplicacao,
+      email: {
+        caixa: valores.caixa.trim(),
+        ...(valores.perfil ? { perfilId: valores.perfil } : {}),
+        ...(valores.para.trim() ? { para: valores.para.trim() } : {}),
+        ...(valores.assunto.trim() ? { assunto: valores.assunto.trim() } : {}),
+        esperaSeg: Math.max(1, Number(valores.espera) || 60),
+        corpoContem: valores.contem.split(/\r?\n/).map((l) => l.trim()).filter(Boolean),
+        extrair,
+      },
+    });
+    await atualizar();
+  };
 
   /** Criar ou alterar um bloco "passo manual" (a execução pára e o testador confirma OK/KO). */
   const editarManual = async (existente?: (typeof blocos)[number]): Promise<void> => {
@@ -262,6 +322,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
           { class: 'acoes' },
           h('button', { id: 'btn-importar-pacote', type: 'button', class: 'botao', title: 'Trazer blocos de outro projeto (ficheiro .uatpack).', onclick: () => void importarPacote() }, 'Importar pacote'),
           blocos.length > 0 && h('button', { id: 'btn-exportar-pacote', type: 'button', class: 'botao', title: 'Levar blocos para outro projeto ou partilhar com a equipa.', onclick: () => void exportarPacote() }, 'Exportar blocos'),
+          h('button', { id: 'btn-novo-email', type: 'button', class: 'botao', title: 'Esperar que chegue um email à caixa de testes, verificá-lo e guardar valores (por exemplo o código de MFA).', onclick: () => void editarEmail() }, 'Novo bloco de email'),
           h('button', { id: 'btn-novo-manual', type: 'button', class: 'botao', title: 'A execução pára neste bloco e o testador confirma OK ou KO.', onclick: () => void editarManual() }, 'Novo passo manual'),
         ),
       ),
@@ -277,7 +338,9 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                 'li',
                 { class: 'item' },
                 h('span', { class: 'tipo-bloco', 'data-tipo': bloco.tipo }, NOMES_TIPO_BLOCO[bloco.tipo] ?? bloco.tipo),
-                bloco.tipo === 'MANUAL'
+                bloco.tipo === 'EMAIL'
+                  ? h('button', { type: 'button', class: 'ligacao item-nome', 'data-email': bloco.id, title: 'Alterar o bloco de email', onclick: () => void editarEmail(bloco) }, bloco.nome)
+                  : bloco.tipo === 'MANUAL'
                   ? h('button', { type: 'button', class: 'ligacao item-nome', 'data-manual': bloco.id, title: 'Alterar o passo manual', onclick: () => void editarManual(bloco) }, bloco.nome)
                   : h('span', { class: 'item-nome' }, bloco.nome),
                 h(

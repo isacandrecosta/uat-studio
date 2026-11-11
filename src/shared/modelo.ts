@@ -78,7 +78,30 @@ export type AcaoPasso =
   | 'clicar'
   | 'verificar'
   | 'guardar'
-  | 'esperar';
+  | 'esperar'
+  /** Simular a resposta de uma API externa (a partir daqui, nesta sessão do browser). */
+  | 'simular'
+  /** Intercetar o pedido que a app enviou (por exemplo, ao clicar em Pagar) e verificar os dados. */
+  | 'intercetar';
+
+/** Passos de rede: que pedidos apanhar e o que fazer com eles. */
+export interface PassoRede {
+  /** Parte do endereço do pedido (por exemplo "easypay.pt/api/pagamentos"), ou um padrão com * . */
+  url: string;
+  /** Só pedidos com este método (vazio = qualquer). */
+  metodo?: string;
+  /** Simular: responder (com código e corpo), falhar (sem ligação) ou demorar (e depois falhar por tempo). */
+  modo?: 'responder' | 'falhar' | 'demorar';
+  estado?: number;
+  /** Corpo da resposta simulada (pode ter {variáveis}). */
+  corpo?: string;
+  tipoConteudo?: string;
+  demoraSeg?: number;
+  /** Intercetar: campos do pedido enviado a verificar ("*" = o corpo todo contém o valor). */
+  verificacoes?: Array<{ caminho: string; esperado: string }>;
+  /** Intercetar: guardar um campo do pedido numa variável. */
+  guardar?: { variavel: string; caminho: string };
+}
 
 export type TipoVerificacao = 'texto' | 'valor' | 'visivel' | 'numero';
 
@@ -101,8 +124,41 @@ export interface Passo {
   condicao?: string;
   /** Para `guardar`: nome da variável onde fica o valor lido. */
   variavel?: string;
+  /** Para `simular` e `intercetar`: o pedido de rede a apanhar. */
+  rede?: PassoRede;
   /** O valor é um segredo (por exemplo, uma password): nunca aparece em logs nem relatórios. */
   secreto?: boolean;
+}
+
+/** Modo print: um elemento do ecrã capturado (posição em píxeis da captura). */
+export interface ElementoDoPrint {
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+  especie: 'texto' | 'lista' | 'marca' | 'botao' | 'outro';
+  descricao: string;
+  /** Texto ou valor atual (serve de sugestão para verificar). */
+  texto: string;
+  opcoes?: string[];
+}
+
+/** Modo print: a captura do ecrã e a estrutura da página por baixo. */
+export interface PrintDoEcra {
+  /** Imagem "data:" da parte visível da página. */
+  imagem: string;
+  largura: number;
+  altura: number;
+  elementos: ElementoDoPrint[];
+}
+
+/** Modo print: o passo a gravar sobre um elemento da captura (não é executado na página). */
+export interface PassoSobrePrint {
+  elemento: number;
+  acao: AcaoPasso;
+  valor?: Valor;
+  verificacao?: Passo['verificacao'];
+  variavel?: string;
 }
 
 /** O que a interface recebe sobre a gravação em curso. */
@@ -413,6 +469,8 @@ export interface Bloco {
   pedido?: PedidoApi;
   /** Passo manual: a execução pára, mostra a instrução e o testador confirma OK ou KO. */
   manual?: { instrucao: string };
+  /** Bloco de email: esperar que chegue um email à caixa de testes, verificá-lo e extrair valores. */
+  email?: DefinicaoEmail;
   /**
    * Bloco de login (UI): depois de correr bem, a sessão (cookies) fica guardada em memória durante a
    * execução e os casos seguintes com os mesmos dados de entrada não repetem o login.
@@ -427,6 +485,26 @@ export interface RespostaManual {
   nota?: string;
   /** Caminho de uma imagem escolhida pelo testador, para juntar às evidências. */
   anexo?: string;
+}
+
+/**
+ * Bloco de email (Microsoft Graph ou compatível): a aplicação do bloco (tipo EMAIL) tem o endereço base
+ * da API (por exemplo https://graph.microsoft.com/v1.0) e o perfil dá o token (OAuth 2.0).
+ * Todos os textos podem ter {variáveis}.
+ */
+export interface DefinicaoEmail {
+  /** Caixa de correio de testes a ler (endereço). */
+  caixa: string;
+  perfilId?: string;
+  /** Filtros para encontrar o email certo (contém; vazio = qualquer). Só contam emails chegados depois do início do caso. */
+  para?: string;
+  assunto?: string;
+  /** Quanto tempo esperar que o email chegue (segundos; por omissão 60). */
+  esperaSeg?: number;
+  /** Textos que o corpo tem de conter (um KO por cada um que falte). */
+  corpoContem?: string[];
+  /** Guardar valores do email em variáveis com uma expressão regular (fica o 1.º grupo, ou tudo). */
+  extrair?: Array<{ variavel: string; de: 'corpo' | 'assunto'; padrao: string }>;
 }
 
 /** Um passo manual à espera da resposta do testador. */

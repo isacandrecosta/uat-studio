@@ -870,6 +870,101 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'duas sessões do browser na mesma jornada e login reutilizado entre casos',
+      async () => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        repo.guardar(pasta, 'blocos', {
+          id: 'entrar-no-backoffice',
+          nome: 'Entrar no Backoffice',
+          tipo: 'UI',
+          aplicacaoId: 'backoffice',
+          login: true,
+          passos: [
+            { id: 'p1', acao: 'navegar', descricao: 'Abrir o Backoffice', valor: { tipo: 'fixo', valor: '' } },
+            { id: 'p2', acao: 'verificar', descricao: 'Ver o botão Procurar', alvo: { descricao: 'Botão Procurar', localizadores: [{ tipo: 'testid', valor: 'btnProcurar' }] }, verificacao: { tipo: 'visivel' } },
+          ],
+        });
+        const casosSimular = repo.ler(pasta, 'casos', 'simular-credito');
+        repo.guardar(pasta, 'jornadas', {
+          id: 'duas-sessoes',
+          nome: 'Duas sessões',
+          epicoId: 'simulacoes',
+          etiquetas: [],
+          blocos: [
+            { id: 'b1', blocoId: 'entrar-no-backoffice', sessao: 'aprovador' },
+            { id: 'b2', blocoId: 'simular-credito', sessao: 'cliente' },
+          ],
+        });
+        repo.guardar(pasta, 'casos', { id: 'duas-sessoes', colunas: casosSimular.colunas, casos: casosSimular.casos.filter((c) => c.id === 'TC0001' || c.id === 'TC0002') });
+        await iniciarRun(pasta, { jornadaIds: ['duas-sessoes'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const run = await esperarFimDoRun(180_000);
+        const [primeiro, segundo] = run?.casos ?? [];
+        console.log(`[smoke]   ${(run?.casos ?? []).map((c) => `${c.casoId}=${c.estado}`).join(', ')}`);
+        confirmar(primeiro?.estado === 'OK' && segundo?.estado === 'OK', `Os 2 casos com duas sessões deviam dar OK: ${primeiro?.erro?.mensagem ?? ''} ${segundo?.erro?.mensagem ?? ''}`);
+        const reutilizado = segundo.passos.find((p) => p.bloco === 'Entrar no Backoffice');
+        confirmar(reutilizado?.descricao === 'Login' && (reutilizado.detalhe ?? '').includes('sessão reutilizada (o login foi feito no caso TC0001)'), `O 2.º caso devia reutilizar o login: ${JSON.stringify(segundo.passos.slice(0, 3))}`);
+        confirmar(primeiro.passos.filter((p) => p.bloco === 'Entrar no Backoffice').length === 2, 'O 1.º caso devia fazer o login a sério (2 passos).');
+        const log = fs.readFileSync(path.join(pasta, 'execucoes', run?.pasta ?? '', primeiro.pasta ?? '', 'caso.log'), 'utf8');
+        confirmar(log.includes('Sessão do browser "aprovador"') && log.includes('Sessão do browser "cliente"') && log.includes('Sessão de login guardada'), 'O caso.log devia mostrar as 2 sessões e a sessão de login guardada.');
+      },
+    ],
+    [
+      'passos de rede: intercetar o pedido que a app envia e simular a resposta de uma página',
+      async () => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const simular = repo.ler(pasta, 'blocos', 'simular-credito');
+        // Simular → submeter → intercetar o pedido ao servidor e verificar os valores enviados.
+        repo.guardar(pasta, 'blocos', {
+          id: 'intercetar-simulacao',
+          nome: 'Intercetar a simulação',
+          tipo: 'UI',
+          aplicacaoId: 'simulador',
+          passos: [
+            ...simular.passos.filter((p) => ['p1', 'p2', 'p3', 'p4'].includes(p.id)),
+            {
+              id: 'p5',
+              acao: 'intercetar',
+              descricao: 'Intercetar o pedido de simulação',
+              rede: {
+                url: 'ActionSimularPedido',
+                metodo: 'POST',
+                verificacoes: [
+                  { caminho: 'inputParameters.VarianteCodigo', esperado: '{Variante}' },
+                  { caminho: 'inputParameters.Valor', esperado: '{Valor}' },
+                  { caminho: '*', esperado: '"viewName":"MainFlow.Simulacao"' },
+                ],
+                guardar: { variavel: 'ValorEnviado', caminho: 'inputParameters.Valor' },
+              },
+            },
+          ],
+        });
+        // A página do Backoffice é simulada: o ecrã mostra a resposta inventada.
+        repo.guardar(pasta, 'blocos', {
+          id: 'backoffice-simulado',
+          nome: 'Backoffice simulado',
+          tipo: 'UI',
+          aplicacaoId: 'backoffice',
+          passos: [
+            { id: 'p1', acao: 'simular', descricao: 'Simular a página do Backoffice', rede: { url: 'SimuladorFinanceiroPOC/Backoffice', modo: 'responder', estado: 200, corpo: '<!doctype html><p data-testid="msgSimulada">Resposta simulada {TESTE}</p>' } },
+            { id: 'p2', acao: 'navegar', descricao: 'Abrir o Backoffice', valor: { tipo: 'fixo', valor: '' } },
+            { id: 'p3', acao: 'verificar', descricao: 'Ver a resposta simulada', alvo: { descricao: 'Mensagem', localizadores: [{ tipo: 'testid', valor: 'msgSimulada' }] }, valor: { tipo: 'formula', expressao: '"Resposta simulada " & {TESTE}' }, verificacao: { tipo: 'texto' } },
+          ],
+        });
+        const casosSimular = repo.ler(pasta, 'casos', 'simular-credito');
+        repo.guardar(pasta, 'jornadas', { id: 'passos-de-rede', nome: 'Passos de rede', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'intercetar-simulacao' }, { id: 'b2', blocoId: 'backoffice-simulado' }] });
+        repo.guardar(pasta, 'casos', { id: 'passos-de-rede', colunas: casosSimular.colunas, casos: casosSimular.casos.filter((c) => c.id === 'TC0001') });
+        await iniciarRun(pasta, { jornadaIds: ['passos-de-rede'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const run = await esperarFimDoRun(120_000);
+        const caso = run?.casos[0];
+        const linhas = (caso?.passos ?? []).map((p) => `${p.estado} | ${p.descricao} | ${p.detalhe ?? ''}`);
+        console.log(`[smoke]   ${caso?.casoId}=${caso?.estado}`);
+        confirmar(caso?.estado === 'OK', `Os passos de rede deviam dar OK: ${caso?.erro?.mensagem ?? ''}\n${linhas.join('\n')}`);
+        confirmar(linhas.some((l) => /^ok \| Intercetar o pedido de simulação \| POST .*ActionSimularPedido; 3 campo/.test(l)), `O intercetar não verificou o pedido:\n${linhas.join('\n')}`);
+        confirmar(caso?.variaveis.ValorEnviado === '500', `O intercetar devia guardar {ValorEnviado} = 500 (guardou "${caso?.variaveis.ValorEnviado}").`);
+        confirmar(linhas.some((l) => /^ok \| Ver a resposta simulada \| "Resposta simulada TC0001"/.test(l)), `A página simulada não apareceu:\n${linhas.join('\n')}`);
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {
@@ -1141,6 +1236,32 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
           apagarSegredosDoPerfil(pasta, 'so-certificado');
         }
 
+        // Blocos de email: uma caixa falsa ao estilo do Microsoft Graph. Um bloco de API faz de "app que envia o email".
+        repo.guardar(pasta, 'aplicacoes', { id: 'caixa-de-teste', nome: 'Caixa de teste', tipo: 'EMAIL', cor: '#7b4bd1', urls: { dev: `${base}/graph/v1.0` } });
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.getElementById('btn-novo-email')");
+        await naPagina(j, "document.getElementById('btn-novo-email').click()");
+        await esperar(j, "document.querySelector('dialog[open] #form-caixa')");
+        await dialogo({ nome: 'Código por email', aplicacao: 'caixa-de-teste', perfil: 'oauth-de-teste', caixa: 'qa@exemplo.pt', para: 'qa+{TESTE}@', assunto: 'Código', espera: '20', contem: 'Caso {TESTE}', extrair: 'CodigoMfa=(\\d{6})' });
+        await esperar(j, "document.querySelector('[data-email=\"codigo-por-email\"]')");
+        const blocoEmail = repo.ler(pasta, 'blocos', 'codigo-por-email');
+        confirmar(blocoEmail.tipo === 'EMAIL' && blocoEmail.email?.extrair?.[0]?.padrao === '(\\d{6})', `O bloco de email não ficou bem guardado: ${JSON.stringify(blocoEmail.email)}`);
+        repo.guardar(pasta, 'blocos', {
+          id: 'app-envia-email',
+          nome: 'App envia o email',
+          tipo: 'API',
+          aplicacaoId: 'api-de-teste',
+          passos: [],
+          pedido: { metodo: 'POST', url: '/email/enviar', parametros: [], cabecalhos: [], tipoCorpo: 'json', corpo: '{ "para": "qa+{TESTE}@exemplo.pt", "assunto": "Código de acesso", "corpo": "<p>Caso {TESTE}: o código é <b>654321</b></p>", "atrasoMs": 2000 }', verificacoes: [{ id: 'v1', alvo: 'estado', operador: 'igual', esperado: '202' }], guardar: [] },
+        });
+        repo.guardar(pasta, 'jornadas', { id: 'mfa-por-email', nome: 'MFA por email', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'app-envia-email' }, { id: 'b2', blocoId: 'codigo-por-email' }] });
+        repo.guardar(pasta, 'casos', { id: 'mfa-por-email', colunas: [], casos: [{ id: 'MFA01', etiquetas: [], dados: {} }] });
+        await iniciarRun(pasta, { jornadaIds: ['mfa-por-email'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const comEmail = (await esperarFimDoRun(90_000))?.casos[0];
+        console.log(`[smoke]   ${comEmail?.casoId}=${comEmail?.estado} {CodigoMfa}=${comEmail?.variaveis.CodigoMfa ?? ''} ${comEmail?.erro?.mensagem ?? ''}`);
+        confirmar(comEmail?.estado === 'OK' && comEmail.variaveis.CodigoMfa === '654321', 'O bloco de email devia dar OK e guardar o código 654321.');
+        confirmar((comEmail?.evidencias ?? []).includes('email/02_codigo-por-email.json'), `Falta a evidência do email: ${(comEmail?.evidencias ?? []).join(', ')}`);
+
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');
       },
@@ -1162,7 +1283,8 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
     }
     codigo = 0;
   } catch (erro) {
-    console.log(`[smoke] ERRO: ${erro instanceof Error ? erro.message : String(erro)}`);
+    // Cada linha com o prefixo, para não se perder quando a saída é filtrada por "[smoke]".
+    console.log(`[smoke] ERRO: ${(erro instanceof Error ? erro.message : String(erro)).split(/\r?\n/).join('\n[smoke]   ')}`);
     await tirarPrint(janela, raiz, 'erro');
     // Se o erro foi durante a gravação, guarda também o que o browser estava a mostrar.
     const pagina = paginaDoGravador();

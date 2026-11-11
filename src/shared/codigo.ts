@@ -99,6 +99,23 @@ function linhasDoPasso(passo: Passo, parametros: BlocoDaJornada['parametros'], u
     case 'esperar':
       linhas.push(passo.alvo ? `await ${alvo}.waitFor();` : `await page.waitForTimeout(${(Number(passo.valor?.tipo === 'fixo' ? passo.valor.valor : '1') || 1) * 1000});`);
       break;
+    case 'simular': {
+      const rede = passo.rede;
+      const padrao = lit(rede?.url.includes('*') ? rede.url : `**${rede?.url ?? ''}**`);
+      if (rede?.modo === 'falhar') linhas.push(`await page.route(${padrao}, (rota) => rota.abort('failed'));`);
+      else if (rede?.modo === 'demorar') linhas.push(`await page.route(${padrao}, async (rota) => { await page.waitForTimeout(${(rede.demoraSeg ?? 30) * 1000}); await rota.abort('timedout'); });`);
+      else linhas.push(`await page.route(${padrao}, (rota) => rota.fulfill({ status: ${rede?.estado ?? 200}, body: ${modelo(rede?.corpo ?? '')} }));`);
+      break;
+    }
+    case 'intercetar': {
+      const rede = passo.rede;
+      linhas.push(`// Intercetar: o pedido a ${rede?.url ?? ''} enviado pela app (no UAT Studio, procura-se desde o início do bloco).`);
+      linhas.push(`const pedido = await page.waitForRequest((r) => r.url().includes(${lit(rede?.url ?? '')}));`);
+      for (const v of rede?.verificacoes ?? []) {
+        linhas.push(v.caminho.trim() === '*' ? `expect.soft(pedido.postData() ?? '').toContain(${modelo(v.esperado)});` : `expect.soft(String(lerCampo(pedido.postDataJSON(), ${lit(v.caminho)}))).toBe(${modelo(v.esperado)});`);
+      }
+      break;
+    }
   }
   return linhas;
 }

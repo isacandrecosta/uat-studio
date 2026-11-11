@@ -17,7 +17,7 @@ import {
 } from '../../shared/modelo';
 import { criarAmbienteApi } from '../api/ambiente';
 import * as repo from '../projeto/repositorio';
-import { correrCaso } from './correrCaso';
+import { correrCaso, SessaoGuardada } from './correrCaso';
 import { escreverRelatorios } from './relatorios';
 
 const PASTA_EXECUCOES = 'execucoes';
@@ -215,6 +215,8 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   const perfis = new Map(repo.listar(pasta, 'perfis').map((p) => [p.id, p]));
   // Um só ambiente de API por execução: os tokens OAuth são pedidos uma vez e reutilizados por todos os casos.
   const api = criarAmbienteApi(pasta);
+  // Sessões de login (blocos de login) guardadas só em memória, durante esta execução.
+  const sessoesGuardadas = new Map<string, SessaoGuardada>();
 
   void (async () => {
     let browser: Browser | null = null;
@@ -258,6 +260,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             calculadas,
             perfis,
             api,
+            sessoesGuardadas,
             proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
             passoManual: () =>
               new Promise<RespostaManual>((resolve) => {

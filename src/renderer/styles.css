@@ -621,3 +621,6 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .dialogo-pacote { width: min(640px, 94vw); }
 .lista-pacote { max-height: 320px; overflow-y: auto; }
 .item[data-estado-pacote="diferente"] .item-meta { color: var(--aviso); font-weight: 600; }
+
+/* Sessões do browser */
+.campo-sessao { max-width: 160px; }

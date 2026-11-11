@@ -60,6 +60,13 @@ const REGRAS_ERRO: Regra[] = [
   },
   { padrao: /não tem endereço no ambiente|não tem endereço no ambiente ativo/, sugestoes: ['Preencha o endereço da aplicação para este ambiente no ecrã Jornadas → Aplicações.'] },
   { padrao: /Falta preencher .* no perfil/, sugestoes: ['Preencha o segredo em falta no ecrã Blocos de API → Perfis de autenticação.'] },
+  {
+    padrao: /O email não chegou/,
+    sugestoes: [
+      'Confirme que a aplicação enviou mesmo o email (e para que endereço) e os filtros do bloco (para, assunto).',
+      'Se o email demora, aumente o tempo de espera do bloco de email.',
+    ],
+  },
   { padrao: /não tem o campo/, sugestoes: ['A resposta não tinha o campo esperado: veja a resposta guardada na pasta api/ do caso e confirme o caminho do campo em "guardar da resposta".'] },
   {
     padrao: /fórmula|variável|\{[^}]+\}|não é um número/i,

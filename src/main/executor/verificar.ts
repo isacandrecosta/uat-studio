@@ -37,7 +37,8 @@ function problemasDoBloco(bloco: Bloco, perfis: Map<string, PerfilAutenticacao>)
         const erro = formula ? validarFormula(formula) : null;
         if (erro) problemas.push(`o passo "${passo.descricao}" tem uma fórmula com erro: ${erro}`);
       }
-      if (passo.acao !== 'navegar' && passo.acao !== 'esperar' && (passo.alvo?.localizadores.length ?? 0) === 0) {
+      if ((passo.acao === 'simular' || passo.acao === 'intercetar') && !passo.rede?.url.trim()) problemas.push(`o passo "${passo.descricao}" não diz que pedidos apanhar`);
+      if (!['navegar', 'esperar', 'simular', 'intercetar'].includes(passo.acao) && (passo.alvo?.localizadores.length ?? 0) === 0) {
         problemas.push(`o passo "${passo.descricao}" não tem elemento gravado`);
       }
       if (passo.acao === 'guardar' && !passo.variavel) problemas.push(`o passo "${passo.descricao}" não diz em que variável guardar`);
@@ -49,6 +50,16 @@ function problemasDoBloco(bloco: Bloco, perfis: Map<string, PerfilAutenticacao>)
       if (pedido.perfilId && !perfis.has(pedido.perfilId)) problemas.push(`usa o perfil de autenticação "${pedido.perfilId}", que já não existe`);
       if (pedido.verificacoes.length === 0 && pedido.guardar.length === 0) problemas.push('não verifica nem guarda nada da resposta');
       for (const g of pedido.guardar) if (!g.variavel.trim() || !g.caminho.trim()) problemas.push('tem uma linha de "guardar da resposta" incompleta');
+    }
+  } else if (bloco.tipo === 'EMAIL') {
+    if (!bloco.email?.caixa.trim()) problemas.push('não diz que caixa de correio ler');
+    if (bloco.email?.perfilId && !perfis.has(bloco.email.perfilId)) problemas.push(`usa o perfil de autenticação "${bloco.email.perfilId}", que já não existe`);
+    for (const e of bloco.email?.extrair ?? []) {
+      try {
+        new RegExp(e.padrao);
+      } catch {
+        problemas.push(`a expressão para guardar {${e.variavel}} não é válida`);
+      }
     }
   } else if (bloco.tipo === 'MANUAL') {
     if (!bloco.manual?.instrucao.trim()) problemas.push('não tem instrução para o testador');
@@ -123,10 +134,11 @@ export async function verificarAntesDeCorrer(pasta: string, ambito: AmbitoRun, o
     for (const texto of problemasDoBloco(bloco, perfis)) {
       juntar(texto.startsWith('não verifica') ? 'aviso' : 'erro', onde, `${texto.charAt(0).toUpperCase()}${texto.slice(1)}.`);
     }
-    const perfil = bloco.pedido?.perfilId ? perfis.get(bloco.pedido.perfilId) : undefined;
+    const idPerfil = bloco.pedido?.perfilId ?? bloco.email?.perfilId;
+    const perfil = idPerfil ? perfis.get(idPerfil) : undefined;
     if (perfil) perfisUsados.set(perfil.id, perfil);
     const enderecoCompleto = bloco.tipo === 'API' && /^https?:\/\//i.test(bloco.pedido?.url.trim() ?? '');
-    const precisaDeEndereco = bloco.tipo === 'API' ? !enderecoCompleto : bloco.passos.some((p) => p.acao === 'navegar');
+    const precisaDeEndereco = bloco.tipo === 'API' ? !enderecoCompleto : bloco.tipo === 'EMAIL' ? true : bloco.passos.some((p) => p.acao === 'navegar');
     const aplicacao = bloco.aplicacaoId ? aplicacoes.get(bloco.aplicacaoId) : undefined;
     if (!aplicacao) {
       if (precisaDeEndereco) juntar('erro', onde, 'Não está ligado a nenhuma aplicação (ou a aplicação foi apagada).');

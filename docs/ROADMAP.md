@@ -36,9 +36,10 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] "Onde é usado" de cada bloco.
 
 ## Fase 4: avançado
-- [ ] Login com sessão reutilizada e MFA (modo de teste / email / TOTP); várias sessões na mesma jornada.
-- [ ] Blocos de Email (IMAP / Microsoft Graph).
-- [ ] Intercetar e simular respostas de APIs externas.
+- [x] Login com sessão reutilizada e MFA (modo de teste / email / TOTP); várias sessões na mesma jornada.
+- [x] Blocos de Email (Microsoft Graph ou compatível).
+- [ ] Blocos de Email por IMAP (Gmail): por fazer, falta uma caixa de testes para o testar.
+- [x] Intercetar e simular respostas de APIs externas.
 - [ ] Modo print híbrido.
 - [x] Relatório PDF para assinatura do UAT, com ID do requisito.
 - [x] Exportar/importar pacotes de blocos.

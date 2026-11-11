@@ -18,16 +18,20 @@ import {
   PedidoManual,
   RegistoPasso,
   RespostaManual,
+  SESSAO_PRINCIPAL,
   ResultadoCaso,
   PerfilAutenticacao,
   ResultadoApi,
   Valor,
   VariavelCalculada,
 } from '../../shared/modelo';
+import { createHash } from 'node:crypto';
 import { mesmoLocalizador } from '../../shared/blocos';
+import { variaveisDoBloco } from '../../shared/variaveis';
 import { sugerirParaCaso } from '../../shared/sugestoes';
 import { avaliarCondicao, avaliarFormula, ErroFormula, preencherTexto } from '../../shared/formulas';
-import { AmbienteApi, ErroApi, executarBlocoApi } from '../api/pedidos';
+import { AmbienteApi, ErroApi, executarBlocoApi, lerCaminho } from '../api/pedidos';
+import { lerEmail } from '../email/email';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, ErroElemento } from '../motor/localizar';
 import { criarSlug } from '../projeto/repositorio';
@@ -67,8 +71,21 @@ export interface PedidoCaso {
   variaveisIniciais?: Record<string, string>;
   /** Passo manual: mostra a instrução ao testador e espera pela resposta (OK/KO). */
   passoManual?(pedido: PedidoManual): Promise<RespostaManual>;
+  /**
+   * Sessões de login guardadas nesta execução (partilhadas entre casos e workers), por bloco de login e
+   * dados de entrada. Só em memória: os cookies nunca vão para o disco.
+   */
+  sessoesGuardadas?: Map<string, SessaoGuardada>;
   /** A página do browser deste caso (para as miniaturas ao vivo); null quando fecha. */
   aoAbrirPagina?(pagina: Page | null): void;
+}
+
+/** Uma sessão de login guardada: o estado do browser (cookies, localStorage) e onde o login terminou. */
+export interface SessaoGuardada {
+  estado: Awaited<ReturnType<BrowserContext['storageState']>>;
+  url: string;
+  /** Caso onde o login foi feito (para o log). */
+  caso: string;
 }
 
 /** Erro nos dados ou na definição do teste (não na aplicação). */
@@ -83,10 +100,16 @@ const compactar = (texto: string): string => texto.replace(/\s+/g, ' ').trim();
 /** Espera que os pedidos da página ao servidor terminem (os ecrãs OutSystems carregam os dados depois de aparecerem). */
 class MonitorDePedidos {
   private pendentes = new Set<Request>();
+  /** Pedidos enviados pela página (para "intercetar"): os mais recentes no fim. */
+  readonly historico: Array<{ url: string; metodo: string; corpo: string; quando: number }> = [];
   constructor(pagina: Page) {
     pagina.on('request', (pedido) => {
       const tipo = pedido.resourceType();
       if (tipo === 'xhr' || tipo === 'fetch') this.pendentes.add(pedido);
+      if (tipo === 'xhr' || tipo === 'fetch' || tipo === 'document' || pedido.method() !== 'GET') {
+        this.historico.push({ url: pedido.url(), metodo: pedido.method(), corpo: pedido.postData() ?? '', quando: Date.now() });
+        if (this.historico.length > 300) this.historico.shift();
+      }
     });
     const terminar = (pedido: Request): void => void this.pendentes.delete(pedido);
     pagina.on('requestfinished', terminar);
@@ -105,6 +128,47 @@ class MonitorDePedidos {
     this.pendentes.clear();
     return false;
   }
+}
+
+/** O endereço corresponde ao padrão? Sem "*", basta conter o texto; com "*", o padrão inteiro (o * vale qualquer coisa). */
+export function coincideUrl(padrao: string, url: string): boolean {
+  const p = padrao.trim();
+  if (!p.includes('*')) return url.includes(p);
+  const expressao = p.split('*').map((parte) => parte.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+  return new RegExp(`^${expressao}$`).test(url);
+}
+
+/**
+ * Lê um campo de um pedido enviado pela app: no corpo JSON (caminho tipo `inputParameters.Valor`),
+ * num formulário (a=1&b=2) ou nos parâmetros do endereço (?a=1). undefined = campo em falta.
+ */
+export function lerCampoDoPedido(enviado: { url: string; corpo: string }): (caminho: string) => string | undefined {
+  let json: unknown;
+  let temJson = false;
+  try {
+    json = JSON.parse(enviado.corpo);
+    temJson = true;
+  } catch {
+    // Não é JSON: formulário ou texto.
+  }
+  const formulario = !temJson && enviado.corpo.includes('=') ? new URLSearchParams(enviado.corpo) : null;
+  let query: URLSearchParams | null = null;
+  try {
+    query = new URL(enviado.url).searchParams;
+  } catch {
+    query = null;
+  }
+  return (caminho) => {
+    const c = caminho.trim();
+    if (c === '*') return enviado.corpo;
+    if (temJson) {
+      const valor = lerCaminho(json, c);
+      if (typeof valor !== 'symbol') return valor !== null && typeof valor === 'object' ? JSON.stringify(valor) : String(valor);
+    }
+    if (formulario?.has(c)) return formulario.get(c) ?? '';
+    if (query?.has(c)) return query.get(c) ?? '';
+    return undefined;
+  };
 }
 
 /** Transforma um erro técnico numa frase simples. */
@@ -271,8 +335,12 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     return { texto: calcular(formula, noBloco, onde), deVariavel: false };
   };
 
+  // A sessão do browser em uso (contexto, página e monitor); as outras ficam em `sessoes`.
   let contexto: BrowserContext | null = null;
   let pagina: Page | null = null;
+  let monitor: MonitorDePedidos | null = null;
+  let sessaoAtual = '';
+  const sessoes = new Map<string, { contexto: BrowserContext; pagina: Page; monitor: MonitorDePedidos }>();
   let traceLigado = false;
   let numeroTrace = 0;
   let blocoAtual = '';
@@ -280,6 +348,8 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   let blocoIdAtual = '';
   let passoIdAtual = '';
   let indiceBloco = -1;
+  /** Quando começou o bloco atual (o "intercetar" só olha para os pedidos enviados desde então). */
+  let inicioBloco = Date.now();
 
   const guardarTrace = async (): Promise<void> => {
     if (!contexto || !traceLigado) return;
@@ -324,26 +394,52 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     await tirarPrint('erro.png');
   };
 
-  try {
-    contexto = await pedido.browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'pt-PT' });
-    if (pedido.trace) await contexto.tracing.start({ screenshots: true, snapshots: true });
-    pagina = await contexto.newPage();
+  /**
+   * Passa para a sessão do browser `nome` (cria-a na 1.ª vez; com `estado`, cria-a já com o login feito).
+   * Cada sessão é um contexto limpo e separado: pessoas diferentes na mesma jornada.
+   */
+  const usarSessao = async (nome: string, estado?: SessaoGuardada['estado']): Promise<void> => {
+    if (sessaoAtual === nome && contexto && !estado) return;
+    // O trace é por sessão: fecha-se o pedaço da sessão que se deixa.
+    await guardarTrace();
+    if (estado) {
+      const antiga = sessoes.get(nome);
+      if (antiga) {
+        if (pedido.trace) await antiga.contexto.tracing.stop().catch(() => undefined);
+        await antiga.contexto.close().catch(() => undefined);
+        sessoes.delete(nome);
+      }
+    }
+    let sessao = sessoes.get(nome);
+    if (!sessao) {
+      const novo = await pedido.browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'pt-PT', ...(estado ? { storageState: estado } : {}) });
+      if (pedido.trace) await novo.tracing.start({ screenshots: true, snapshots: true });
+      const novaPagina = await novo.newPage();
+      sessao = { contexto: novo, pagina: novaPagina, monitor: new MonitorDePedidos(novaPagina) };
+      sessoes.set(nome, sessao);
+      if (sessoes.size > 1 || nome !== SESSAO_PRINCIPAL) escrever(`  Sessão do browser "${nome}"${estado ? ' (com o login guardado)' : ''}`);
+    }
+    contexto = sessao.contexto;
+    pagina = sessao.pagina;
+    monitor = sessao.monitor;
+    sessaoAtual = nome;
     pedido.aoAbrirPagina?.(pagina);
-    const monitor = new MonitorDePedidos(pagina);
+  };
+
+  try {
     // Depois de uma verificação, o ecrã já assentou: as seguintes não precisam de esperar tanto.
     let ecraAssente = false;
 
     const correrBloco = async (indice: number, item: BlocoDaJornada): Promise<void> => {
-      const pag = pagina as Page;
-      const ctx = contexto as BrowserContext;
       indiceBloco = indice;
       const bloco = pedido.blocos.get(item.blocoId);
       if (!bloco) throw new ErroDados(`O bloco "${item.blocoId}" já não existe.`);
       blocoAtual = bloco.nome;
+      inicioBloco = Date.now();
       passoAtual = '';
       blocoIdAtual = bloco.id;
       passoIdAtual = '';
-      if (bloco.tipo !== 'UI' && bloco.tipo !== 'API' && bloco.tipo !== 'MANUAL') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
+      if (bloco.tipo !== 'UI' && bloco.tipo !== 'API' && bloco.tipo !== 'MANUAL' && bloco.tipo !== 'EMAIL') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
       const aplicacao = bloco.aplicacaoId ? pedido.aplicacoes.get(bloco.aplicacaoId) : undefined;
       // Bloco condicional: só corre se a condição se cumprir para este caso.
       if (item.condicao?.trim() && !cumpre(item.condicao, procurar, `condição do bloco "${bloco.nome}"`)) {
@@ -390,6 +486,46 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         if (!resposta.ok) resultado.diferencas.push({ bloco: bloco.nome, passo: 'Confirmação manual', esperado: 'OK', obtido: nota ? `KO: ${nota}` : 'KO' });
         registar(bloco.nome, 'Confirmação manual', resposta.ok ? 'ok' : 'ko', Date.now() - t0, [resposta.ok ? 'o testador confirmou' : 'o testador marcou KO', nota && `"${nota}"`, resposta.anexo && 'com anexo'].filter(Boolean).join('; '));
         if (pagina && pagina.url() !== 'about:blank') await tirarPrint(`${base}.png`);
+        return;
+      }
+
+      if (bloco.tipo === 'EMAIL') {
+        // Espera pelo email na caixa de testes, verifica o corpo e guarda valores (por exemplo, o código de MFA).
+        await pontoDeControlo();
+        const def = bloco.email;
+        passoAtual = 'À espera do email';
+        resultado.passoAtual = `${bloco.nome}: à espera do email`;
+        pedido.aoProgredir(resultado);
+        const t0 = Date.now();
+        const lido = await lerEmail(
+          {
+            bloco,
+            urlBase: aplicacao?.urls[pedido.ambiente.id],
+            perfil: def?.perfilId ? pedido.perfis.get(def.perfilId) : undefined,
+            preencher: (texto) => preencherNoBloco(item)(texto),
+            desde: inicio,
+            devePararAgora: () => pedido.devePararAgora() || pedido.deveSaltar(),
+          },
+          pedido.api,
+        );
+        if (pedido.devePararAgora()) throw new Parado();
+        if (pedido.deveSaltar()) throw new Saltado();
+        // Evidência: o email recebido (JSON com o texto e o HTML).
+        const base = `${String(indice + 1).padStart(2, '0')}_${criarSlug(bloco.nome)}`;
+        fs.mkdirSync(path.join(pedido.pasta, 'email'), { recursive: true });
+        fs.writeFileSync(path.join(pedido.pasta, 'email', `${base}.json`), `${JSON.stringify(lido.email, null, 2)}\n`, 'utf8');
+        fs.writeFileSync(path.join(pedido.pasta, 'email', `${base}.html`), lido.email.html, 'utf8');
+        resultado.evidencias?.push(`email/${base}.json`, `email/${base}.html`);
+        registar(bloco.nome, `Email recebido: "${lido.email.assunto}"`, 'ok', Date.now() - t0, `de ${lido.email.de}${lido.tentativas > 1 ? ` (à ${lido.tentativas}.ª consulta)` : ''}`);
+        for (const v of lido.verificacoes) {
+          if (!v.ok) resultado.diferencas.push({ bloco: bloco.nome, passo: v.descricao, esperado: v.esperado, obtido: v.obtido });
+          registar(bloco.nome, v.descricao, v.ok ? 'ok' : 'ko', 0, v.ok ? undefined : 'não contém');
+        }
+        for (const [nome, valor] of Object.entries(lido.guardadas)) {
+          variaveis[nome] = valor;
+          resultado.variaveis[nome] = valor;
+          registar(bloco.nome, `Guardar {${nome}}`, 'ok', 0, `"${valor}"`);
+        }
         return;
       }
 
@@ -446,6 +582,30 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         return;
       }
 
+      // Sessão do browser deste bloco. Num bloco de login, uma sessão já guardada (mesmos dados) evita repetir o login.
+      const nomeSessao = item.sessao?.trim() || SESSAO_PRINCIPAL;
+      let chaveLogin = '';
+      if (bloco.login && pedido.sessoesGuardadas) {
+        const procurar = procurarNoBloco(item);
+        const entradas = variaveisDoBloco(bloco).usa.map((nome) => [nome, procurar(nome) ?? '']);
+        // A chave é um resumo (hash): as passwords usadas no login não ficam guardadas em lado nenhum.
+        chaveLogin = createHash('sha256').update(JSON.stringify([bloco.id, entradas])).digest('hex');
+        const guardada = pedido.sessoesGuardadas.get(chaveLogin);
+        if (guardada) {
+          await pontoDeControlo();
+          await usarSessao(nomeSessao, guardada.estado);
+          if (guardada.url && guardada.url !== 'about:blank') {
+            await (pagina as Page).goto(guardada.url, { waitUntil: 'domcontentloaded', timeout: Math.max(limiteMs, 90_000) });
+          }
+          registar(bloco.nome, 'Login', 'ok', 0, `sessão reutilizada (o login foi feito no caso ${guardada.caso})`);
+          return;
+        }
+      }
+      await usarSessao(nomeSessao);
+      const pag = pagina as Page;
+      const ctx = contexto as BrowserContext;
+      const mon = monitor as MonitorDePedidos;
+
       // Blocos com segredos (por exemplo, login) correm sem trace, para a password não ficar gravada.
       const temSegredos = bloco.passos.some((p) => p.secreto);
       if (pedido.trace) {
@@ -468,13 +628,18 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           continue;
         }
         const t0 = Date.now();
-        await monitor.esperarCalma(pag, 10_000);
+        await mon.esperarCalma(pag, 10_000);
         const nota = await executarPasso(passo, item, aplicacao, bloco.nome);
         if (nota.estado === 'ko' && nota.diferenca) resultado.diferencas.push(nota.diferenca);
         registar(bloco.nome, passo.descricao, nota.estado, Date.now() - t0, nota.detalhe);
       }
 
-      await monitor.esperarCalma(pag, 5_000);
+      await mon.esperarCalma(pag, 5_000);
+      // Login feito sem diferenças: a sessão fica guardada (só em memória) para os casos seguintes.
+      if (chaveLogin && !resultado.diferencas.some((d) => d.bloco === bloco.nome)) {
+        pedido.sessoesGuardadas?.set(chaveLogin, { estado: await ctx.storageState(), url: pag.url(), caso: caso.id });
+        escrever(`  Sessão de login guardada para os casos seguintes`);
+      }
       await tirarPrint(`${String(indice + 1).padStart(2, '0')}_${criarSlug(bloco.nome)}.png`);
     };
 
@@ -572,6 +737,80 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           }
           return { estado: 'ok' };
         }
+        case 'simular': {
+          // A partir daqui, nesta sessão do browser, os pedidos a este endereço recebem a resposta simulada.
+          const rede = passo.rede;
+          if (!rede?.url.trim()) throw new ErroDados(`O passo "${passo.descricao}" não diz que pedidos simular.`);
+          const modo = rede.modo ?? 'responder';
+          const corpo = modo === 'responder' ? preencherNoBloco(item)(rede.corpo ?? '') : '';
+          const estado = rede.estado ?? 200;
+          const tipoConteudo =
+            rede.tipoConteudo?.trim() || (/^\s*[[{]/.test(corpo) ? 'application/json; charset=utf-8' : /^\s*</.test(corpo) ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8');
+          const metodo = rede.metodo?.trim().toUpperCase();
+          await (contexto as BrowserContext).route(
+            (url) => coincideUrl(rede.url, url.href),
+            async (rota) => {
+              if (metodo && rota.request().method() !== metodo) return rota.fallback();
+              if (modo === 'falhar') return rota.abort('failed');
+              if (modo === 'demorar') {
+                await new Promise((r) => setTimeout(r, Math.max(0, rede.demoraSeg ?? 30) * 1000));
+                return rota.abort('timedout').catch(() => undefined);
+              }
+              return rota.fulfill({ status: estado, body: corpo, contentType: tipoConteudo });
+            },
+          );
+          const efeito = modo === 'falhar' ? 'falham (sem ligação)' : modo === 'demorar' ? `demoram ${rede.demoraSeg ?? 30} s e falham` : `recebem HTTP ${estado}`;
+          return { estado: 'ok', detalhe: `a partir daqui, os pedidos${metodo ? ` ${metodo}` : ''} a "${rede.url}" ${efeito}` };
+        }
+        case 'intercetar': {
+          // O pedido que a app enviou desde o início do bloco (espera um pouco se ainda não saiu).
+          const rede = passo.rede;
+          if (!rede?.url.trim()) throw new ErroDados(`O passo "${passo.descricao}" não diz que pedido intercetar.`);
+          const mon = monitor as MonitorDePedidos;
+          const metodo = rede.metodo?.trim().toUpperCase();
+          const fimEspera = Date.now() + Math.max(1, passo.verificacao?.esperaSeg ?? 10) * 1000;
+          const procurar = () => [...mon.historico].reverse().find((r) => r.quando >= inicioBloco && coincideUrl(rede.url, r.url) && (!metodo || r.metodo === metodo));
+          let enviado = procurar();
+          while (!enviado && Date.now() < fimEspera) {
+            await p.waitForTimeout(200);
+            enviado = procurar();
+          }
+          if (!enviado) {
+            return {
+              estado: 'ko',
+              detalhe: `a app não enviou nenhum pedido${metodo ? ` ${metodo}` : ''} a "${rede.url}"`,
+              diferenca: { bloco: nomeBloco, passo: passo.descricao, esperado: `pedido a ${rede.url}`, obtido: '(pedido não enviado)' },
+            };
+          }
+          const ler = lerCampoDoPedido(enviado);
+          const falhas: string[] = [];
+          for (const v of rede.verificacoes ?? []) {
+            const esperado = preencherNoBloco(item)(v.esperado);
+            const obtido = ler(v.caminho);
+            const ok =
+              v.caminho.trim() === '*'
+                ? enviado.corpo.includes(esperado)
+                : obtido !== undefined && (obtido === esperado || ((): boolean => {
+                    const a = lerNumero(obtido);
+                    const b = lerNumero(esperado);
+                    return Boolean(a && b && compararComTolerancia(b, a, { inteiro: 0n, casas: 0 }).igual);
+                  })());
+            if (!ok) {
+              const mostrado = v.caminho.trim() === '*' ? '(o corpo não contém o valor)' : obtido === undefined ? '(campo em falta)' : obtido;
+              falhas.push(`${v.caminho}: esperado "${esperado}", obtido "${mostrado}"`);
+              resultado.diferencas.push({ bloco: nomeBloco, passo: `${passo.descricao} › ${v.caminho}`, esperado, obtido: mostrado });
+            }
+          }
+          if (rede.guardar?.variavel.trim()) {
+            const valor = ler(rede.guardar.caminho) ?? '';
+            variaveis[rede.guardar.variavel.trim()] = valor;
+            resultado.variaveis[rede.guardar.variavel.trim()] = valor;
+          }
+          const resumo = `${enviado.metodo} ${enviado.url.replace(/^https?:\/\/[^/]+/, '')}`;
+          const verificados = (rede.verificacoes ?? []).length;
+          if (falhas.length > 0) return { estado: 'ko', detalhe: `${resumo}; ${falhas.join('; ')}` };
+          return { estado: 'ok', detalhe: verificados > 0 ? `${resumo}; ${verificados} campo(s) verificado(s)` : resumo };
+        }
         case 'verificar': {
           const tipo = passo.verificacao?.tipo ?? 'texto';
           // "Esperar até": o passo pode ter o seu próprio tempo de espera (por exemplo, um estado que demora a mudar).
@@ -656,9 +895,10 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     for (const [i, e] of estadosBlocos.entries()) if (e === 'por-correr' || e === 'a-correr') estadosBlocos[i] = 'nao-corrido';
     pedido.aoAbrirPagina?.(null);
     await guardarTrace();
-    if (contexto) {
-      if (pedido.trace) await contexto.tracing.stop().catch(() => undefined);
-      await contexto.close().catch(() => undefined);
+    // Fecha todas as sessões do browser deste caso.
+    for (const sessao of sessoes.values()) {
+      if (pedido.trace) await sessao.contexto.tracing.stop().catch(() => undefined);
+      await sessao.contexto.close().catch(() => undefined);
     }
     resultado.duracaoMs = Date.now() - inicio;
     resultado.passoAtual = undefined;
