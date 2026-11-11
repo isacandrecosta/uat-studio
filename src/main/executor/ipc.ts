@@ -1,5 +1,5 @@
 // Liga a interface às execuções (correr, parar, histórico, evidências) e ao Excel dos casos.
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AmbitoRun, Bloco, OpcoesRun } from '../../shared/modelo';
@@ -9,7 +9,7 @@ import { exportarCasos, importarCasos } from '../excel/casosExcel';
 import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
 import { criarAmbienteApi } from '../api/ambiente';
-import { caminhoNaExecucao, continuarRun, estadoRun, iniciarRun, listarHistorico, pararRun, pausarRun, saltarCaso } from './execucao';
+import { caminhoNaExecucao, continuarRun, estadoRun, iniciarRun, listarHistorico, miniaturasDosWorkers, pararRun, pausarRun, saltarCaso } from './execucao';
 import { verificarAntesDeCorrer } from './verificar';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
@@ -20,6 +20,14 @@ export function registarIpcExecucoes(): void {
   ipcMain.handle('run:parar', () => pararRun());
   ipcMain.handle('run:pausar', () => pausarRun());
   ipcMain.handle('run:continuar', () => continuarRun());
+  // Miniaturas ao vivo dos workers (reduzidas, para não pesar na interface).
+  ipcMain.handle('run:miniaturas', async () =>
+    (await miniaturasDosWorkers()).map(({ worker, chave, imagem }) => ({
+      worker,
+      chave,
+      imagem: imagem ? `data:image/jpeg;base64,${nativeImage.createFromBuffer(imagem).resize({ width: 400, quality: 'good' }).toJPEG(70).toString('base64')}` : null,
+    })),
+  );
   ipcMain.handle('run:saltar', (_e, chave: string) => saltarCaso(String(chave)));
   // Verificação antes de correr: o que falta ou está mal, sem abrir o browser.
   ipcMain.handle('run:verificar', (_e, ambito: AmbitoRun) => {

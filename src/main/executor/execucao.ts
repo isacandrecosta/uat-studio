@@ -2,7 +2,8 @@
 // por "workers" em paralelo e escreve a pasta da execução (logs, evidências, relatórios).
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Browser, chromium } from 'playwright-core';
+import { Browser, chromium, Page } from 'playwright-core';
+import { fotografarJornadas } from '../../shared/mapa';
 import {
   AmbitoRun,
   Bloco,
@@ -30,6 +31,8 @@ let pararPedido = false;
 let pausado = false;
 /** Casos (idDaJornada/idDoCaso) que o utilizador mandou saltar. */
 const saltar = new Set<string>();
+/** Página aberta por cada worker (para as miniaturas ao vivo do mapa de execução). */
+const paginasDosWorkers = new Map<number, { pagina: Page; chave: string }>();
 let notificar: (estado: EstadoRun) => void = () => undefined;
 let ultimaNotificacao = 0;
 
@@ -154,8 +157,15 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
       pasta: pastaDoCaso(item).replace(/\\/g, '/'),
     })),
     pasta: nomePasta,
+    jornadas: fotografarJornadas(
+      repo.listar(pasta, 'jornadas').filter((j) => itens.some((i) => i.jornada.id === j.id)),
+      repo.listar(pasta, 'epicos'),
+      repo.listar(pasta, 'blocos'),
+      repo.listar(pasta, 'aplicacoes'),
+    ),
   };
   runAtual = run;
+  paginasDosWorkers.clear();
   pararPedido = false;
   pausado = false;
   saltar.clear();
@@ -185,7 +195,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
       browser = await chromium.launch({ channel: opcoes.canal, headless: !opcoes.visivel });
       const lancado = browser;
       let proximo = 0;
-      const worker = async (): Promise<void> => {
+      const worker = async (numeroWorker: number): Promise<void> => {
         for (;;) {
           const indice = proximo++;
           if (indice >= itens.length) return;
@@ -204,6 +214,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
           const relativa = run.casos[indice].pasta ?? pastaDoCaso(item);
           log(`A correr ${item.jornada.nome} / ${item.caso.id}`);
           run.casos[indice].estado = 'a-correr';
+          run.casos[indice].worker = numeroWorker;
           avisar(true);
           const resultado = await correrCaso({
             browser: lancado,
@@ -220,8 +231,12 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             perfis,
             api,
             proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
+            aoAbrirPagina: (pagina) => {
+              if (pagina) paginasDosWorkers.set(numeroWorker, { pagina, chave });
+              else paginasDosWorkers.delete(numeroWorker);
+            },
             aoProgredir: (parcial) => {
-              run.casos[indice] = { ...parcial, pasta: relativa };
+              run.casos[indice] = { ...parcial, pasta: relativa, worker: numeroWorker };
               avisar();
             },
             devePararAgora: () => pararPedido,
@@ -233,7 +248,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
               while (pausado && !pararPedido && !saltar.has(chave)) await new Promise((r) => setTimeout(r, 150));
             },
           });
-          run.casos[indice] = { ...resultado, pasta: relativa };
+          run.casos[indice] = { ...resultado, pasta: relativa, worker: numeroWorker };
           const resumo = resultado.estado === 'ERRO' ? `ERRO: ${resultado.erro?.mensagem ?? ''}` : resultado.estado;
           log(`${item.jornada.nome} / ${item.caso.id}: ${resumo} (${(resultado.duracaoMs / 1000).toFixed(1)} s)`);
           // "Pausar no 1.º ERRO": fica em pausa para se poder ver o que se passou antes de continuar.
@@ -245,7 +260,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
           avisar(true);
         }
       };
-      await Promise.all(Array.from({ length: Math.min(paralelo, itens.length) }, () => worker()));
+      await Promise.all(Array.from({ length: Math.min(paralelo, itens.length) }, (_, i) => worker(i + 1)));
     } catch (erro) {
       const texto = erro instanceof Error ? erro.message.split('\n')[0] : String(erro);
       log(`A execução falhou: ${texto}`);
@@ -256,6 +271,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
         }
       }
     } finally {
+      paginasDosWorkers.clear();
       await browser?.close().catch(() => undefined);
       run.ativo = false;
       run.aParar = false;
@@ -275,6 +291,31 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   })();
 
   return run;
+}
+
+export interface MiniaturaWorker {
+  worker: number;
+  /** Caso que o worker está a correr (`idDaJornada/idDoCaso`). */
+  chave: string;
+  /** Print do ecrã do browser (JPEG), ou null se não foi possível tirar. */
+  imagem: Buffer | null;
+}
+
+/**
+ * Miniaturas ao vivo: um print rápido da página de cada worker (só quando o mapa pede).
+ * Funciona também em background: o browser desenha a página mesmo sem janela.
+ */
+export async function miniaturasDosWorkers(): Promise<MiniaturaWorker[]> {
+  const lista = [...paginasDosWorkers.entries()].sort(([a], [b]) => a - b);
+  return Promise.all(
+    lista.map(async ([worker, { pagina, chave }]) => {
+      let imagem: Buffer | null = null;
+      if (!pagina.isClosed()) {
+        imagem = await pagina.screenshot({ type: 'jpeg', quality: 50, timeout: 2_000, animations: 'allow', caret: 'initial' }).catch(() => null);
+      }
+      return { worker, chave, imagem };
+    }),
+  );
 }
 
 /** Põe a execução em pausa (os casos param entre passos, nunca a meio de uma ação). */

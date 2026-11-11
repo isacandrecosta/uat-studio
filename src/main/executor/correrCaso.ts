@@ -10,6 +10,7 @@ import {
   BlocoDaJornada,
   Caso,
   Diferenca,
+  EstadoBlocoCaso,
   EstadoPasso,
   Jornada,
   Localizador,
@@ -57,6 +58,8 @@ export interface PedidoCaso {
   deveSaltar(): boolean;
   /** Chamado antes de cada passo: é aqui que a execução espera se estiver em pausa (ou em modo lento). */
   entrePassos(): Promise<void>;
+  /** A página do browser deste caso (para as miniaturas ao vivo); null quando fecha. */
+  aoAbrirPagina?(pagina: Page | null): void;
 }
 
 /** Erro nos dados ou na definição do teste (não na aplicação). */
@@ -127,7 +130,9 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     variaveis: {},
     duracaoMs: 0,
     evidencias: [],
+    blocos: jornada.blocos.map(() => 'por-correr'),
   };
+  const estadosBlocos = resultado.blocos as EstadoBlocoCaso[];
   const variaveis: Record<string, string> = { ...caso.dados, TESTE: caso.id, RUN: pedido.runId };
 
   // Variáveis usadas em passos secretos (passwords): nunca aparecem em logs.
@@ -307,6 +312,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     contexto = await pedido.browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'pt-PT' });
     if (pedido.trace) await contexto.tracing.start({ screenshots: true, snapshots: true });
     pagina = await contexto.newPage();
+    pedido.aoAbrirPagina?.(pagina);
     const monitor = new MonitorDePedidos(pagina);
     // Depois de uma verificação, o ecrã já assentou: as seguintes não precisam de esperar tanto.
     let ecraAssente = false;
@@ -325,8 +331,11 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       if (item.condicao?.trim() && !cumpre(item.condicao, procurar, `condição do bloco "${bloco.nome}"`)) {
         escrever(`Bloco ${indice + 1}: ${bloco.nome} (não executado)`);
         registar(bloco.nome, 'Bloco não executado', 'ignorado', 0, `a condição não se cumpre: ${item.condicao.trim()}`);
+        estadosBlocos[indice] = 'ignorado';
         return;
       }
+      estadosBlocos[indice] = 'a-correr';
+      pedido.aoProgredir(resultado);
       escrever(`Bloco ${indice + 1}: ${bloco.nome}${item.sempre ? ' (limpeza: corre sempre)' : ''}`);
       evento({ tipo: 'bloco-inicio', bloco: bloco.nome });
 
@@ -418,10 +427,13 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     let houveErro = false;
     for (const [indice, item] of jornada.blocos.entries()) {
       if (houveErro && !item.sempre) continue;
+      const diferencasAntes = resultado.diferencas.length;
       try {
         await correrBloco(indice, item);
+        if (estadosBlocos[indice] === 'a-correr') estadosBlocos[indice] = resultado.diferencas.length > diferencasAntes ? 'ko' : 'ok';
       } catch (erro) {
         if (erro instanceof Parado || erro instanceof Saltado) throw erro;
+        estadosBlocos[indice] = 'erro';
         if (houveErro) {
           // Uma limpeza que falha não muda o resultado do caso, mas fica registada.
           registar(blocoAtual, passoAtual || 'Limpeza', 'erro', 0, `A limpeza falhou: ${explicarErro(erro, limiteMs)}`);
@@ -579,6 +591,9 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       await registarErro(erro);
     }
   } finally {
+    // O que não chegou a correr (depois de um erro, ou caso parado/saltado).
+    for (const [i, e] of estadosBlocos.entries()) if (e === 'por-correr' || e === 'a-correr') estadosBlocos[i] = 'nao-corrido';
+    pedido.aoAbrirPagina?.(null);
     await guardarTrace();
     if (contexto) {
       if (pedido.trace) await contexto.tracing.stop().catch(() => undefined);

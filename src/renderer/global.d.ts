@@ -60,6 +60,8 @@ declare global {
         continuar(): Promise<EstadoRun | null>;
         /** Salta um caso (`idDaJornada/idDoCaso`), esteja por correr ou a correr. */
         saltar(chave: string): Promise<EstadoRun | null>;
+        /** Miniaturas ao vivo do browser de cada worker (imagem "data:", ou null). */
+        miniaturas(): Promise<Array<{ worker: number; chave: string; imagem: string | null }>>;
         /** Verificação antes de correr: o que falta ou está mal para esta escolha. */
         verificar(ambito: AmbitoRun): Promise<ResultadoVerificacao>;
         historico(): Promise<EstadoRun[]>;

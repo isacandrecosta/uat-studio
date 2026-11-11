@@ -180,8 +180,24 @@ export interface ResultadoCaso {
   pasta?: string;
   /** Ficheiros de evidência (prints, trace), relativos à pasta do caso. */
   evidencias?: string[];
+  /** Estado de cada bloco da jornada neste caso (pela ordem do percurso), para o mapa de execução. */
+  blocos?: EstadoBlocoCaso[];
+  /** Número do worker (1, 2, ...) que correu este caso. */
+  worker?: number;
   /** Passos onde o localizador preferido falhou e uma alternativa funcionou (para reparar com um clique). */
   reparos?: SugestaoReparo[];
+}
+
+/** nao-corrido: ficou por correr (depois de um erro, ou o caso foi parado/saltado). */
+export type EstadoBlocoCaso = 'por-correr' | 'a-correr' | 'ok' | 'ko' | 'erro' | 'ignorado' | 'nao-corrido';
+
+/** "Fotografia" de uma jornada no início da execução (o mapa e o histórico não dependem de alterações posteriores). */
+export interface JornadaDoRun {
+  id: string;
+  nome: string;
+  epicoId: string;
+  epicoNome: string;
+  blocos: Array<{ nome: string; tipo: TipoBloco; aplicacaoNome?: string; cor?: string; condicional?: boolean; limpeza?: boolean }>;
 }
 
 /** O localizador preferido de um passo falhou, mas outro encontrou o elemento. */
@@ -234,6 +250,8 @@ export interface EstadoRun {
   casos: ResultadoCaso[];
   /** Pasta da execução (dentro de `execucoes/`). */
   pasta?: string;
+  /** As jornadas envolvidas, como estavam no início (para o mapa de execução). */
+  jornadas?: JornadaDoRun[];
 }
 
 export interface PedidoGravacao {

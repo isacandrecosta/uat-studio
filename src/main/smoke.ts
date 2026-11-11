@@ -8,7 +8,7 @@ import { ChildProcess, spawn } from 'node:child_process';
 import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
 import { apagarSegredosDoPerfil, segredosPreenchidos } from './cofre';
 import * as repo from './projeto/repositorio';
-import { continuarRun, estadoRun } from './executor/execucao';
+import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { criarProjeto } from './projeto/ipc';
 
@@ -563,6 +563,50 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await esperar(j, "document.querySelector('#reparos .botao-reparar').textContent === 'Reparado'");
         const reparado = repo.ler(pasta, 'blocos', 'simular-credito').passos.find((p) => p.id === 'p3')?.alvo?.localizadores.map((l) => l.valor);
         confirmar(reparado?.join(',') === 'inpValor,inpValorAntigo', `O localizador não foi reparado: ${reparado?.join(',')}`);
+      },
+    ],
+    [
+      'mapa de execução ao vivo: miniaturas dos workers, cores por bloco e as 3 vistas',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"mapa\"]').click()");
+        await esperar(j, "document.getElementById('mapa-run') && document.querySelector('#mapa[data-vista=\"jornadas\"]')");
+        // A execução começa com o mapa já aberto: o mapa tem de a apanhar sozinho.
+        await iniciarRun(pasta, { jornadaIds: ['simular-e-validar'] }, { canal: 'msedge', visivel: false, paralelo: 2 });
+        await esperar(j, "document.querySelector('.mapa-jornada[data-jornada=\"simular-e-validar\"] .no[data-estado=\"a-correr\"]')", 60_000);
+        await esperar(j, "document.querySelector('#workers .worker img')", 60_000);
+        const workers = await naPagina<number>(j, "document.querySelectorAll('#workers .worker').length");
+        confirmar(workers === 2, `Deviam aparecer 2 workers (apareceram ${workers}).`);
+        confirmar(await naPagina<boolean>(j, "Boolean(document.getElementById('mapa-pausar'))"), 'O mapa devia ter o botão Pausar durante a execução.');
+        const escolhida = await naPagina<string>(j, "document.getElementById('mapa-run').selectedOptions[0]?.textContent ?? ''");
+        confirmar(escolhida.startsWith(estadoRun()?.id + ' '), `A lista devia mostrar a execução nova (${estadoRun()?.id}): ${escolhida}`);
+        await new Promise((r) => setTimeout(r, 4_000));
+        await tirarPrint(j, raiz, 'mapa-ao-vivo');
+        const miniatura = await naPagina<string>(j, "document.querySelector('#workers .worker img')?.src ?? ''");
+        if (miniatura.startsWith('data:image/jpeg;base64,')) fs.writeFileSync(path.join(raiz, 'out', 'smoke-miniatura.jpg'), Buffer.from(miniatura.split(',')[1], 'base64'));
+
+        const run = await esperarFimDoRun(300_000);
+        if (!run || run.ativo) throw new Error('A execução do mapa não terminou.');
+        console.log(`[smoke]   ${run.casos.map((c) => `${c.casoId}=${c.estado} [${(c.blocos ?? []).join(',')}] w${c.worker}`).join('; ')}`);
+        confirmar(run.casos.every((c) => c.estado === 'OK'), 'Os 3 casos deviam dar OK.');
+        confirmar(run.casos[2].blocos?.join(',') === 'ok,ignorado,ignorado,ignorado', `Estados dos blocos do caso rejeitado errados: ${run.casos[2].blocos?.join(',')}`);
+        confirmar(run.jornadas?.[0]?.blocos.length === 4, 'A execução devia guardar a fotografia da jornada (4 blocos).');
+        await esperar(j, "document.querySelector('#mapa-resumo[data-ativo=\"false\"]') && !document.querySelector('#workers .worker')");
+        const cores = await naPagina<string>(j, "[...document.querySelectorAll('.mapa-jornada[data-jornada=\"simular-e-validar\"] .no')].map((n) => n.dataset.estado).join(',')");
+        confirmar(cores === 'ok,ok,ok,ok', `As cores dos blocos no fim deviam ser todas OK: ${cores}`);
+
+        await naPagina(j, "document.querySelector('.separador[data-vista=\"casos\"]').click()");
+        await esperar(j, "document.querySelector('.mapa-matriz[data-jornada=\"simular-e-validar\"]')");
+        const celulas = await naPagina<string>(j, "[...document.querySelectorAll('tr[data-caso=\"simular-e-validar/BO0003\"] .celula')].map((c) => c.dataset.estado).join(',')");
+        confirmar(celulas === 'ok,ignorado,ignorado,ignorado', `Matriz do caso rejeitado errada: ${celulas}`);
+        await tirarPrint(j, raiz, 'mapa-casos');
+        await naPagina(j, "document.querySelector('.separador[data-vista=\"epicos\"]').click()");
+        await esperar(j, "document.querySelector('.no[data-epico=\"Simulações de crédito\"][data-estado=\"ok\"]') && document.querySelector('.no[data-no-jornada=\"simular-e-validar\"]')");
+        await naPagina(j, "document.querySelector('.separador[data-vista=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('.mapa-jornada .no[data-bloco=\"0\"]')");
+        const faixa = await naPagina<string>(j, "getComputedStyle(document.querySelector('.mapa-jornada .no[data-bloco=\"0\"]'), '::after').backgroundColor");
+        confirmar(faixa === 'rgb(47, 107, 237)', `O bloco devia ter a faixa com a cor da aplicação (obtido ${faixa}).`);
+        await tirarPrint(j, raiz, 'mapa');
       },
     ],
     [
