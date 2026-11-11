@@ -122,6 +122,9 @@ function htmlDoCaso(caso: ResultadoCaso): string {
       )}${caso.erro.porExecutar.length ? `<br><strong>Ficou por executar:</strong> ${esc(caso.erro.porExecutar.join(', '))}` : ''}</div>`,
     );
   }
+  if (caso.sugestoes?.length) {
+    partes.push(`<div class="sugestoes"><strong>Sugestão:</strong><ul>${caso.sugestoes.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>`);
+  }
   if (caso.diferencas.length > 0) {
     partes.push(
       `<table class="dif"><thead><tr><th>Passo</th><th>Esperado</th><th>Obtido</th><th>Diferença</th></tr></thead><tbody>${caso.diferencas
@@ -171,6 +174,7 @@ summary{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 14p
 .estado{min-width:64px;padding:2px 8px;border-radius:5px;background:#98a2b3;color:#fff;font-weight:700;font-size:12px;text-align:center}
 .e-OK .estado{background:#1a8f4c}.e-KO .estado{background:#c0392b}.e-ERRO .estado{background:#e0a100}
 .id{font-weight:700}.nome{flex:1;min-width:120px}.detalhe{padding:4px 14px 14px;border-top:1px solid #e1e4ea}
+.sugestoes{margin:10px 0;padding:8px 12px;border-radius:8px;background:#eef4ff}.sugestoes ul{margin:4px 0 0 18px;padding:0}
 .erro{margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff4d9;line-height:1.6}
 table.dif{width:100%;margin:10px 0;border-collapse:collapse}table.dif th,table.dif td{padding:6px 8px;border:1px solid #e1e4ea;text-align:left}
 table.dif th{background:#fdecea}.passos{margin:10px 0;padding-left:28px;line-height:1.7}

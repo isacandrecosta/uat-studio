@@ -1,5 +1,6 @@
 // Ecrã Blocos de API: construir pedidos, perfis de autenticação (com segredos no cofre) e teste individual.
 import { ondeEUsado } from '../../shared/blocos.js';
+import { importarPedidos, type PedidoImportado } from '../../shared/importar.js';
 import {
   SEGREDOS_DO_PERFIL,
   type Bloco,
@@ -29,6 +30,7 @@ const TIPOS_CORPO: Array<[TipoCorpo, string]> = [
   ['nenhum', 'Sem corpo'],
   ['json', 'JSON'],
   ['xml', 'XML'],
+  ['soap', 'SOAP (XML)'],
   ['texto', 'Texto'],
   ['formulario', 'Formulário (a=1&b=2)'],
 ];
@@ -51,6 +53,16 @@ const OPERADORES: Array<[OperadorApi, string]> = [
 /** Bloco que está aberto no editor (mantém-se ao mudar de ecrã). */
 let blocoAbertoId: string | null = null;
 let casoDeExemplo = '';
+
+/** Envelope SOAP 1.1 de exemplo, posto no corpo quando se escolhe "SOAP" com o corpo vazio. */
+const ENVELOPE_SOAP = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <Operacao xmlns="http://exemplo.pt/servico">
+      <Campo>{Valor}</Campo>
+    </Operacao>
+  </soap:Body>
+</soap:Envelope>`;
 
 function pedidoVazio(): PedidoApi {
   return {
@@ -239,6 +251,91 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
     redesenhar();
   }
 
+  /** Importar pedidos de um comando cURL, de uma especificação OpenAPI (JSON) ou de uma coleção do Postman. */
+  async function importar(): Promise<void> {
+    if (aplicacoesApi.length === 0) {
+      await confirmar('Falta uma aplicação de API', 'Cria primeiro uma aplicação do tipo API (ecrã Jornadas, cartão Aplicações), com o endereço da API neste ambiente.', 'Fechar');
+      return;
+    }
+    let lidos: PedidoImportado[] = [];
+    const fechar = (): void => {
+      dialogo.close();
+      dialogo.remove();
+    };
+    const texto = h('textarea', { id: 'importar-texto', class: 'campo campo-area', rows: 8, spellcheck: 'false', placeholder: 'Cole aqui um comando cURL, ou o JSON de uma especificação OpenAPI ou de uma coleção do Postman.' });
+    const ficheiro = h('input', { id: 'importar-ficheiro', type: 'file', accept: '.json,.txt,.sh' }) as HTMLInputElement;
+    const aplicacao = h('select', { id: 'importar-aplicacao', class: 'campo' }, aplicacoesApi.map((a) => h('option', { value: a.id }, a.nome)));
+    const previsao = h('div', { id: 'importar-previsao', class: 'importar-previsao' });
+    const erro = h('p', { class: 'aviso-erro', role: 'alert', hidden: true });
+    const botaoImportar = h('button', { id: 'importar-confirmar', type: 'button', class: 'botao botao-primario', disabled: true }, 'Importar');
+    const ler = (): void => {
+      erro.hidden = true;
+      lidos = [];
+      previsao.replaceChildren();
+      botaoImportar.setAttribute('disabled', '');
+      if (!texto.value.trim()) return;
+      try {
+        lidos = importarPedidos(texto.value);
+      } catch (e) {
+        erro.textContent = mensagemDeErro(e);
+        erro.hidden = false;
+        return;
+      }
+      previsao.append(
+        h('p', { class: 'suave' }, `${lidos.length} pedido${lidos.length === 1 ? '' : 's'} encontrado${lidos.length === 1 ? '' : 's'}. Escolhe os que queres importar:`),
+        h(
+          'ul',
+          { class: 'lista-itens' },
+          lidos.map((l, i) =>
+            h(
+              'li',
+              { class: 'item' },
+              h('label', { class: 'opcao' }, h('input', { type: 'checkbox', checked: true, 'data-importar': i }), h('span', { class: 'metodo', 'data-metodo': l.pedido.metodo }, l.pedido.metodo), ` ${l.nome}`),
+              l.avisos.length > 0 && h('span', { class: 'item-meta suave' }, l.avisos.join(' ')),
+            ),
+          ),
+        ),
+      );
+      botaoImportar.removeAttribute('disabled');
+    };
+    texto.addEventListener('input', ler);
+    ficheiro.addEventListener('change', async () => {
+      const escolhido = ficheiro.files?.[0];
+      if (!escolhido) return;
+      texto.value = await escolhido.text();
+      ler();
+    });
+    botaoImportar.addEventListener('click', async () => {
+      const escolhidos = lidos.filter((_, i) => (previsao.querySelector(`[data-importar="${i}"]`) as HTMLInputElement | null)?.checked);
+      let ultimo = '';
+      for (const l of escolhidos) {
+        const novo = await api.dados.guardar('blocos', { nome: l.nome, tipo: 'API', aplicacaoId: aplicacao.value, passos: [], pedido: l.pedido });
+        ultimo = novo.id;
+      }
+      fechar();
+      if (ultimo) blocoAbertoId = ultimo;
+      redesenhar();
+    });
+    const dialogo = h(
+      'dialog',
+      { class: 'dialogo dialogo-importar', oncancel: fechar },
+      h(
+        'div',
+        { class: 'dialogo-corpo' },
+        h('h2', {}, 'Importar pedidos'),
+        h('p', { class: 'suave' }, 'Cada pedido vira um bloco de API. As {variáveis} (por exemplo {id} no caminho) vêm das colunas dos casos. Passwords e tokens não são importados: ficam nos perfis de autenticação.'),
+        texto,
+        h('label', { class: 'campo-grupo' }, 'Ou escolher um ficheiro', ficheiro),
+        h('label', { class: 'campo-grupo' }, 'Aplicação (endereço base)', aplicacao),
+        erro,
+        previsao,
+        h('div', { class: 'dialogo-botoes' }, h('button', { type: 'button', class: 'botao', onclick: fechar }, 'Cancelar'), botaoImportar),
+      ),
+    );
+    document.body.append(dialogo);
+    dialogo.showModal();
+  }
+
   function cartaoBlocos(): HTMLElement {
     return h(
       'section',
@@ -304,7 +401,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
     const desenharVerificacoes = (): void => {
       listaVerificacoes.replaceChildren(
         ...pedido.verificacoes.map((v, indice) => {
-          const caminho = texto(`v-caminho-${indice}`, v.caminho ?? '', (valor) => (v.caminho = valor), v.alvo === 'cabecalho' ? 'Nome do cabeçalho' : 'Campo, por exemplo: cliente.id');
+          const caminho = texto(`v-caminho-${indice}`, v.caminho ?? '', (valor) => (v.caminho = valor), v.alvo === 'cabecalho' ? 'Nome do cabeçalho' : 'Campo (cliente.id) ou XPath (//Estado)');
           caminho.setAttribute('aria-label', 'Campo ou cabeçalho');
           caminho.hidden = v.alvo === 'estado' || v.alvo === 'tempo';
           const esperado = texto(`v-esperado-${indice}`, v.esperado, (valor) => (v.esperado = valor), 'Valor esperado (pode ter {variáveis})');
@@ -528,9 +625,27 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
         'div',
         { class: 'campo-grupo' },
         h('label', { for: 'api-corpo' }, 'Corpo do pedido'),
-        escolha('api-tipo-corpo', TIPOS_CORPO, pedido.tipoCorpo, (v) => (pedido.tipoCorpo = v), 'Tipo de corpo'),
+        escolha(
+          'api-tipo-corpo',
+          TIPOS_CORPO,
+          pedido.tipoCorpo,
+          (v) => {
+            pedido.tipoCorpo = v;
+            // SOAP: começa com um envelope de exemplo e lembra o cabeçalho SOAPAction.
+            if (v === 'soap' && !pedido.corpo.trim()) {
+              pedido.corpo = ENVELOPE_SOAP;
+              const campoCorpo = document.getElementById('api-corpo') as HTMLTextAreaElement | null;
+              if (campoCorpo) campoCorpo.value = ENVELOPE_SOAP;
+            }
+          },
+          'Tipo de corpo',
+        ),
         area('api-corpo', pedido.corpo, (v) => (pedido.corpo = v), '{ "nome": "{Nome}", "nif": "{NIF}" }', 6),
-        h('p', { class: 'ajuda-campo' }, 'Podes usar {variáveis} dos casos, {TESTE}, {RUN}, {DATA:yyyyMMdd} e variáveis calculadas em qualquer campo.'),
+        h(
+          'p',
+          { class: 'ajuda-campo' },
+          'Podes usar {variáveis} dos casos, {TESTE}, {RUN}, {DATA:yyyyMMdd} e variáveis calculadas em qualquer campo. Em JSON e XML/SOAP os valores são protegidos (aspas, &, <). SOAP: acrescenta o cabeçalho "SOAPAction: ..." se o serviço o pedir. Respostas em XML: o campo lê-se por XPath (por exemplo //Estado, Cliente.Nome ou //Cliente/@id; os prefixos soap:/ns2: são ignorados).',
+        ),
       ),
       h(
         'div',
@@ -643,7 +758,10 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
   }
 
   // ---------- Montagem ----------
-  acoes.append(h('button', { id: 'btn-novo-bloco-api', type: 'button', class: 'botao botao-primario', onclick: () => void novoBloco() }, 'Novo bloco de API'));
+  acoes.append(
+    h('button', { id: 'btn-importar-api', type: 'button', class: 'botao', onclick: () => void importar() }, 'Importar (cURL, OpenAPI, Postman)'),
+    h('button', { id: 'btn-novo-bloco-api', type: 'button', class: 'botao botao-primario', onclick: () => void novoBloco() }, 'Novo bloco de API'),
+  );
   const aberto = blocosApi.find((b) => b.id === blocoAbertoId) ?? blocosApi[0];
   blocoAbertoId = aberto?.id ?? null;
   corpo.append(

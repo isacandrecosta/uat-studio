@@ -10,6 +10,7 @@ import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
 import { criarAmbienteApi } from '../api/ambiente';
 import { caminhoNaExecucao, pausarWorker, responderManual, saltarJornada, continuarRun, estadoRun, iniciarRun, listarHistorico, miniaturasDosWorkers, pararRun, pausarRun, saltarCaso } from './execucao';
+import { abrirTrace } from './trace';
 import { verificarAntesDeCorrer } from './verificar';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
@@ -59,6 +60,11 @@ export function registarIpcExecucoes(): void {
     if (!fs.existsSync(destino)) throw new repo.ErroProjeto('Esse ficheiro já não existe.');
     const erro = await shell.openPath(destino);
     if (erro) throw new repo.ErroProjeto(`Não foi possível abrir: ${erro}`);
+  });
+  ipcMain.handle('run:abrir-trace', (_e, ...partes: string[]) => {
+    const destino = caminhoNaExecucao(pastaDoProjeto(), ...partes.map(String));
+    if (!destino.endsWith('.zip') || !fs.existsSync(destino)) throw new repo.ErroProjeto('Esse trace já não existe.');
+    return abrirTrace(caminhoNaExecucao(pastaDoProjeto()), destino);
   });
   ipcMain.handle('run:ler-texto', (_e, ...partes: string[]) => {
     const destino = caminhoNaExecucao(pastaDoProjeto(), ...partes.map(String));

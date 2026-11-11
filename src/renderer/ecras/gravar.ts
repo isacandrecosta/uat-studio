@@ -80,6 +80,34 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
       await api.gravador.terminar(guardar);
       await atualizar();
     };
+    // "Regravar este elemento": o bloco é guardado logo que o elemento é trocado; aqui só se fecha.
+    if (g.regravar !== undefined) {
+      acoes.replaceChildren(
+        h(
+          'button',
+          {
+            id: 'btn-terminar-regravar',
+            type: 'button',
+            class: g.regravado ? 'botao botao-primario' : 'botao',
+            onclick: async () => {
+              await api.gravador.terminar(false);
+              await atualizar();
+            },
+          },
+          g.regravado ? 'Terminar' : 'Cancelar',
+        ),
+      );
+      corpo.replaceChildren(
+        h(
+          'section',
+          { id: 'gravacao-ativa', class: 'cartao', 'data-regravar': g.regravado ? 'feito' : 'a-espera' },
+          h('h2', {}, `Regravar o elemento "${g.regravar}"`),
+          h('p', { class: 'suave' }, `Bloco "${bloco.nome}" (${g.aplicacaoNome}). Só o elemento deste passo muda; a ação e o valor ficam como estavam.`),
+          g.mensagem && h('p', { class: 'caixa-sugestoes', id: 'mensagem-regravar', role: 'status' }, g.mensagem),
+        ),
+      );
+      return;
+    }
     acoes.replaceChildren(
       h('button', { type: 'button', class: 'botao', onclick: () => void terminar(false) }, 'Cancelar'),
       h(

@@ -3,7 +3,7 @@ import { avaliarFormula, contextoDeExemplo, ErroFormula, preencherTexto } from '
 import { Bloco, ResultadoApi } from '../../shared/modelo';
 import { lerSegredo } from '../cofre';
 import * as repo from '../projeto/repositorio';
-import { AmbienteApi, ErroApi, escaparJson, executarBlocoApi } from './pedidos';
+import { AmbienteApi, ErroApi, executarBlocoApi } from './pedidos';
 
 export function criarAmbienteApi(pasta: string): AmbienteApi {
   return {
@@ -56,9 +56,9 @@ export async function testarBloco(pasta: string, bloco: Bloco, chaveCaso: string
       bloco,
       urlBase: aplicacao?.urls[ambiente.id],
       perfil,
-      preencher: (texto, paraJson) => {
+      preencher: (texto, proteger) => {
         try {
-          return preencherTexto(texto, { ...base, variavel: procurar }, paraJson ? escaparJson : undefined);
+          return preencherTexto(texto, { ...base, variavel: procurar }, proteger);
         } catch (erro) {
           if (erro instanceof ErroFormula) throw new ErroApi(erro.message);
           throw erro;

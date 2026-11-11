@@ -32,7 +32,7 @@ function contar(run: EstadoRun): Record<string, number> {
   return totais;
 }
 
-export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Promise<void> {
+export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contexto): Promise<void> {
   const api = window.uatStudio;
   deixarDeOuvir?.();
   deixarDeOuvir = null;
@@ -502,6 +502,9 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
         ),
       );
     }
+    if (caso.sugestoes?.length) {
+      zona.append(h('div', { class: 'caixa-sugestoes' }, h('strong', {}, 'Sugestão'), h('ul', {}, caso.sugestoes.map((s) => h('li', {}, s)))));
+    }
     if (caso.diferencas.length > 0) {
       zona.append(
         h(
@@ -548,12 +551,95 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
           { class: 'acoes' },
           h('button', { type: 'button', class: 'botao botao-pequeno-livre', onclick: () => void api.runs.abrir(pasta, pastaCaso) }, 'Abrir pasta do caso'),
           h('button', { type: 'button', class: 'botao botao-pequeno-livre', onclick: () => void api.runs.abrir(pasta, pastaCaso, 'caso.log') }, 'Abrir caso.log'),
-          traces.length > 0 && h('span', { class: 'suave' }, `Trace: ${traces.join(', ')} (abre-se em trace.playwright.dev ou com "npx playwright show-trace")`),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao botao-pequeno-livre botao-copiar-log',
+              onclick: async (evento: Event) => {
+                const botao = evento.currentTarget as HTMLButtonElement;
+                try {
+                  await navigator.clipboard.writeText(await api.runs.lerTexto(pasta, pastaCaso, 'caso.log'));
+                  botao.textContent = 'Log copiado';
+                } catch {
+                  botao.textContent = 'Não foi possível copiar';
+                }
+                setTimeout(() => (botao.textContent = 'Copiar log'), 2000);
+              },
+            },
+            'Copiar log',
+          ),
+          traces.map((t) =>
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao botao-pequeno-livre botao-trace',
+                'data-trace': t,
+                title: 'Gravação passo a passo do Playwright (ações, prints e pedidos de rede)',
+                onclick: () => void api.runs.abrirTrace(pasta, pastaCaso, t).catch((e) => confirmar('Não foi possível abrir o trace', mensagemDeErro(e), 'Fechar')),
+              },
+              traces.length > 1 ? `Abrir trace ${t.replace(/D/g, '')}` : 'Abrir trace',
+            ),
+          ),
+          !run.ativo &&
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao botao-pequeno-livre botao-repetir-caso',
+                disabled: atualAtiva(),
+                onclick: async () => {
+                  try {
+                    await iniciar({ chavesCasos: [caso.chave] }, { ...run.opcoes, paralelo: 1, confirmouProducao: false });
+                  } catch (e) {
+                    await confirmar('Não foi possível repetir', mensagemDeErro(e), 'Fechar');
+                  }
+                },
+              },
+              'Repetir só este caso',
+            ),
         ),
       );
     }
     const retomar = caixaRetomar(run, caso);
     if (retomar) zona.append(retomar);
+    const regravar = botaoRegravar(run, caso);
+    if (regravar) zona.querySelector('.caixa-sugestoes')?.append(regravar);
+  }
+
+  /**
+   * "Regravar este elemento": quando o caso parou porque um elemento não foi encontrado (ou há vários iguais),
+   * abre o gravador, repete os passos anteriores do bloco com os dados deste caso e pede para apontar o elemento.
+   */
+  function botaoRegravar(run: EstadoRun, caso: ResultadoCaso): HTMLElement | null {
+    const erro = caso.erro;
+    if (run.ativo || !erro?.blocoId || !erro.passoId || !/Não encontrei o elemento|Há d+ elementos que correspondem/.test(erro.mensagem)) return null;
+    const bloco = blocos.get(erro.blocoId);
+    if (bloco?.tipo !== 'UI' || !bloco.aplicacaoId || !bloco.passos.some((p) => p.id === erro.passoId && p.alvo)) return null;
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: 'botao botao-pequeno-livre botao-regravar',
+        onclick: async () => {
+          // Os valores do caso: os dados do Excel, as variáveis guardadas e os parâmetros do bloco nesta jornada.
+          const valores: Record<string, string> = { ...(conjuntos.find((c) => c.id === caso.jornadaId)?.casos.find((c) => c.id === caso.casoId)?.dados ?? {}), ...caso.variaveis, TESTE: caso.casoId };
+          const item = jornadas.find((j) => j.id === caso.jornadaId)?.blocos.find((b) => b.blocoId === bloco.id);
+          for (const [nome, valor] of Object.entries(item?.parametros ?? {})) {
+            if (valor.tipo === 'fixo') valores[nome] = valor.valor;
+            else if (valor.tipo === 'variavel' && valores[valor.nome] !== undefined) valores[nome] = valores[valor.nome];
+          }
+          try {
+            await api.gravador.iniciar({ aplicacaoId: bloco.aplicacaoId ?? '', blocoId: bloco.id, abrirAplicacao: false, canal: run.opcoes.canal, regravar: { passoId: erro.passoId ?? '', valores } });
+            irPara('gravar');
+          } catch (e) {
+            await confirmar('Não foi possível regravar', mensagemDeErro(e), 'Fechar');
+          }
+        },
+      },
+      'Regravar este elemento',
+    );
   }
 
   /**

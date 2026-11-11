@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('uatStudio', {
     historico: chamar('run:historico'),
     abrir: chamar('run:abrir'),
     lerTexto: chamar('run:ler-texto'),
+    abrirTrace: chamar('run:abrir-trace'),
     imagem: chamar('run:imagem'),
     aoAtualizar: ouvir('run:atualizado'),
   },

@@ -606,3 +606,13 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .caixa-retomar .retomar-bloco { width: auto; max-width: 360px; }
 .caixa-retomar .ajuda-campo { flex-basis: 100%; margin: 0; }
 .worker-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* Sugestões no detalhe do caso */
+.caixa-sugestoes { padding: 8px 12px; border-radius: 8px; background: #eef4ff; border: 1px solid #c9daf8; }
+.caixa-sugestoes ul { margin: 4px 0 0 18px; padding: 0; }
+.caixa-sugestoes li + li { margin-top: 4px; }
+
+/* Importar pedidos de API */
+.dialogo-importar { width: min(760px, 94vw); }
+.importar-previsao .lista-itens { max-height: 260px; overflow-y: auto; }
+.importar-previsao .item { flex-wrap: wrap; }

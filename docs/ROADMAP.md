@@ -16,7 +16,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 ## Fase 2: dados e API
 - [x] Motor de fórmulas (decimal exato, arredondamento selecionável), marcadores, contadores persistentes e geradores.
 - [x] Blocos de API: construtor de pedidos, perfis OAuth 2.0 (client credentials, password, renovação) / API Key / Basic / Bearer, verificações, guardar da resposta, teste individual.
-- [ ] Blocos de API, o que falta: certificado de cliente (mTLS), OAuth Authorization Code + PKCE, verificações em XML (XPath), SOAP, importar cURL/OpenAPI/Postman.
+- [x] Blocos de API: verificações e "guardar" em XML (XPath), SOAP, importar cURL/OpenAPI (JSON)/Postman.
+- [ ] Blocos de API, o que falta: certificado de cliente (mTLS), OAuth Authorization Code + PKCE.
 - [x] Cofre local de segredos; segredos fora do trace (desligado ou limpo no login e nos pedidos de token).
 - [x] Passos e blocos condicionais ("só se `{Produto}` = X").
 - [x] Bloco "esperar até" e ação "encontrar linha na tabela".
@@ -29,7 +30,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Controlo por jornada ("saltar o resto da jornada") e por worker (pausar só um); retomar a meio (recomeçar um caso a partir de um bloco, com as variáveis guardadas).
 - [x] Mapa de execução ao vivo (grafo, cores, miniaturas de workers). *Fica de fora "abrir o browser de um worker" (em background não há janela para mostrar).*
 - [x] Reparar localizadores com um clique (quando o preferido falha e uma alternativa funciona).
-- [ ] Log de erro com explicação por regras e sugestões (por exemplo, "regravar o elemento" quando nenhum localizador serve).
+- [x] Log de erro com explicação por regras e sugestões; ações "copiar log", "abrir trace" (dentro da app), "repetir só este caso" e "regravar este elemento".
 - [x] Matriz de cobertura e comparação com a execução anterior.
 - [x] Bloco "passo manual".
 - [x] "Onde é usado" de cada bloco.

@@ -718,6 +718,108 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'erro explicado com sugestões, abrir o trace, regravar o elemento e repetir só este caso',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        // O campo Valor deixa de ser encontrado por qualquer localizador.
+        const bloco = repo.ler(pasta, 'blocos', 'simular-credito');
+        const passoValor = bloco.passos.find((p) => p.id === 'p3');
+        if (!passoValor?.alvo) throw new Error('O passo p3 do exemplo não tem alvo.');
+        passoValor.alvo.localizadores = [{ tipo: 'testid', valor: 'inpNaoExiste' }];
+        repo.guardar(pasta, 'blocos', bloco);
+
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-correr') && !document.getElementById('btn-correr').disabled");
+        /** Espera que comece uma execução diferente desta. */
+        const esperarNova = async (anterior: string | undefined): Promise<void> => {
+          const fim = Date.now() + 60_000;
+          while (estadoRun()?.id === anterior && Date.now() < fim) await new Promise((r) => setTimeout(r, 100));
+        };
+        const antesDoErro = estadoRun()?.id;
+        await naPagina(
+          j,
+          "(() => { const a = document.getElementById('run-ambito'); a.value = 'jornada:simular-credito'; a.dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('run-casos').value = 'TC0001'; document.getElementById('run-paralelo').value = '1'; document.getElementById('btn-correr').click(); })()",
+        );
+        // "Correr" verifica primeiro: com problemas, há que confirmar.
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"true\"]') || document.getElementById('btn-correr-na-mesma')", 60_000);
+        if (await naPagina<boolean>(j, "Boolean(document.getElementById('btn-correr-na-mesma'))")) await naPagina(j, "document.getElementById('btn-correr-na-mesma').click()");
+        await esperarNova(antesDoErro);
+        const comErro = await esperarFimDoRun(120_000);
+        const caso = comErro?.casos[0];
+        console.log(`[smoke]   ${caso?.casoId} ${caso?.estado}: ${caso?.erro?.mensagem}`);
+        if (!caso) throw new Error('Não há caso.');
+        confirmar(caso.estado === 'ERRO' && caso.erro?.passoId === 'p3' && caso.erro.blocoId === 'simular-credito', 'O caso devia dar ERRO no passo p3.');
+        confirmar((caso.sugestoes ?? []).some((t) => t.includes('Regravar este elemento')), `Faltam as sugestões: ${JSON.stringify(caso.sugestoes)}`);
+        const log = fs.readFileSync(path.join(pasta, 'execucoes', comErro?.pasta ?? '', caso.pasta ?? '', 'caso.log'), 'utf8');
+        confirmar(log.includes('Sugestão: O ecrã pode ter mudado'), 'A sugestão devia estar no caso.log.');
+
+        await esperar(j, "document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo')");
+        await naPagina(j, "document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo').click()");
+        await esperar(j, "document.querySelector('.caixa-sugestoes .botao-regravar') && document.querySelector('.botao-trace') && document.querySelector('.botao-repetir-caso')");
+        await tirarPrint(j, raiz, 'sugestoes');
+
+        // Abrir o trace numa janela da app.
+        const janelasAntes = BrowserWindow.getAllWindows().length;
+        await naPagina(j, "document.querySelector('.botao-trace').click()");
+        const fimJanela = Date.now() + 20_000;
+        while (BrowserWindow.getAllWindows().length === janelasAntes && Date.now() < fimJanela) await new Promise((r) => setTimeout(r, 100));
+        const janelaTrace = BrowserWindow.getAllWindows().find((w) => w !== j);
+        if (!janelaTrace) throw new Error('A janela do trace não abriu.');
+        const fimTrace = Date.now() + 20_000;
+        let textoTrace = '';
+        while (Date.now() < fimTrace && !textoTrace.includes('Actions')) {
+          textoTrace = await janelaTrace.webContents.executeJavaScript('document.body.innerText').catch(() => '');
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        confirmar(janelaTrace.webContents.getURL().includes('/trace/index.html') && textoTrace.includes('Actions') && !textoTrace.includes('Could not load'), `O trace não abriu bem: ${textoTrace.slice(0, 200)}`);
+        await new Promise((r) => setTimeout(r, 1_000));
+        const printTrace = await janelaTrace.webContents.capturePage();
+        fs.writeFileSync(path.join(raiz, 'out', 'smoke-trace.png'), printTrace.toPNG());
+        janelaTrace.destroy();
+
+        // Regravar o elemento: o gravador repete os passos anteriores e espera que se aponte o campo.
+        await naPagina(j, "document.querySelector('.caixa-sugestoes .botao-regravar').click()");
+        await esperar(j, "document.querySelector('#gravacao-ativa[data-regravar=\"a-espera\"]')", 90_000);
+        const fimRepeticao = Date.now() + 90_000;
+        while (!(estadoGravador().mensagem ?? '').startsWith('Pronto') && Date.now() < fimRepeticao) await new Promise((r) => setTimeout(r, 200));
+        confirmar((estadoGravador().mensagem ?? '').startsWith('Pronto'), `A repetição dos passos anteriores falhou: ${estadoGravador().mensagem}`);
+        const p = paginaDoGravador();
+        if (!p) throw new Error('O gravador não tem página.');
+        const barra = await p.locator('#__uat-gravador .barra').textContent();
+        confirmar((barra ?? '').includes('Aponta para: Campo Valor'), `A barra devia pedir o elemento: ${barra}`);
+        const variante = await p.locator('[data-testid="ddVariante"] select').evaluate((el) => (el as HTMLSelectElement).selectedOptions[0]?.text ?? '');
+        confirmar(variante.startsWith('CP12'), `A repetição devia ter escolhido a variante do caso (CP12): ${variante}`);
+        const popup = p.locator('#__uat-gravador .popup');
+        await p.locator('[data-testid="inpValor"]').click();
+        await popup.waitFor();
+        await popup.getByLabel('Texto a escrever').fill('1');
+        await popup.getByRole('button', { name: 'Gravar passo' }).click();
+        const fimRegravar = Date.now() + 20_000;
+        while (!estadoGravador().regravado && Date.now() < fimRegravar) await new Promise((r) => setTimeout(r, 100));
+        confirmar(estadoGravador().regravado, `O elemento não foi regravado: ${await p.locator('#__uat-gravador .aviso').textContent()}`);
+        const valorEscrito = await p.locator('[data-testid="inpValor"]').evaluate((el) => (el instanceof HTMLInputElement ? el.value : (el.querySelector('input') as HTMLInputElement | null)?.value ?? ''));
+        confirmar(valorEscrito === '500', `O passo devia ter escrito o valor do caso (500), escreveu "${valorEscrito}".`);
+        const corrigido = repo.ler(pasta, 'blocos', 'simular-credito').passos.find((x) => x.id === 'p3');
+        confirmar(corrigido?.alvo?.localizadores[0]?.valor === 'inpValor' && corrigido.valor?.tipo === 'variavel', `O passo regravado está errado: ${JSON.stringify(corrigido)}`);
+        await esperar(j, "document.querySelector('#gravacao-ativa[data-regravar=\"feito\"]')");
+        await tirarPrint(j, raiz, 'regravar');
+        await naPagina(j, "document.getElementById('btn-terminar-regravar').click()");
+        await esperar(j, "!document.getElementById('gravacao-ativa')");
+
+        // Repetir só este caso: agora dá OK.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo')");
+        // O detalhe pode já estar aberto (a app lembra-se do caso aberto): só se clica se estiver fechado.
+        await naPagina(j, "document.querySelector('.botao-repetir-caso') || document.querySelector('.caso[data-chave=\"simular-credito/TC0001\"] .caso-topo').click()");
+        await esperar(j, "document.querySelector('.botao-repetir-caso:not([disabled])')");
+        const antesDeRepetir = estadoRun()?.id;
+        await naPagina(j, "document.querySelector('.botao-repetir-caso').click()");
+        await esperarNova(antesDeRepetir);
+        const repetido = await esperarFimDoRun(120_000);
+        confirmar(repetido?.casos.length === 1 && repetido.casos[0].estado === 'OK', `Repetir só este caso devia dar OK: ${repetido?.casos.map((c) => c.estado).join(',')}`);
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {
@@ -939,6 +1041,21 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(tem(/^ok \| Apagar cliente \| DELETE .*HTTP 204/), `O bloco de limpeza devia ter corrido depois do erro:\n${linhas.join('\n')}`);
         confirmar(linhas.filter((l) => l.includes('| Consultar cliente |')).length === 1, 'O bloco depois do erro (sem "corre sempre") não devia ter corrido.');
         confirmar(limpeza.erro?.porExecutar.join(',') === 'Consultar cliente', `Blocos por executar errados: ${limpeza.erro?.porExecutar.join(',')}`);
+
+        // Importar um comando cURL pela interface: vira um bloco de API.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"api\"]').click()");
+        await esperar(j, "document.getElementById('btn-importar-api')");
+        await naPagina(j, "document.getElementById('btn-importar-api').click()");
+        await esperar(j, "document.getElementById('importar-texto')");
+        await escrever('#importar-texto', `curl -X PUT '${base}/api/clientes/{IdCliente}?origem=uat' -H 'Content-Type: application/json' -H 'Authorization: Bearer xpto' --data-raw '{"estado":"Ativo"}'`);
+        await esperar(j, "document.querySelector('#importar-previsao [data-importar=\"0\"]')");
+        await naPagina(j, "document.getElementById('importar-confirmar').click()");
+        await esperar(j, "!document.querySelector('dialog[open]')");
+        const importado = repo.listar(pasta, 'blocos').find((b) => b.nome === 'PUT /api/clientes/{IdCliente}');
+        confirmar(
+          importado?.pedido?.metodo === 'PUT' && importado.pedido.tipoCorpo === 'json' && importado.pedido.parametros[0]?.nome === 'origem' && !JSON.stringify(importado).includes('xpto'),
+          `O bloco importado do cURL está errado: ${JSON.stringify(importado?.pedido)}`,
+        );
 
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');

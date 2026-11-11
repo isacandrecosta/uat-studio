@@ -25,8 +25,9 @@ import {
   VariavelCalculada,
 } from '../../shared/modelo';
 import { mesmoLocalizador } from '../../shared/blocos';
+import { sugerirParaCaso } from '../../shared/sugestoes';
 import { avaliarCondicao, avaliarFormula, ErroFormula, preencherTexto } from '../../shared/formulas';
-import { AmbienteApi, ErroApi, escaparJson, executarBlocoApi } from '../api/pedidos';
+import { AmbienteApi, ErroApi, executarBlocoApi } from '../api/pedidos';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, ErroElemento } from '../motor/localizar';
 import { criarSlug } from '../projeto/repositorio';
@@ -229,12 +230,12 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   /** Troca as {variáveis} de um texto (endereços, cabeçalhos e corpos dos pedidos de API). */
   const preencherNoBloco =
     (item: BlocoDaJornada) =>
-    (texto: string, paraJson?: boolean): string => {
+    (texto: string, proteger?: (valor: string) => string): string => {
       try {
         return preencherTexto(
           texto,
           { variavel: procurarNoBloco(item), teste: caso.id, run: pedido.runId, agora: new Date(), contador: pedido.proximoContador, aleatorio: Math.random },
-          paraJson ? escaparJson : undefined,
+          proteger,
         );
       } catch (erro) {
         if (erro instanceof ErroFormula) throw new ErroDados(erro.message);
@@ -276,6 +277,8 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   let numeroTrace = 0;
   let blocoAtual = '';
   let passoAtual = '';
+  let blocoIdAtual = '';
+  let passoIdAtual = '';
   let indiceBloco = -1;
 
   const guardarTrace = async (): Promise<void> => {
@@ -311,7 +314,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       .slice(indiceBloco + 1)
       .filter((b) => !b.sempre)
       .map((b) => pedido.blocos.get(b.blocoId)?.nome ?? b.blocoId);
-    resultado.erro = { mensagem, bloco: blocoAtual, passo: passoAtual, porExecutar };
+    resultado.erro = { mensagem, bloco: blocoAtual, passo: passoAtual, porExecutar, ...(blocoIdAtual ? { blocoId: blocoIdAtual } : {}), ...(passoIdAtual ? { passoId: passoIdAtual } : {}) };
     registar(blocoAtual, passoAtual || 'Preparar o caso', 'erro', 0, mensagem);
     if (porExecutar.length > 0) escrever(`Blocos por executar: ${porExecutar.join(', ')}`);
     if (!(erro instanceof ErroElemento || erro instanceof ErroAcao || erro instanceof ErroDados || erro instanceof ErroApi)) {
@@ -338,6 +341,8 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       if (!bloco) throw new ErroDados(`O bloco "${item.blocoId}" já não existe.`);
       blocoAtual = bloco.nome;
       passoAtual = '';
+      blocoIdAtual = bloco.id;
+      passoIdAtual = '';
       if (bloco.tipo !== 'UI' && bloco.tipo !== 'API' && bloco.tipo !== 'MANUAL') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
       const aplicacao = bloco.aplicacaoId ? pedido.aplicacoes.get(bloco.aplicacaoId) : undefined;
       // Bloco condicional: só corre se a condição se cumprir para este caso.
@@ -454,6 +459,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       for (const passo of bloco.passos) {
         await pontoDeControlo();
         passoAtual = passo.descricao;
+        passoIdAtual = passo.id;
         resultado.passoAtual = `${bloco.nome}: ${passo.descricao}`;
         pedido.aoProgredir(resultado);
         // Passo condicional: só corre se a condição se cumprir para este caso.
@@ -661,6 +667,11 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         ? `KO (${resultado.diferencas.length} diferença${resultado.diferencas.length === 1 ? '' : 's'})`
         : resultado.estado;
     escrever(`Resultado: ${resumo} em ${segundos(resultado.duracaoMs)}`);
+    const sugestoes = sugerirParaCaso(resultado);
+    if (sugestoes.length > 0) {
+      resultado.sugestoes = sugestoes;
+      for (const s of sugestoes) escrever(`Sugestão: ${s}`);
+    }
     evento({ tipo: 'caso-fim', estado: resultado.estado, duracaoMs: resultado.duracaoMs, diferencas: resultado.diferencas, erro: resultado.erro });
   }
   return resultado;

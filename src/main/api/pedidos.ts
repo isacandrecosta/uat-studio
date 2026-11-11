@@ -2,6 +2,7 @@
 // (OAuth 2.0, API Key, Basic, Bearer), verifica a resposta e guarda valores em variáveis.
 // Não depende do Electron: recebe de fora o "fetch" e a forma de ler segredos, para poder ser testado.
 import { Bloco, OperadorApi, PedidoApi, PerfilAutenticacao, ResultadoApi, VerificacaoApi } from '../../shared/modelo';
+import { escaparXml, lerXml, lerXPath, XML_EM_FALTA } from './xml';
 import { comparar, Decimal, lerNumero } from '../../shared/decimal';
 
 /** Erro com uma mensagem pensada para o utilizador. */
@@ -28,7 +29,8 @@ export interface PedidoBloco {
   urlBase?: string;
   perfil?: PerfilAutenticacao;
   /** Troca as {variáveis} de um texto. `paraJson` protege aspas e barras. */
-  preencher(texto: string, paraJson?: boolean): string;
+  /** Troca as {variáveis}; `proteger` adapta cada valor ao formato (por exemplo, aspas num JSON ou & num XML). */
+  preencher(texto: string, proteger?: (valor: string) => string): string;
 }
 
 const MASCARA = '***';
@@ -248,11 +250,14 @@ function montarUrl(pedido: PedidoApi, urlBase: string | undefined, preencher: Pe
 const TIPOS_DE_CONTEUDO: Record<string, string> = {
   json: 'application/json; charset=utf-8',
   xml: 'application/xml; charset=utf-8',
+  // SOAP 1.1 (para SOAP 1.2, ponha o cabeçalho Content-Type: application/soap+xml).
+  soap: 'text/xml; charset=utf-8',
   texto: 'text/plain; charset=utf-8',
   formulario: 'application/x-www-form-urlencoded',
 };
 
 const escaparJson = (valor: string): string => JSON.stringify(valor).slice(1, -1);
+export { escaparXml };
 
 export async function executarBlocoApi(pedidoBloco: PedidoBloco, amb: AmbienteApi): Promise<ResultadoApi> {
   const { bloco, perfil, preencher } = pedidoBloco;
@@ -264,7 +269,8 @@ export async function executarBlocoApi(pedidoBloco: PedidoBloco, amb: AmbienteAp
 
   const cabecalhosBase: Record<string, string> = {};
   const temCorpo = pedido.tipoCorpo !== 'nenhum' && pedido.metodo !== 'GET';
-  const corpo = temCorpo ? preencher(pedido.corpo, pedido.tipoCorpo === 'json') : undefined;
+  const proteger = pedido.tipoCorpo === 'json' ? escaparJson : pedido.tipoCorpo === 'xml' || pedido.tipoCorpo === 'soap' ? escaparXml : undefined;
+  const corpo = temCorpo ? preencher(pedido.corpo, proteger) : undefined;
   if (temCorpo) cabecalhosBase['Content-Type'] = TIPOS_DE_CONTEUDO[pedido.tipoCorpo];
   if (pedido.tipoCorpo === 'json' && corpo?.trim()) {
     try {
@@ -310,8 +316,20 @@ export async function executarBlocoApi(pedidoBloco: PedidoBloco, amb: AmbienteAp
   try {
     json = JSON.parse(texto);
   } catch {
-    // A resposta não é JSON (pode ser XML ou texto): só dá para verificar a resposta toda.
+    // A resposta não é JSON: pode ser XML (lido por XPath) ou texto (só dá para verificar a resposta toda).
   }
+  const xml = json === EM_FALTA ? lerXml(texto) : null;
+  /** Um campo da resposta: em JSON pelo caminho (campo em falta = 0, regra do OutSystems); em XML por XPath. */
+  const lerCampo = (caminho: string): unknown => {
+    if (json !== EM_FALTA) return lerCaminho(json, caminho);
+    if (!xml) return EM_FALTA;
+    try {
+      const valor = lerXPath(xml, caminho);
+      return valor === XML_EM_FALTA ? EM_FALTA : valor;
+    } catch (erro) {
+      throw new ErroApi(erro instanceof Error ? erro.message : String(erro));
+    }
+  };
 
   const resultado: ResultadoApi = {
     pedido: { metodo: pedido.metodo, url: mascarar(url), cabecalhos: cabecalhosPedido, ...(corpo !== undefined ? { corpo: mascarar(corpo) } : {}) },
@@ -327,8 +345,7 @@ export async function executarBlocoApi(pedidoBloco: PedidoBloco, amb: AmbienteAp
     else if (v.alvo === 'tempo') obtido = tempoMs;
     else if (v.alvo === 'cabecalho') obtido = resposta.headers.get(v.caminho ?? '') ?? EM_FALTA;
     else if (!v.caminho?.trim()) obtido = texto;
-    else if (json === EM_FALTA) obtido = EM_FALTA;
-    else obtido = lerCaminho(json, v.caminho);
+    else obtido = lerCampo(v.caminho);
 
     let ok: boolean;
     if (v.alvo === 'estado' && v.operador === 'igual' && esperado.includes(',')) {
@@ -347,7 +364,7 @@ export async function executarBlocoApi(pedidoBloco: PedidoBloco, amb: AmbienteAp
 
   for (const g of pedido.guardar) {
     if (!g.variavel.trim()) continue;
-    const valor = json === EM_FALTA ? EM_FALTA : lerCaminho(json, g.caminho);
+    const valor = lerCampo(g.caminho);
     if (valor === EM_FALTA) {
       throw new ErroApi(`Não foi possível guardar {${g.variavel}}: a resposta (HTTP ${resposta.status}) não tem o campo "${g.caminho}".`);
     }

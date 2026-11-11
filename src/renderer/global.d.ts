@@ -74,6 +74,8 @@ declare global {
         /** Abre no Windows uma pasta ou ficheiro dentro de `execucoes/`. */
         abrir(...partes: string[]): Promise<void>;
         lerTexto(...partes: string[]): Promise<string>;
+        /** Abre um trace (.zip) numa janela com o visualizador do Playwright. */
+        abrirTrace(...partes: string[]): Promise<'janela' | 'pasta'>;
         /** Um print em formato "data:", ou null se não existir. */
         imagem(...partes: string[]): Promise<string | null>;
         aoAtualizar(callback: (estado: EstadoRun) => void): () => void;

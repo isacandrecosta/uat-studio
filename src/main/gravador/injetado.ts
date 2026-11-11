@@ -16,7 +16,7 @@ export function scriptGravador(): void {
     nome?: string;
   }
 
-  const estado = { modo: 'gravar' as 'gravar' | 'livre', suspenso: false, colunas: [] as string[] };
+  const estado = { modo: 'gravar' as 'gravar' | 'livre', suspenso: false, colunas: [] as string[], regravar: '' };
   let marcador = 0;
   let popupAberto = false;
 
@@ -110,7 +110,7 @@ export function scriptGravador(): void {
   function definirModo(modo: 'gravar' | 'livre', avisarPrincipal: boolean): void {
     estado.modo = modo;
     barra.dataset.modo = modo;
-    textoBarra.textContent = modo === 'gravar' ? 'A gravar: clica num elemento' : 'Em pausa: a página funciona normalmente';
+    textoBarra.textContent = modo === 'gravar' ? (estado.regravar ? `Aponta para: ${estado.regravar}` : 'A gravar: clica num elemento') : 'Em pausa: a página funciona normalmente';
     botaoModo.textContent = modo === 'gravar' ? 'Pausar' : 'Retomar gravação';
     if (modo === 'livre') esconderRealce();
     if (avisarPrincipal) void enviar({ tipo: 'modo', modo });
@@ -617,6 +617,7 @@ export function scriptGravador(): void {
   void enviar({ tipo: 'estado' }).then((resposta) => {
     if (!resposta) return;
     estado.colunas = resposta.colunas ?? [];
+    estado.regravar = resposta.regravar ?? '';
     definirModo(resposta.modo ?? 'gravar', false);
   });
 }

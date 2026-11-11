@@ -15,6 +15,7 @@ import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, linhasCom, paraLocator } from '../motor/localizar';
 import * as repo from '../projeto/repositorio';
 import { scriptGravador } from './injetado';
+import { repetirPassosAte, resolverValor } from './regravar';
 
 interface Sessao {
   pasta: string;
@@ -29,6 +30,8 @@ interface Sessao {
   modo: 'gravar' | 'livre';
   colunas: string[];
   mensagem?: string;
+  /** "Regravar este elemento": o passo a corrigir e os valores do caso. */
+  regravar?: { passoId: string; valores: Record<string, string>; feito: boolean };
 }
 
 /** O que a página envia quando o utilizador confirma o popup. */
@@ -61,6 +64,7 @@ export function estadoGravador(): EstadoGravador {
     aplicacaoNome: sessao.aplicacaoNome,
     bloco: sessao.bloco,
     mensagem: sessao.mensagem,
+    ...(sessao.regravar ? { regravar: sessao.bloco.passos.find((p) => p.id === sessao?.regravar?.passoId)?.alvo?.descricao ?? '', regravado: sessao.regravar.feito } : {}),
   };
 }
 
@@ -138,7 +142,46 @@ async function filtrarLocalizadores(pagina: Page, m: MensagemPasso): Promise<Loc
   return bons;
 }
 
+/**
+ * "Regravar este elemento": só o elemento do passo muda (a ação, o valor e o resto ficam).
+ * O passo é executado com o elemento novo antes de ser aceite, e o bloco fica logo guardado.
+ */
+async function regravarElemento(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; mensagem: string }> {
+  const r = s.regravar;
+  const passo = s.bloco.passos.find((p) => p.id === r?.passoId);
+  if (!r || !passo) return { ok: false, mensagem: 'O passo a regravar já não existe.' };
+  if (r.feito) return { ok: false, mensagem: 'O elemento já foi regravado. Fecha o browser ou termina a gravação.' };
+  const localizadores = await filtrarLocalizadores(s.pagina, m);
+  if (localizadores.length === 0) return { ok: false, mensagem: 'Não encontrei uma forma fiável de localizar este elemento.' };
+  const alvo = {
+    descricao: passo.alvo?.descricao ?? m.alvo.descricao,
+    localizadores,
+    ...(m.alvo.widget ? { widget: m.alvo.widget } : {}),
+    ...(m.alvo.linha ? { linha: m.alvo.linha } : passo.alvo?.linha ? { linha: passo.alvo.linha } : {}),
+  };
+  const experimentado = { ...passo, alvo };
+  try {
+    const linha = alvo.linha ? (m.linhaExemplo ?? resolverValor(alvo.linha.valor, r.valores)) : undefined;
+    if (['escrever', 'escolher', 'marcar', 'clicar'].includes(passo.acao)) {
+      await executarAcao(s.pagina, experimentado, resolverValor(passo.valor, r.valores), { limiteMs: 10_000, linha });
+    } else {
+      await lerElemento(s.pagina, experimentado, { limiteMs: 5_000, linha });
+    }
+  } catch (erro) {
+    const texto = erro instanceof Error ? erro.message.split(/\r?\n/)[0] : String(erro);
+    return { ok: false, mensagem: `Não consegui executar o passo com este elemento, por isso não foi trocado: ${texto}` };
+  }
+  passo.alvo = alvo;
+  repo.guardar(s.pasta, 'blocos', s.bloco);
+  r.feito = true;
+  s.modo = 'livre';
+  await s.pagina.evaluate(() => (window as unknown as { __uatPagina?: { definirModo(m: string): void } }).__uatPagina?.definirModo('livre')).catch(() => undefined);
+  avisar(`Elemento de "${passo.descricao}" regravado e bloco guardado.`);
+  return { ok: true, mensagem: `Elemento regravado (${descreverLocalizador(localizadores[0])}). O bloco já foi guardado: podes fechar o browser.` };
+}
+
 async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; mensagem: string }> {
+  if (s.regravar) return regravarElemento(s, m);
   const localizadores = await filtrarLocalizadores(s.pagina, m);
   if (localizadores.length === 0) {
     return {
@@ -220,6 +263,10 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
     if (!nome) throw new repo.ErroProjeto('Dá um nome ao bloco.');
     bloco = { id: '', nome, tipo: 'UI', aplicacaoId: aplicacao.id, passos: [] };
   }
+  const indiceRegravar = pedido.regravar ? bloco.passos.findIndex((p) => p.id === pedido.regravar?.passoId) : -1;
+  if (pedido.regravar && (indiceRegravar < 0 || !bloco.passos[indiceRegravar].alvo)) {
+    throw new repo.ErroProjeto('Esse passo já não existe no bloco (ou não tem elemento).');
+  }
   if (pedido.abrirAplicacao && bloco.passos.length === 0) {
     bloco.passos.push({
       id: 'p1',
@@ -247,10 +294,14 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
       urlBase,
       modo: 'gravar',
       colunas: [...colunas],
+      ...(pedido.regravar ? { regravar: { passoId: pedido.regravar.passoId, valores: { ...pedido.regravar.valores }, feito: false } } : {}),
     };
     await contexto.exposeBinding('__uatGravador', async (_origem, mensagem: { tipo: string; modo?: 'gravar' | 'livre' }) => {
       if (sessao !== nova) return null;
-      if (mensagem.tipo === 'estado') return { modo: nova.modo, colunas: nova.colunas };
+      if (mensagem.tipo === 'estado') {
+        const regravar = nova.regravar && !nova.regravar.feito ? nova.bloco.passos.find((p) => p.id === nova.regravar?.passoId)?.alvo?.descricao : undefined;
+        return { modo: nova.modo, colunas: nova.colunas, ...(regravar ? { regravar } : {}) };
+      }
       if (mensagem.tipo === 'modo' && mensagem.modo) {
         nova.modo = mensagem.modo;
         return null;
@@ -264,13 +315,25 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
     });
     sessao = nova;
     await nova.pagina.goto(construirUrl(urlBase, ''), { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    if (nova.regravar) {
+      // Pausa a gravação enquanto repete os passos anteriores (os cliques não abrem o popup).
+      await nova.pagina.evaluate(() => (window as unknown as { __uatPagina?: { definirModo(m: string): void } }).__uatPagina?.definirModo('livre')).catch(() => undefined);
+      nova.modo = 'livre';
+      avisar('A repetir os passos anteriores...');
+      const parou = await repetirPassosAte(nova.pagina, bloco, indiceRegravar, nova.regravar.valores, urlBase);
+      nova.modo = 'gravar';
+      await nova.pagina.evaluate(() => (window as unknown as { __uatPagina?: { definirModo(m: string): void } }).__uatPagina?.definirModo('gravar')).catch(() => undefined);
+      const alvo = bloco.passos[indiceRegravar].alvo?.descricao ?? '';
+      nova.mensagem = parou ?? `Pronto: aponta para "${alvo}" no browser e confirma o popup (a ação e o valor do passo ficam como estavam).`;
+    }
   } catch (erro) {
     sessao = null;
     await browser.close().catch(() => undefined);
     const texto = erro instanceof Error ? erro.message.split('\n')[0] : String(erro);
     throw new repo.ErroProjeto(`Não foi possível abrir a aplicação: ${texto}`);
   }
-  avisar(undefined);
+  if (!sessao?.regravar) avisar(undefined);
+  else notificar(estadoGravador());
   return estadoGravador();
 }
 

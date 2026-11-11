@@ -114,6 +114,10 @@ export interface EstadoGravador {
   bloco: Bloco | null;
   /** Último aviso (por exemplo, um passo que não foi possível gravar). */
   mensagem?: string;
+  /** A regravar o elemento deste passo (descrição), à espera que o testador aponte. */
+  regravar?: string;
+  /** O elemento já foi regravado (e o bloco guardado). */
+  regravado?: boolean;
 }
 
 /**
@@ -171,6 +175,9 @@ export interface ResultadoCaso {
     passo: string;
     /** Blocos que ficaram por executar. */
     porExecutar: string[];
+    /** Ids do bloco e do passo onde parou (para "Regravar este elemento"). */
+    blocoId?: string;
+    passoId?: string;
   };
   passos: RegistoPasso[];
   /** Variáveis guardadas durante a jornada. */
@@ -182,6 +189,8 @@ export interface ResultadoCaso {
   evidencias?: string[];
   /** Estado de cada bloco da jornada neste caso (pela ordem do percurso), para o mapa de execução. */
   blocos?: EstadoBlocoCaso[];
+  /** Sugestões geradas por regras quando o caso dá KO ou ERRO. */
+  sugestoes?: string[];
   /** Passo manual à espera do testador (enquanto não responde, o caso fica parado). */
   aguardaManual?: PedidoManual;
   /** Número do worker (1, 2, ...) que correu este caso. */
@@ -273,6 +282,11 @@ export interface PedidoGravacao {
   canal: 'msedge' | 'chrome';
   /** O utilizador confirmou que quer mesmo gravar num ambiente de produção. */
   confirmouProducao?: boolean;
+  /**
+   * "Regravar este elemento": repete os passos do bloco antes deste passo (com estes valores,
+   * por exemplo os dados e as variáveis do caso que falhou) e substitui só o elemento do passo.
+   */
+  regravar?: { passoId: string; valores: Record<string, string> };
 }
 
 export type TipoBloco = 'UI' | 'API' | 'EMAIL' | 'VERIFICACAO' | 'MANUAL';
@@ -285,7 +299,7 @@ export interface ParNomeValor {
 }
 
 export type MetodoHttp = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-export type TipoCorpo = 'nenhum' | 'json' | 'xml' | 'texto' | 'formulario';
+export type TipoCorpo = 'nenhum' | 'json' | 'xml' | 'soap' | 'texto' | 'formulario';
 export type OperadorApi = 'igual' | 'diferente' | 'contem' | 'maior' | 'menor' | 'regex' | 'existe';
 
 /** Uma verificação sobre a resposta. */
