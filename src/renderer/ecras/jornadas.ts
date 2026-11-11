@@ -4,7 +4,7 @@ import { codigoDoBloco } from '../../shared/codigo.js';
 import { ondeEUsado } from '../../shared/blocos.js';
 import { confirmar, h, mostrarCodigo, mostrarUsos, pedirFormulario, pedirTexto, plural } from '../dom.js';
 
-const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
+const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação', MANUAL: 'Manual' };
 
 export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, irPara }: Contexto): Promise<void> {
   const dados = window.uatStudio.dados;
@@ -129,12 +129,35 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
     );
   }
 
+  /** Criar ou alterar um bloco "passo manual" (a execução pára e o testador confirma OK/KO). */
+  const editarManual = async (existente?: (typeof blocos)[number]): Promise<void> => {
+    const valores = await pedirFormulario(existente ? `Passo manual "${existente.nome}"` : 'Novo passo manual', [
+      { id: 'nome', rotulo: 'Nome', valor: existente?.nome, obrigatorio: true, ajuda: 'Por exemplo: Confirmar o PDF do contrato' },
+      {
+        id: 'instrucao',
+        rotulo: 'Instrução para o testador',
+        tipo: 'area',
+        valor: existente?.manual?.instrucao,
+        obrigatorio: true,
+        ajuda: 'Pode ter {variáveis} do caso, por exemplo: Confirme que o pedido {PedidoId} chegou ao email do cliente.',
+      },
+    ]);
+    if (!valores?.nome.trim() || !valores.instrucao.trim()) return;
+    await dados.guardar('blocos', { ...(existente ?? { passos: [] }), nome: valores.nome.trim(), tipo: 'MANUAL', manual: { instrucao: valores.instrucao.trim() } });
+    await atualizar();
+  };
+
   // Blocos partilhados
   corpo.append(
     h(
       'section',
       { class: 'cartao' },
-      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Blocos partilhados')),
+      h(
+        'header',
+        { class: 'cartao-topo' },
+        h('h2', {}, 'Blocos partilhados'),
+        h('button', { id: 'btn-novo-manual', type: 'button', class: 'botao', title: 'A execução pára neste bloco e o testador confirma OK ou KO.', onclick: () => void editarManual() }, 'Novo passo manual'),
+      ),
       blocos.length === 0
         ? h('p', { class: 'suave' }, 'Ainda não há blocos. Os blocos de UI são criados no ecrã Gravar.')
         : h(
@@ -147,12 +170,14 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                 'li',
                 { class: 'item' },
                 h('span', { class: 'tipo-bloco', 'data-tipo': bloco.tipo }, NOMES_TIPO_BLOCO[bloco.tipo] ?? bloco.tipo),
-                h('span', { class: 'item-nome' }, bloco.nome),
+                bloco.tipo === 'MANUAL'
+                  ? h('button', { type: 'button', class: 'ligacao item-nome', 'data-manual': bloco.id, title: 'Alterar o passo manual', onclick: () => void editarManual(bloco) }, bloco.nome)
+                  : h('span', { class: 'item-nome' }, bloco.nome),
                 h(
                   'span',
                   { class: 'item-meta' },
                   aplicacao && h('span', {}, aplicacao.nome),
-                  bloco.tipo !== 'API' && h('span', {}, plural(bloco.passos.length, 'passo')),
+                  (bloco.tipo === 'UI' || bloco.tipo === 'VERIFICACAO') && h('span', {}, plural(bloco.passos.length, 'passo')),
                   h(
                     'button',
                     {

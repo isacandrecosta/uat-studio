@@ -574,3 +574,29 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .worker-passo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dialogo-miniatura { width: min(1100px, 94vw); cursor: zoom-out; }
 .dialogo-miniatura img { width: 100%; border: 1px solid var(--borda); border-radius: 6px; }
+
+/* Matriz de cobertura e comparação com execuções anteriores */
+.cobertura-escolha { min-width: 220px; max-width: 320px; }
+.matriz-cobertura th, .matriz-cobertura td { white-space: nowrap; text-align: left; }
+.celula-cobertura { display: inline-block; padding: 1px 8px; border: 1px solid #c9ced8; border-radius: 10px; font-size: 12px; background: var(--neutro-fundo); }
+.celula-cobertura[data-estado="OK"] { border-color: var(--ok); background: var(--ok-fundo); color: var(--ok); }
+.celula-cobertura[data-estado="KO"] { border-color: var(--erro); background: var(--erro-fundo); color: var(--erro); }
+.celula-cobertura[data-estado="ERRO"] { border-color: #e0a100; background: var(--aviso-fundo); color: var(--aviso); }
+.celula-cobertura[data-estado="nunca"] { border-style: dashed; color: var(--texto-suave); background: var(--superficie); }
+.caixa-comparacao { margin: 16px 0; padding: 12px 16px; border: 1px solid var(--borda); border-radius: 8px; background: var(--fundo); }
+.caixa-comparacao h3 { margin: 0 0 8px; font-size: 15px; }
+.total[data-mudanca="piorou"] strong, .mudanca[data-mudanca="piorou"] { color: var(--erro); }
+.total[data-mudanca="melhorou"] strong, .mudanca[data-mudanca="melhorou"] { color: var(--ok); }
+.total[data-mudanca="mudou"] strong, .mudanca[data-mudanca="mudou"] { color: var(--aviso); }
+.mudanca { font-weight: 600; }
+.tabela-comparacao { margin-top: 10px; }
+.comparacao-vazia { margin: 12px 0; }
+
+/* Passo manual */
+.tipo-bloco[data-tipo="MANUAL"] { background: #7b4bd1; }
+.campo-area { width: 100%; resize: vertical; font: inherit; }
+.caixa-manual { display: block !important; border: 2px solid #7b4bd1; margin-bottom: 16px; }
+.caixa-manual h2 { margin: 0 0 4px; }
+.manual-instrucao { white-space: pre-wrap; font-size: 15px; padding: 10px 12px; background: #f4effc; border-radius: 6px; }
+.caixa-manual .acoes { display: flex; gap: 8px; margin-top: 8px; }
+.aviso-manual { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0 4px; padding: 10px 12px; border: 2px solid #7b4bd1; border-radius: 8px; background: #f4effc; }

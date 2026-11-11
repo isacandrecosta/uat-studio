@@ -182,6 +182,8 @@ export interface ResultadoCaso {
   evidencias?: string[];
   /** Estado de cada bloco da jornada neste caso (pela ordem do percurso), para o mapa de execução. */
   blocos?: EstadoBlocoCaso[];
+  /** Passo manual à espera do testador (enquanto não responde, o caso fica parado). */
+  aguardaManual?: PedidoManual;
   /** Número do worker (1, 2, ...) que correu este caso. */
   worker?: number;
   /** Passos onde o localizador preferido falhou e uma alternativa funcionou (para reparar com um clique). */
@@ -267,7 +269,7 @@ export interface PedidoGravacao {
   confirmouProducao?: boolean;
 }
 
-export type TipoBloco = 'UI' | 'API' | 'EMAIL' | 'VERIFICACAO';
+export type TipoBloco = 'UI' | 'API' | 'EMAIL' | 'VERIFICACAO' | 'MANUAL';
 
 // ---------- Blocos de API ----------
 export interface ParNomeValor {
@@ -369,6 +371,25 @@ export interface Bloco {
   passos: Passo[];
   /** Blocos de API: o pedido HTTP. */
   pedido?: PedidoApi;
+  /** Passo manual: a execução pára, mostra a instrução e o testador confirma OK ou KO. */
+  manual?: { instrucao: string };
+}
+
+/** A resposta do testador a um passo manual. */
+export interface RespostaManual {
+  ok: boolean;
+  /** Observação do testador (aparece no log e, se for KO, no relatório). */
+  nota?: string;
+  /** Caminho de uma imagem escolhida pelo testador, para juntar às evidências. */
+  anexo?: string;
+}
+
+/** Um passo manual à espera da resposta do testador. */
+export interface PedidoManual {
+  bloco: string;
+  /** Instrução já com os dados do caso. */
+  instrucao: string;
+  desde: string;
 }
 
 /** Um bloco colocado numa jornada. */

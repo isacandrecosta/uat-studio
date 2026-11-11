@@ -59,3 +59,8 @@ test('variáveis calculadas e fórmulas contam para o que a jornada precisa', ()
     blocosEmFalta: [],
   });
 });
+
+test('um passo manual usa as {variáveis} da instrução', () => {
+  const bloco = { id: 'm', nome: 'M', tipo: 'MANUAL' as const, passos: [], manual: { instrucao: 'Confirme o pedido {PedidoId} do cliente {Nome} ({DATA:dd-MM})' } };
+  assert.deepEqual(variaveisDoBloco(bloco).usa, ['PedidoId', 'Nome']);
+});

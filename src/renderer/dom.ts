@@ -86,7 +86,7 @@ export interface CampoFormulario {
   id: string;
   rotulo: string;
   /** `segredo` mostra pontos em vez do texto e nunca vem preenchido. */
-  tipo?: 'texto' | 'escolha' | 'segredo';
+  tipo?: 'texto' | 'escolha' | 'segredo' | 'area';
   opcoes?: Array<{ valor: string; texto: string }>;
   valor?: string;
   ajuda?: string;
@@ -96,11 +96,13 @@ export interface CampoFormulario {
 /** Janela com vários campos. Devolve os valores por id, ou null se o utilizador cancelar. */
 export function pedirFormulario(titulo: string, campos: CampoFormulario[], botao = 'Guardar'): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
-    const entradas = new Map<string, HTMLInputElement | HTMLSelectElement>();
+    const entradas = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
     const linhas = campos.map((campo) => {
       const id = `form-${campo.id}`;
       const entrada =
-        campo.tipo === 'escolha'
+        campo.tipo === 'area'
+          ? h('textarea', { id, class: 'campo campo-area', rows: 5, required: campo.obrigatorio, spellcheck: 'true' }, campo.valor ?? '')
+          : campo.tipo === 'escolha'
           ? h('select', { id, class: 'campo' }, (campo.opcoes ?? []).map((o) => h('option', { value: o.valor, selected: o.valor === campo.valor }, o.texto)))
           : h('input', {
               id,

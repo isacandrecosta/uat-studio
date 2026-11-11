@@ -30,8 +30,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Mapa de execução ao vivo (grafo, cores, miniaturas de workers). *Fica de fora "abrir o browser de um worker" (em background não há janela para mostrar).*
 - [x] Reparar localizadores com um clique (quando o preferido falha e uma alternativa funciona).
 - [ ] Log de erro com explicação por regras e sugestões (por exemplo, "regravar o elemento" quando nenhum localizador serve).
-- [ ] Matriz de cobertura e comparação com a execução anterior.
-- [ ] Bloco "passo manual".
+- [x] Matriz de cobertura e comparação com a execução anterior.
+- [x] Bloco "passo manual".
 - [x] "Onde é usado" de cada bloco.
 
 ## Fase 4: avançado

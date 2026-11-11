@@ -156,7 +156,14 @@ export async function ecraMapa({ corpo, acoes, irPara }: Contexto): Promise<void
   function desenharTopo(r: EstadoRun): void {
     const estados = r.casos.map((c) => estadoDoCasoNoMapa(c.estado));
     const feitos = r.casos.filter((c) => c.estado !== 'por-correr' && c.estado !== 'a-correr').length;
+    const manuais = r.ativo ? r.casos.filter((c) => c.aguardaManual) : [];
     zonaTopo.replaceChildren(
+      ...(manuais.length === 0 ? [] : [h(
+          'div',
+          { class: 'aviso-manual', id: 'mapa-manual', role: 'alert' },
+          h('span', {}, `${plural(manuais.length, 'passo manual', 'passos manuais')} à espera do testador (${manuais.map((c) => c.casoId).join(', ')}).`),
+          h('button', { type: 'button', class: 'botao botao-primario', onclick: () => irPara('runs') }, 'Responder'),
+        )]),
       h('progress', { class: 'barra-progresso', max: r.casos.length, value: feitos, 'aria-label': 'Progresso da execução' }),
       h(
         'p',

@@ -46,6 +46,8 @@ export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
     for (const texto of textos) for (const nome of variaveisDoTexto(texto ?? '')) juntar(usa, nome);
     for (const guardar of pedido.guardar) juntar(produz, guardar.variavel);
   }
+  // Passo manual: as {variáveis} da instrução.
+  for (const nome of variaveisDoTexto(bloco.manual?.instrucao ?? '')) juntar(usa, nome);
   return { usa, produz };
 }
 

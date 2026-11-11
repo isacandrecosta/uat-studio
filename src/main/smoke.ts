@@ -610,6 +610,68 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'comparação com as execuções anteriores e matriz de cobertura',
+      async (j) => {
+        // A última execução (a do mapa) repetiu os 3 casos da jornada entre portais, que já tinham dado OK.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.querySelector('#comparacao .total[data-mudanca=\"igual\"]') && document.getElementById('matriz-cobertura')");
+        const iguais = await naPagina<string>(j, "document.querySelector('#comparacao .total[data-mudanca=\"igual\"] strong').textContent");
+        confirmar(iguais === '3', `A comparação devia ter 3 casos iguais (tem ${iguais}).`);
+        const celula = await naPagina<string>(j, "document.querySelector('#matriz-cobertura tr[data-variante=\"CP12\"] td[data-jornada=\"simular-e-validar\"] .celula-cobertura')?.dataset.estado ?? ''");
+        confirmar(celula === 'OK', `Na matriz, CP12 × "Simular e validar" devia estar OK (está "${celula}").`);
+        await naPagina(j, "document.getElementById('cobertura').scrollIntoView()");
+        await tirarPrint(j, raiz, 'cobertura');
+        await naPagina(j, "(() => { const e = document.getElementById('cobertura-linhas'); e.value = 'caso'; e.dispatchEvent(new Event('change')); })()");
+        await esperar(j, "document.querySelector('#matriz-cobertura tr[data-variante=\"TC0001\"]')");
+      },
+    ],
+    [
+      'passo manual: a execução pára, o testador confirma OK num caso e marca KO noutro',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.getElementById('btn-novo-manual')");
+        await naPagina(j, "document.getElementById('btn-novo-manual').click()");
+        await esperar(j, "document.querySelector('dialog[open] #form-instrucao')");
+        await naPagina(
+          j,
+          `(() => { const d = document.querySelector('dialog[open]'); d.querySelector('#form-nome').value = 'Confirmar o pedido'; d.querySelector('#form-instrucao').value = 'Confirme que o pedido {PedidoId} aparece no ecrã.'; d.querySelector('button[type=submit]').click(); })()`,
+        );
+        await esperar(j, "document.querySelector('[data-manual=\"confirmar-o-pedido\"]')");
+        confirmar(repo.ler(pasta, 'blocos', 'confirmar-o-pedido').tipo === 'MANUAL', 'O bloco manual não foi criado.');
+
+        const casosSimular = repo.ler(pasta, 'casos', 'simular-credito');
+        repo.guardar(pasta, 'jornadas', { id: 'com-passo-manual', nome: 'Com passo manual', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'simular-credito' }, { id: 'b2', blocoId: 'confirmar-o-pedido' }] });
+        repo.guardar(pasta, 'casos', { id: 'com-passo-manual', colunas: casosSimular.colunas, casos: casosSimular.casos.filter((c) => c.id === 'TC0001' || c.id === 'TC0002') });
+
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-correr') && document.querySelector('#run-ambito option[value=\"jornada:com-passo-manual\"]')");
+        await naPagina(
+          j,
+          "(() => { const a = document.getElementById('run-ambito'); a.value = 'jornada:com-passo-manual'; a.dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('run-casos').value = ''; document.getElementById('run-paralelo').value = '2'; document.getElementById('btn-correr').click(); })()",
+        );
+        await esperar(j, "document.querySelectorAll('.caixa-manual').length === 2", 120_000);
+        const instrucao = await naPagina<string>(j, "document.querySelector('.caixa-manual[data-chave=\"com-passo-manual/TC0001\"] .manual-instrucao').textContent");
+        const pedidoId = estadoRun()?.casos.find((c) => c.casoId === 'TC0001')?.variaveis.PedidoId ?? '?';
+        confirmar(instrucao === `Confirme que o pedido ${pedidoId} aparece no ecrã.`, `A instrução devia ter o número do pedido: ${instrucao}`);
+        await tirarPrint(j, raiz, 'passo-manual');
+
+        // TC0001: OK. TC0002: KO sem observação dá aviso; com observação, fica KO.
+        await naPagina(j, "document.querySelector('.caixa-manual[data-chave=\"com-passo-manual/TC0001\"] .botao-manual-ok').click()");
+        await esperar(j, "document.querySelectorAll('.caixa-manual').length === 1");
+        await naPagina(j, "document.querySelector('.caixa-manual .botao-manual-ko').click()");
+        await esperar(j, "!document.querySelector('.caixa-manual .aviso-erro').hidden");
+        await naPagina(j, "(() => { const c = document.querySelector('.caixa-manual'); c.querySelector('.manual-nota').value = 'O pedido não aparece'; c.querySelector('.botao-manual-ko').click(); })()");
+        const run = await esperarFimDoRun(120_000);
+        const estados = (run?.casos ?? []).map((c) => `${c.casoId}=${c.estado}`).join(', ');
+        console.log(`[smoke]   ${estados}`);
+        confirmar(estados === 'TC0001=OK, TC0002=KO', `Resultado inesperado do passo manual: ${estados}`);
+        const ko = run?.casos[1].diferencas[0];
+        confirmar(ko?.passo === 'Confirmação manual' && ko.obtido === 'KO: O pedido não aparece', `A diferença do KO manual está errada: ${JSON.stringify(ko)}`);
+        confirmar(run?.casos[1].blocos?.join(',') === 'ok,ko', `Estados dos blocos errados: ${run?.casos[1].blocos?.join(',')}`);
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {

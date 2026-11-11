@@ -3,6 +3,7 @@ import { descreverLocalizador, estadoDoReparo, juntarReparos } from '../../share
 import type { AmbitoRun, Bloco, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { confirmar, h, mensagemDeErro, plural } from '../dom.js';
+import { cartaoCobertura, cartaoComparacao } from './cobertura.js';
 
 const NOMES_ESTADO: Record<ResultadoCaso['estado'], string> = {
   'por-correr': 'Por correr',
@@ -60,8 +61,14 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
     desenharRun();
   };
   const zonaRun = h('div', { id: 'zona-run' });
+  /** Passos manuais à espera (zona própria: só é redesenhada quando a lista muda, para não apagar o que se está a escrever). */
+  const zonaManual = h('div', { id: 'zona-manual' });
+  let manuaisDesenhados = '';
   const zonaHistorico = h('div', {});
-  corpo.append(zonaFormulario, zonaRun, zonaHistorico);
+  const zonaCobertura = h('div', {});
+  /** Histórico mais recente (para a comparação e a matriz de cobertura). */
+  let historicoAtual = historico;
+  corpo.append(zonaFormulario, zonaManual, zonaRun, zonaHistorico, zonaCobertura);
 
   let runMostrado: EstadoRun | null = (historicoAberto && historico.find((r) => r.pasta === historicoAberto)) || atual || historico[0] || null;
   if (atual?.ativo) runMostrado = atual;
@@ -228,9 +235,59 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
     return execucaoAtiva;
   }
 
+  function desenharManuais(run: EstadoRun | null): void {
+    const pendentes = run?.ativo ? run.casos.filter((c) => c.aguardaManual) : [];
+    const chave = pendentes.map((c) => `${c.chave}|${c.aguardaManual?.desde}`).join(',');
+    if (chave === manuaisDesenhados) return;
+    manuaisDesenhados = chave;
+    zonaManual.replaceChildren(
+      ...pendentes.map((caso) => {
+        const pedido = caso.aguardaManual;
+        if (!pedido) return h('span', {});
+        const nota = h('textarea', { class: 'campo campo-area manual-nota', rows: 2, placeholder: 'Observação (opcional; obrigatória para KO)', 'aria-label': 'Observação' });
+        const anexar = h('input', { type: 'checkbox', class: 'manual-anexar' });
+        const erro = h('p', { class: 'aviso-erro', role: 'alert', hidden: true });
+        const responder = async (ok: boolean): Promise<void> => {
+          if (!ok && !nota.value.trim()) {
+            erro.textContent = 'Para marcar KO, escreve o que viste de errado.';
+            erro.hidden = false;
+            nota.focus();
+            return;
+          }
+          try {
+            const resultado = await api.runs.responderManual(caso.chave, ok, nota.value, anexar.checked);
+            if (resultado === null) return; // cancelou a escolha do ficheiro
+            manuaisDesenhados = '';
+            desenharManuais(resultado);
+          } catch (e) {
+            erro.textContent = mensagemDeErro(e);
+            erro.hidden = false;
+          }
+        };
+        return h(
+          'section',
+          { class: 'cartao caixa-manual', 'data-chave': caso.chave, role: 'alert' },
+          h('h2', {}, `Passo manual: ${pedido.bloco}`),
+          h('p', { class: 'suave' }, `${caso.jornadaNome} › ${caso.casoId}${caso.worker ? ` · worker ${caso.worker}` : ''} · à espera desde ${new Date(pedido.desde).toLocaleTimeString('pt-PT')}`),
+          h('p', { class: 'manual-instrucao' }, pedido.instrucao),
+          nota,
+          h('label', { class: 'opcao' }, anexar, 'Anexar um print (escolher uma imagem do disco)'),
+          erro,
+          h(
+            'div',
+            { class: 'acoes' },
+            h('button', { type: 'button', class: 'botao botao-primario botao-manual-ok', onclick: () => void responder(true) }, 'Confirmar OK'),
+            h('button', { type: 'button', class: 'botao botao-perigo botao-manual-ko', onclick: () => void responder(false) }, 'Marcar KO'),
+          ),
+        );
+      }),
+    );
+  }
+
   function desenharRun(): void {
     acoes.replaceChildren();
     const run = runMostrado;
+    desenharManuais(run);
     if (!run) {
       zonaRun.replaceChildren(
         h('div', { class: 'vazio' }, h('p', { class: 'vazio-titulo' }, 'Ainda não há execuções'), h('p', {}, 'Escolhe o que correr e carrega em "Correr".')),
@@ -309,6 +366,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
           totais.PARADO > 0 && total('parados', totais.PARADO, ''),
           (totais.SALTADO ?? 0) > 0 && total('saltados', totais.SALTADO, ''),
         ),
+        cartaoComparacao(run, historicoAtual),
         cartaoReparos(run),
         h(
           'ul',
@@ -497,6 +555,9 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
   }
 
   function desenharHistorico(runs: EstadoRun[]): void {
+    historicoAtual = runs;
+    zonaCobertura.replaceChildren(cartaoCobertura(jornadas, conjuntos, runs));
+    if (runMostrado && !runMostrado.ativo) desenharRun();
     if (runs.length === 0) {
       zonaHistorico.replaceChildren();
       return;

@@ -270,6 +270,10 @@ export function codigoDaJornada(
       linhas.push(...indentar(corpoDoBlocoApi(bloco, urlDe(bloco, aplicacoes, ambienteId)), 4));
       return;
     }
+    if (bloco.tipo === 'MANUAL') {
+      linhas.push('    // Passo manual: no UAT Studio a execução pára aqui e o testador confirma OK ou KO.', ...(bloco.manual?.instrucao ?? '').split(/\r?\n/).map((l) => `    // ${l}`), '    await page.pause();');
+      return;
+    }
     if (bloco.tipo !== 'UI') {
       linhas.push(`    // Bloco de ${bloco.tipo}: ainda sem código equivalente.`);
       return;

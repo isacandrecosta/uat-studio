@@ -12,6 +12,7 @@ import {
   Jornada,
   OpcoesRun,
   ResultadoCaso,
+  RespostaManual,
 } from '../../shared/modelo';
 import { criarAmbienteApi } from '../api/ambiente';
 import * as repo from '../projeto/repositorio';
@@ -31,6 +32,8 @@ let pararPedido = false;
 let pausado = false;
 /** Casos (idDaJornada/idDoCaso) que o utilizador mandou saltar. */
 const saltar = new Set<string>();
+/** Passos manuais à espera do testador, por caso (`idDaJornada/idDoCaso`). */
+const pendentesManuais = new Map<string, { responder: (r: RespostaManual) => void; vigiar: ReturnType<typeof setInterval> }>();
 /** Página aberta por cada worker (para as miniaturas ao vivo do mapa de execução). */
 const paginasDosWorkers = new Map<number, { pagina: Page; chave: string }>();
 let notificar: (estado: EstadoRun) => void = () => undefined;
@@ -231,6 +234,21 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             perfis,
             api,
             proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
+            passoManual: () =>
+              new Promise<RespostaManual>((resolve) => {
+                log(`${item.jornada.nome} / ${item.caso.id}: passo manual à espera do testador`);
+                // Parar ou saltar o caso também acaba com a espera.
+                const vigiar = setInterval(() => {
+                  if (pararPedido || saltar.has(chave)) responder({ ok: false });
+                }, 150);
+                const responder = (r: RespostaManual): void => {
+                  clearInterval(vigiar);
+                  pendentesManuais.delete(chave);
+                  resolve(r);
+                };
+                pendentesManuais.set(chave, { responder, vigiar });
+                avisar(true);
+              }),
             aoAbrirPagina: (pagina) => {
               if (pagina) paginasDosWorkers.set(numeroWorker, { pagina, chave });
               else paginasDosWorkers.delete(numeroWorker);
@@ -316,6 +334,17 @@ export async function miniaturasDosWorkers(): Promise<MiniaturaWorker[]> {
       return { worker, chave, imagem };
     }),
   );
+}
+
+/** Resposta do testador a um passo manual. */
+export function responderManual(chave: string, resposta: RespostaManual): EstadoRun | null {
+  const pendente = pendentesManuais.get(chave);
+  if (!pendente || !runAtual) return runAtual;
+  const caso = runAtual.casos.find((c) => c.chave === chave);
+  if (caso) caso.aguardaManual = undefined;
+  pendente.responder({ ok: Boolean(resposta.ok), ...(resposta.nota ? { nota: String(resposta.nota).slice(0, 2000) } : {}), ...(resposta.anexo ? { anexo: resposta.anexo } : {}) });
+  avisar(true);
+  return runAtual;
 }
 
 /** Põe a execução em pausa (os casos param entre passos, nunca a meio de uma ação). */

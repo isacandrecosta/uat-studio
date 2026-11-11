@@ -15,7 +15,9 @@ import {
   Jornada,
   Localizador,
   Passo,
+  PedidoManual,
   RegistoPasso,
+  RespostaManual,
   ResultadoCaso,
   PerfilAutenticacao,
   ResultadoApi,
@@ -58,6 +60,8 @@ export interface PedidoCaso {
   deveSaltar(): boolean;
   /** Chamado antes de cada passo: é aqui que a execução espera se estiver em pausa (ou em modo lento). */
   entrePassos(): Promise<void>;
+  /** Passo manual: mostra a instrução ao testador e espera pela resposta (OK/KO). */
+  passoManual?(pedido: PedidoManual): Promise<RespostaManual>;
   /** A página do browser deste caso (para as miniaturas ao vivo); null quando fecha. */
   aoAbrirPagina?(pagina: Page | null): void;
 }
@@ -325,7 +329,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       if (!bloco) throw new ErroDados(`O bloco "${item.blocoId}" já não existe.`);
       blocoAtual = bloco.nome;
       passoAtual = '';
-      if (bloco.tipo !== 'UI' && bloco.tipo !== 'API') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
+      if (bloco.tipo !== 'UI' && bloco.tipo !== 'API' && bloco.tipo !== 'MANUAL') throw new ErroDados(`Os blocos de ${bloco.tipo} ainda não são suportados.`);
       const aplicacao = bloco.aplicacaoId ? pedido.aplicacoes.get(bloco.aplicacaoId) : undefined;
       // Bloco condicional: só corre se a condição se cumprir para este caso.
       if (item.condicao?.trim() && !cumpre(item.condicao, procurar, `condição do bloco "${bloco.nome}"`)) {
@@ -338,6 +342,42 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       pedido.aoProgredir(resultado);
       escrever(`Bloco ${indice + 1}: ${bloco.nome}${item.sempre ? ' (limpeza: corre sempre)' : ''}`);
       evento({ tipo: 'bloco-inicio', bloco: bloco.nome });
+
+      if (bloco.tipo === 'MANUAL') {
+        await pontoDeControlo();
+        const instrucao = preencherNoBloco(item)(bloco.manual?.instrucao ?? '').trim();
+        if (!instrucao) throw new ErroDados(`O passo manual "${bloco.nome}" não tem instrução.`);
+        if (!pedido.passoManual) throw new ErroDados('Esta execução não aceita passos manuais.');
+        passoAtual = 'À espera do testador';
+        resultado.passoAtual = `${bloco.nome}: à espera do testador`;
+        resultado.aguardaManual = { bloco: bloco.nome, instrucao, desde: new Date().toISOString() };
+        pedido.aoProgredir(resultado);
+        escrever(`  Passo manual: ${instrucao.replace(/s+/g, ' ')}`);
+        const t0 = Date.now();
+        let resposta: RespostaManual;
+        try {
+          resposta = await pedido.passoManual(resultado.aguardaManual);
+        } finally {
+          resultado.aguardaManual = undefined;
+        }
+        if (pedido.devePararAgora()) throw new Parado();
+        if (pedido.deveSaltar()) throw new Saltado();
+        const nota = resposta.nota?.trim();
+        const base = `${String(indice + 1).padStart(2, '0')}_${criarSlug(bloco.nome)}`;
+        if (resposta.anexo) {
+          const destino = `${base}_anexo${path.extname(resposta.anexo).toLowerCase() || '.png'}`;
+          try {
+            fs.copyFileSync(resposta.anexo, path.join(pedido.pasta, destino));
+            resultado.evidencias?.push(destino);
+          } catch {
+            escrever(`  Não foi possível juntar o anexo ${path.basename(resposta.anexo)}.`);
+          }
+        }
+        if (!resposta.ok) resultado.diferencas.push({ bloco: bloco.nome, passo: 'Confirmação manual', esperado: 'OK', obtido: nota ? `KO: ${nota}` : 'KO' });
+        registar(bloco.nome, 'Confirmação manual', resposta.ok ? 'ok' : 'ko', Date.now() - t0, [resposta.ok ? 'o testador confirmou' : 'o testador marcou KO', nota && `"${nota}"`, resposta.anexo && 'com anexo'].filter(Boolean).join('; '));
+        if (pagina && pagina.url() !== 'about:blank') await tirarPrint(`${base}.png`);
+        return;
+      }
 
       if (bloco.tipo === 'API') {
         await pontoDeControlo();

@@ -9,7 +9,7 @@ import { exportarCasos, importarCasos } from '../excel/casosExcel';
 import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
 import { criarAmbienteApi } from '../api/ambiente';
-import { caminhoNaExecucao, continuarRun, estadoRun, iniciarRun, listarHistorico, miniaturasDosWorkers, pararRun, pausarRun, saltarCaso } from './execucao';
+import { caminhoNaExecucao, responderManual, continuarRun, estadoRun, iniciarRun, listarHistorico, miniaturasDosWorkers, pararRun, pausarRun, saltarCaso } from './execucao';
 import { verificarAntesDeCorrer } from './verificar';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
@@ -28,6 +28,18 @@ export function registarIpcExecucoes(): void {
       imagem: imagem ? `data:image/jpeg;base64,${nativeImage.createFromBuffer(imagem).resize({ width: 400, quality: 'good' }).toJPEG(70).toString('base64')}` : null,
     })),
   );
+  // Passo manual: OK/KO do testador, com uma imagem opcional escolhida no disco.
+  ipcMain.handle('run:responder-manual', async (evento, chave: string, ok: boolean, nota: string, anexar: boolean) => {
+    let anexo: string | undefined;
+    if (anexar) {
+      const janela = BrowserWindow.fromWebContents(evento.sender);
+      const opcoes: Electron.OpenDialogOptions = { title: 'Escolher o print a anexar', properties: ['openFile'], filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg'] }] };
+      const escolha = janela ? await dialog.showOpenDialog(janela, opcoes) : await dialog.showOpenDialog(opcoes);
+      if (escolha.canceled) return null;
+      anexo = escolha.filePaths[0];
+    }
+    return responderManual(String(chave), { ok: Boolean(ok), nota: String(nota ?? ''), ...(anexo ? { anexo } : {}) });
+  });
   ipcMain.handle('run:saltar', (_e, chave: string) => saltarCaso(String(chave)));
   // Verificação antes de correr: o que falta ou está mal, sem abrir o browser.
   ipcMain.handle('run:verificar', (_e, ambito: AmbitoRun) => {

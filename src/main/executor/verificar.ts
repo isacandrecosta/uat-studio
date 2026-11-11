@@ -48,6 +48,8 @@ function problemasDoBloco(bloco: Bloco, perfis: Map<string, PerfilAutenticacao>)
       if (pedido.verificacoes.length === 0 && pedido.guardar.length === 0) problemas.push('não verifica nem guarda nada da resposta');
       for (const g of pedido.guardar) if (!g.variavel.trim() || !g.caminho.trim()) problemas.push('tem uma linha de "guardar da resposta" incompleta');
     }
+  } else if (bloco.tipo === 'MANUAL') {
+    if (!bloco.manual?.instrucao.trim()) problemas.push('não tem instrução para o testador');
   } else {
     problemas.push(`é do tipo ${bloco.tipo}, que ainda não é suportado`);
   }
