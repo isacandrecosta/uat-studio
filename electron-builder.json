@@ -1,0 +1,24 @@
+{
+  "appId": "pt.uatstudio.app",
+  "productName": "UAT Studio",
+  "directories": {
+    "output": "out/app"
+  },
+  "files": [
+    "dist/main/**/*.js",
+    "dist/shared/**/*.js",
+    "dist/web/**/*.js",
+    "!dist/web/diagnostico/**",
+    "src/renderer/*.html",
+    "src/renderer/*.css",
+    "package.json"
+  ],
+  "win": {
+    "target": [{ "target": "portable", "arch": ["x64"] }],
+    "signAndEditExecutable": false
+  },
+  "portable": {
+    "artifactName": "UAT-Studio.exe"
+  },
+  "publish": null
+}

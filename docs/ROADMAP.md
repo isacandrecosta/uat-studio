@@ -43,5 +43,6 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [ ] Modo print híbrido.
 - [x] Relatório PDF para assinatura do UAT, com ID do requisito.
 - [x] Exportar/importar pacotes de blocos.
-- [ ] Executável portátil assinado, ficha da ferramenta para a equipa de segurança e guia de instalação para o PC da empresa.
+- [x] Executável portátil (`npm.cmd run exe`, verificado com `npm.cmd run exe:verificar`), ficha da ferramenta para a equipa de segurança (`docs/FICHA-SEGURANCA.md`, `docs/LICENCAS.md`) e guia de instalação (`docs/GUIA-INSTALACAO.md`).
+- [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

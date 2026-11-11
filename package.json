@@ -11,7 +11,10 @@
     "smoke": "npm run build && electron . --smoke",
     "diagnostico": "npm run build && electron dist/diagnostico/main.js",
     "diagnostico:smoke": "npm run build && electron dist/diagnostico/main.js --smoke",
-    "diagnostico:exe": "npm run build && electron-builder --config electron-builder.diagnostico.json"
+    "diagnostico:exe": "npm run build && electron-builder --config electron-builder.diagnostico.json",
+    "exe": "npm run build && electron-builder --config electron-builder.json",
+    "exe:verificar": "node scripts/verificar-exe.mjs",
+    "licencas": "node scripts/licencas.mjs"
   },
   "author": "isacandrecosta",
   "license": "UNLICENSED",

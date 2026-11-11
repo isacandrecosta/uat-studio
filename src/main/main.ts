@@ -13,6 +13,7 @@ import { registarIpcExecucoes } from './executor/ipc';
 import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
 import { registarIpcPacotes } from './projeto/pacotes';
 import { correrSmoke } from './smoke';
+import { ficheiroDeVerificacao, verificarArranque } from './arranque';
 import { PedidoGravacao } from '../shared/modelo';
 
 const RAIZ = path.join(__dirname, '..', '..');
@@ -64,6 +65,8 @@ void app.whenReady().then(() => {
     if (!janela.isDestroyed()) janela.webContents.send('run:atualizado', estado);
   });
   if (MODO_SMOKE) void correrSmoke(janela, RAIZ);
+  const verificacao = ficheiroDeVerificacao();
+  if (verificacao) janela.webContents.once('did-finish-load', () => void verificarArranque(janela, verificacao));
 });
 
 app.on('window-all-closed', () => {
