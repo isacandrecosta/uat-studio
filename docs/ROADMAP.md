@@ -23,9 +23,10 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Blocos de preparação e limpeza por API (qualquer bloco pode ser marcado "limpeza: corre sempre").
 
 ## Fase 3: execuções a sério
-- [ ] Ecrã Runs: opções, filtros por etiqueta, progresso ao vivo, histórico, detalhes com logs e evidências.
-- [ ] Verificação antes de correr (variáveis, segredos, ambiente).
-- [ ] Controlo: pausar, continuar, parar, saltar (por run, jornada, caso ou worker); retomar a meio.
+- [x] Ecrã Runs: opções, filtros por etiqueta, progresso ao vivo, histórico, detalhes com logs e evidências.
+- [x] Verificação antes de correr (variáveis, segredos, ambiente).
+- [x] Controlo: pausar, continuar, parar, saltar um caso, velocidade (lenta, passo a passo), pausar no erro, repetir só KO/ERRO.
+- [ ] Controlo, o que falta: por jornada ou worker; retomar a meio (recomeçar uma jornada a partir de um bloco).
 - [ ] Mapa de execução ao vivo (grafo, cores, miniaturas de workers).
 - [ ] Log de erro com explicação por regras e sugestões; reparar localizadores com um clique.
 - [ ] Matriz de cobertura e comparação com a execução anterior.

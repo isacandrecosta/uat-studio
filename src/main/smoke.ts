@@ -8,7 +8,7 @@ import { ChildProcess, spawn } from 'node:child_process';
 import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
 import { apagarSegredosDoPerfil, segredosPreenchidos } from './cofre';
 import * as repo from './projeto/repositorio';
-import { estadoRun } from './executor/execucao';
+import { continuarRun, estadoRun } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { criarProjeto } from './projeto/ipc';
 
@@ -17,6 +17,7 @@ type Passo = (janela: BrowserWindow) => Promise<void>;
 /** Servidor de teste (OAuth 2.0 + API), que vive FORA do projeto. Sem ele, o passo de API é saltado. */
 const SERVIDOR_TESTE = process.env.UAT_SERVIDOR_TESTE ?? path.resolve(__dirname, '..', '..', '..', 'uat-servidor-teste', 'servidor.mjs');
 let servidor: ChildProcess | null = null;
+const URL_APP_POC = 'https://personal-e5m9c9gh-dev.outsystems.app/SimuladorFinanceiroPOC';
 
 /** Corre código na página e devolve o resultado. */
 export function naPagina<T>(janela: BrowserWindow, codigo: string): Promise<T> {
@@ -461,6 +462,66 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'verificação antes de correr e controlo da execução (passo a passo, continuar, saltar um caso)',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const definir = (seletor: string, valor: string): Promise<void> =>
+          naPagina(
+            j,
+            `(() => { const e = document.querySelector(${JSON.stringify(seletor)}); e.value = ${JSON.stringify(valor)}; e.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+          );
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.getElementById('btn-verificar') && !document.getElementById('btn-correr').disabled");
+        await definir('#run-ambito', 'jornada:simular-credito');
+
+        // Com uma coluna em falta nos casos, a verificação avisa e "Correr" não arranca sozinho.
+        const casos = repo.ler(pasta, 'casos', 'simular-credito');
+        repo.guardar(pasta, 'casos', { ...casos, colunas: casos.colunas.filter((c) => c !== 'Valor') });
+        await naPagina(j, "document.getElementById('btn-verificar').click()");
+        await esperar(j, "document.querySelector('#resultado-verificacao[data-estado=\"erro\"]')", 40_000);
+        const problemas = await naPagina<string>(j, "document.getElementById('resultado-verificacao').innerText");
+        confirmar(problemas.includes('Falta a coluna "Valor" nos casos'), `A verificação devia apontar a coluna em falta: ${problemas}`);
+        await naPagina(j, "document.getElementById('btn-correr').click()");
+        await esperar(j, "document.getElementById('btn-correr-na-mesma')", 40_000);
+        confirmar(!estadoRun()?.ativo, 'Com problemas, a execução não devia arrancar sozinha.');
+        await tirarPrint(j, raiz, 'verificacao');
+        repo.guardar(pasta, 'casos', casos);
+        await naPagina(j, "document.getElementById('btn-verificar').click()");
+        await esperar(j, "document.querySelector('#resultado-verificacao[data-estado=\"ok\"]')", 40_000);
+
+        // Passo a passo: a execução pára antes de cada passo e só avança com "Continuar".
+        await naPagina(j, "(() => { document.getElementById('run-casos').value = 'TC0001, TC0002, TC0003'; document.getElementById('run-velocidade').value = 'passo'; document.getElementById('btn-correr').click(); })()");
+        await esperar(j, "document.querySelector('#run-progresso[data-pausa=\"true\"]') && document.getElementById('btn-continuar')", 90_000);
+        const passosFeitos = (): number => estadoRun()?.casos[0].passos.length ?? 0;
+        confirmar(passosFeitos() === 0, 'Em passo a passo, nada devia correr antes do primeiro "Continuar".');
+        await naPagina(j, "document.getElementById('btn-continuar').click()");
+        const fimPasso = Date.now() + 60_000;
+        while (!(estadoRun()?.emPausa && passosFeitos() === 1)) {
+          if (Date.now() > fimPasso) throw new Error(`Depois de "Continuar" devia correr 1 passo e voltar a parar (passos: ${passosFeitos()}, em pausa: ${estadoRun()?.emPausa}).`);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        await new Promise((r) => setTimeout(r, 600));
+        confirmar(passosFeitos() === 1, 'Em pausa, não devia avançar sozinho.');
+
+        // Saltar o 2.º caso (ainda por correr) pela interface.
+        await esperar(j, "document.querySelector('.caso[data-chave=\"simular-credito/TC0002\"] .botao-saltar')");
+        await tirarPrint(j, raiz, 'controlo');
+        await naPagina(j, "document.querySelector('.caso[data-chave=\"simular-credito/TC0002\"] .botao-saltar').click()");
+
+        // O resto dos passos: "Continuar" sempre que parar.
+        const fimRun = Date.now() + 240_000;
+        while (estadoRun()?.ativo) {
+          if (Date.now() > fimRun) throw new Error('A execução passo a passo não terminou.');
+          if (estadoRun()?.emPausa) continuarRun();
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        const estados = (estadoRun()?.casos ?? []).map((c) => `${c.casoId}=${c.estado}`).join(', ');
+        console.log(`[smoke]   ${estados}`);
+        confirmar(estados === 'TC0001=OK, TC0002=SALTADO, TC0003=OK', `Resultado inesperado da execução passo a passo: ${estados}`);
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"false\"]') && document.querySelector('.caso[data-estado=\"SALTADO\"]')");
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {
@@ -603,6 +664,17 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
           .join('\n');
         confirmar(!tudo.includes('segredo-de-teste'), 'O client secret aparece nos ficheiros da execução!');
 
+        // "Repetir só KO/ERRO": corre outra vez só o caso que falhou.
+        await esperar(j, "document.getElementById('btn-repetir-falhados')");
+        await naPagina(j, "document.getElementById('btn-repetir-falhados').click()");
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"true\"]')", 60_000);
+        await esperar(j, "document.querySelector('#run-atual[data-ativo=\"false\"]')", 120_000);
+        const repetida = estadoRun();
+        confirmar(
+          repetida?.id !== run.id && repetida?.casos.length === 1 && repetida.casos[0].casoId === 'API002' && repetida.casos[0].estado === 'KO',
+          `"Repetir só KO/ERRO" devia correr só o API002: ${repetida?.casos.map((c) => `${c.casoId}=${c.estado}`).join(', ')}`,
+        );
+
         // 5. "Esperar até" e limpeza: um bloco repete o pedido até desistir (KO), outro dá erro,
         //    e o bloco de limpeza (apagar o cliente) corre na mesma.
         const pedidoBase = { parametros: [], cabecalhos: [], tipoCorpo: 'nenhum' as const, corpo: '', perfilId: 'oauth-de-teste', guardar: [] };
@@ -680,6 +752,13 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
 
   try {
     await new Promise<void>((resolve) => janela.webContents.once('did-finish-load', () => resolve()));
+    // A app POC "adormece" quando não é usada e a 1.ª resposta pode ser um erro: acordá-la antes de começar.
+    for (let tentativa = 1; tentativa <= 6; tentativa++) {
+      const acordada = await fetch(`${URL_APP_POC}/rest/PedidosAPI/variantes`, { signal: AbortSignal.timeout(60_000) }).then((r) => r.ok, () => false);
+      if (acordada) break;
+      console.log(`[smoke] a app POC ainda não responde (tentativa ${tentativa})`);
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
     for (const [nome, passo] of passos) {
       await passo(janela);
       console.log(`[smoke] OK: ${nome}`);

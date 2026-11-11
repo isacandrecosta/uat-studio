@@ -1,5 +1,5 @@
 // Ecrã Runs e resultados: escolher o que correr, acompanhar ao vivo e ver o histórico e os detalhes.
-import type { AmbitoRun, EstadoRun, ResultadoCaso } from '../../shared/modelo.js';
+import type { AmbitoRun, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { confirmar, h, mensagemDeErro, plural } from '../dom.js';
 
@@ -10,6 +10,7 @@ const NOMES_ESTADO: Record<ResultadoCaso['estado'], string> = {
   KO: 'KO',
   ERRO: 'ERRO',
   PARADO: 'Parado',
+  SALTADO: 'Saltado',
 };
 
 let deixarDeOuvir: (() => void) | null = null;
@@ -43,6 +44,17 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
   ]);
   const ambiente = estado.projeto.ambientes.find((a) => a.id === estado.projeto.ambienteAtivo);
   const zonaFormulario = h('div', {});
+  /** Há uma execução a correr neste momento (mesmo que se esteja a ver uma antiga)? */
+  let execucaoAtiva = Boolean(atual?.ativo);
+  /** Começa uma execução (usado pelo formulário e por "Repetir só KO/ERRO"). */
+  const iniciar = async (pedido: AmbitoRun, opcoes: OpcoesRun): Promise<void> => {
+    historicoAberto = null;
+    casoAberto = null;
+    runMostrado = await api.runs.iniciar(pedido, opcoes);
+    execucaoAtiva = true;
+    desenharFormulario(true);
+    desenharRun();
+  };
   const zonaRun = h('div', { id: 'zona-run' });
   const zonaHistorico = h('div', {});
   corpo.append(zonaFormulario, zonaRun, zonaHistorico);
@@ -57,6 +69,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
   deixarDeOuvir = api.runs.aoAtualizar((novo) => {
     if (!zonaRun.isConnected) return;
     const terminou = runMostrado?.ativo && !novo.ativo;
+    execucaoAtiva = novo.ativo;
     // Só acompanha ao vivo se não estiver a ver uma execução antiga.
     if (!historicoAberto || historicoAberto === novo.pasta) {
       runMostrado = novo;
@@ -85,8 +98,67 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
     const browser = h('select', { id: 'run-browser', class: 'campo' }, h('option', { value: 'msedge' }, 'Microsoft Edge'), h('option', { value: 'chrome' }, 'Google Chrome'));
     const modo = h('select', { id: 'run-modo', class: 'campo' }, h('option', { value: 'background' }, 'Em background (sem janela)'), h('option', { value: 'visivel' }, 'Visível'));
     const paralelo = h('select', { id: 'run-paralelo', class: 'campo' }, [1, 2, 4, 8].map((n) => h('option', { value: n }, n === 1 ? '1 de cada vez' : `${n} em paralelo`)));
+    const velocidade = h(
+      'select',
+      { id: 'run-velocidade', class: 'campo' },
+      h('option', { value: 'normal' }, 'Normal'),
+      h('option', { value: 'lenta' }, 'Lenta (1 segundo entre passos)'),
+      h('option', { value: 'passo' }, 'Passo a passo (pára antes de cada passo)'),
+    );
+    const pausarNoErro = h('input', { id: 'run-pausar-erro', type: 'checkbox' });
     const botao = h('button', { id: 'btn-correr', type: 'submit', class: 'botao botao-primario', disabled: aCorrer }, aCorrer ? 'A correr…' : 'Correr');
+    const botaoVerificar = h('button', { id: 'btn-verificar', type: 'button', class: 'botao', disabled: aCorrer }, 'Verificar');
+    const zonaVerificacao = h('div', { id: 'zona-verificacao', class: 'zona-verificacao' });
     const grupo = (id: string, rotulo: string, campo: HTMLElement): HTMLElement => h('div', { class: 'campo-grupo' }, h('label', { for: id }, rotulo), campo);
+
+    /** O que foi escolhido para correr. */
+    const lerAmbito = (): AmbitoRun => {
+      const pedido: AmbitoRun = {};
+      const [tipo, id] = ambito.value.split(':');
+      if (tipo === 'epico') pedido.epicoIds = [id];
+      if (tipo === 'jornada') pedido.jornadaIds = [id];
+      const ids = casos.value.split(',').map((c) => c.trim()).filter(Boolean);
+      if (ids.length > 0) {
+        pedido.chavesCasos = jornadas.filter((j) => tipo !== 'jornada' || j.id === id).flatMap((j) => ids.map((c) => `${j.id}/${c}`));
+      }
+      const filtro = etiquetas.value.split(',').map((e) => e.trim()).filter(Boolean);
+      if (filtro.length > 0) pedido.etiquetas = filtro;
+      return pedido;
+    };
+
+    /** Mostra o resultado da verificação. Devolve true se não houver erros. */
+    const verificar = async (aoCorrerNaMesma?: () => void): Promise<boolean> => {
+      zonaVerificacao.replaceChildren(h('p', { class: 'suave', role: 'status' }, 'A verificar…'));
+      const resultado = await api.runs.verificar(lerAmbito());
+      const erros = resultado.problemas.filter((p) => p.gravidade === 'erro');
+      const avisos = resultado.problemas.filter((p) => p.gravidade === 'aviso');
+      const titulo =
+        erros.length > 0
+          ? `Há ${plural(erros.length, 'problema')} que ${erros.length === 1 ? 'impede' : 'impedem'} casos de correr`
+          : avisos.length > 0
+            ? `Pode correr (${plural(resultado.casos, 'caso')}), com ${plural(avisos.length, 'aviso')}`
+            : `Está tudo pronto para correr ${plural(resultado.casos, 'caso')}`;
+      zonaVerificacao.replaceChildren(
+        h(
+          'div',
+          { id: 'resultado-verificacao', class: 'verificacao', 'data-estado': erros.length > 0 ? 'erro' : avisos.length > 0 ? 'aviso' : 'ok', role: 'status' },
+          h('p', { class: 'verificacao-titulo' }, titulo),
+          resultado.problemas.length > 0 &&
+            h(
+              'ul',
+              { class: 'lista-problemas' },
+              resultado.problemas.map((p) => h('li', { 'data-gravidade': p.gravidade }, h('strong', {}, `${p.onde}: `), p.mensagem)),
+            ),
+          erros.length > 0 &&
+            aoCorrerNaMesma &&
+            h('button', { id: 'btn-correr-na-mesma', type: 'button', class: 'botao', onclick: aoCorrerNaMesma }, 'Correr mesmo assim'),
+        ),
+      );
+      return erros.length === 0;
+    };
+    botaoVerificar.addEventListener('click', () => {
+      void verificar().catch((e) => zonaVerificacao.replaceChildren(h('p', { class: 'aviso-erro', role: 'alert' }, mensagemDeErro(e))));
+    });
 
     zonaFormulario.replaceChildren(
       h(
@@ -96,37 +168,35 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
           onsubmit: async (evento: Event) => {
             evento.preventDefault();
             erro.hidden = true;
-            const pedido: AmbitoRun = {};
-            const [tipo, id] = ambito.value.split(':');
-            if (tipo === 'epico') pedido.epicoIds = [id];
-            if (tipo === 'jornada') pedido.jornadaIds = [id];
-            const ids = casos.value.split(',').map((c) => c.trim()).filter(Boolean);
-            if (ids.length > 0) {
-              pedido.chavesCasos = jornadas.filter((j) => tipo !== 'jornada' || j.id === id).flatMap((j) => ids.map((c) => `${j.id}/${c}`));
-            }
-            const filtro = etiquetas.value.split(',').map((e) => e.trim()).filter(Boolean);
-            if (filtro.length > 0) pedido.etiquetas = filtro;
-            let confirmouProducao = false;
-            if (ambiente?.tipo === 'PRD') {
-              confirmouProducao = await confirmar('Ambiente de PRODUÇÃO', `O ambiente ativo (${ambiente.nome}) é de produção. Tens a certeza de que queres correr testes aqui?`, 'Correr em produção');
-              if (!confirmouProducao) return;
-            }
-            botao.disabled = true;
+            const pedido = lerAmbito();
+            const correr = async (): Promise<void> => {
+              let confirmouProducao = false;
+              if (ambiente?.tipo === 'PRD') {
+                confirmouProducao = await confirmar('Ambiente de PRODUÇÃO', `O ambiente ativo (${ambiente.nome}) é de produção. Tens a certeza de que queres correr testes aqui?`, 'Correr em produção');
+                if (!confirmouProducao) return;
+              }
+              botao.disabled = true;
+              try {
+                await iniciar(pedido, {
+                  canal: browser.value === 'chrome' ? 'chrome' : 'msedge',
+                  visivel: modo.value === 'visivel',
+                  paralelo: Number(paralelo.value),
+                  velocidade: velocidade.value === 'lenta' ? 'lenta' : velocidade.value === 'passo' ? 'passo' : 'normal',
+                  pausarNoErro: pausarNoErro.checked,
+                  confirmouProducao,
+                });
+              } catch (e) {
+                erro.textContent = mensagemDeErro(e);
+                erro.hidden = false;
+                botao.disabled = false;
+              }
+            };
+            // Antes de correr, verifica: se houver problemas que impedem casos de correr, mostra-os e deixa decidir.
             try {
-              historicoAberto = null;
-              casoAberto = null;
-              runMostrado = await api.runs.iniciar(pedido, {
-                canal: browser.value === 'chrome' ? 'chrome' : 'msedge',
-                visivel: modo.value === 'visivel',
-                paralelo: Number(paralelo.value),
-                confirmouProducao,
-              });
-              botao.textContent = 'A correr…';
-              desenharRun();
+              if (await verificar(() => void correr())) await correr();
             } catch (e) {
               erro.textContent = mensagemDeErro(e);
               erro.hidden = false;
-              botao.disabled = false;
             }
           },
         },
@@ -141,10 +211,17 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
           grupo('run-browser', 'Browser', browser),
           grupo('run-modo', 'Modo', modo),
           grupo('run-paralelo', 'Em paralelo', paralelo),
+          grupo('run-velocidade', 'Velocidade', velocidade),
+          h('label', { class: 'opcao opcao-run' }, pausarNoErro, 'Pausar quando um caso der ERRO'),
         ),
-        botao,
+        h('div', { class: 'acoes' }, botao, botaoVerificar),
+        zonaVerificacao,
       ),
     );
+  }
+
+  function atualAtiva(): boolean {
+    return execucaoAtiva;
   }
 
   function desenharRun(): void {
@@ -161,9 +238,36 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
     const feitos = run.casos.length - totais['por-correr'] - totais['a-correr'];
     if (run.ativo) {
       acoes.append(
+        run.emPausa
+          ? h('button', { id: 'btn-continuar', type: 'button', class: 'botao botao-primario', onclick: () => void api.runs.continuar() }, 'Continuar')
+          : h('button', { id: 'btn-pausar', type: 'button', class: 'botao', disabled: run.aParar, title: 'Pára entre passos, nunca a meio de uma ação.', onclick: () => void api.runs.pausar() }, 'Pausar'),
         h('button', { id: 'btn-parar', type: 'button', class: 'botao botao-perigo', disabled: run.aParar, onclick: () => void api.runs.parar() }, run.aParar ? 'A parar…' : 'Parar'),
       );
     } else if (pasta) {
+      const falhados = run.casos.filter((c) => c.estado === 'KO' || c.estado === 'ERRO');
+      const haOutraACorrer = atualAtiva();
+      if (falhados.length > 0) {
+        acoes.append(
+          h(
+            'button',
+            {
+              id: 'btn-repetir-falhados',
+              type: 'button',
+              class: 'botao botao-primario',
+              disabled: haOutraACorrer,
+              title: 'Corre outra vez só os casos que deram KO ou ERRO, com as mesmas opções.',
+              onclick: async () => {
+                try {
+                  await iniciar({ chavesCasos: falhados.map((c) => c.chave) }, { ...run.opcoes, confirmouProducao: false });
+                } catch (e) {
+                  await confirmar('Não foi possível repetir', mensagemDeErro(e), 'Fechar');
+                }
+              },
+            },
+            `Repetir só KO/ERRO (${falhados.length})`,
+          ),
+        );
+      }
       acoes.append(
         h('button', { type: 'button', class: 'botao', onclick: () => void api.runs.abrir(pasta) }, 'Abrir pasta'),
         h('button', { type: 'button', class: 'botao', onclick: () => void api.runs.abrir(pasta, 'relatorio.xlsx') }, 'Relatório Excel'),
@@ -188,7 +292,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
               `${new Date(run.inicio).toLocaleString('pt-PT')} · Ambiente ${run.ambiente} · ${run.opcoes.canal === 'msedge' ? 'Edge' : 'Chrome'}, ${run.opcoes.visivel ? 'visível' : 'em background'}, ${run.opcoes.paralelo} em paralelo`,
             ),
           ),
-          h('span', { class: 'etiqueta', id: 'run-progresso' }, run.ativo ? `${feitos} de ${run.casos.length}` : 'Terminada'),
+          h('span', { class: 'etiqueta', id: 'run-progresso', 'data-pausa': String(run.ativo && run.emPausa) }, run.ativo ? `${run.emPausa ? 'Em pausa · ' : ''}${feitos} de ${run.casos.length}` : 'Terminada'),
         ),
         h('progress', { class: 'barra-progresso', max: run.casos.length, value: feitos, 'aria-label': 'Progresso da execução' }),
         h(
@@ -199,6 +303,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
           total('KO', totais.KO, 'KO'),
           total('ERRO', totais.ERRO, 'ERRO'),
           totais.PARADO > 0 && total('parados', totais.PARADO, ''),
+          (totais.SALTADO ?? 0) > 0 && total('saltados', totais.SALTADO, ''),
         ),
         h(
           'ul',
@@ -221,9 +326,22 @@ export async function ecraRuns({ estado, corpo, acoes, selecao }: Contexto): Pro
             : '';
     const detalhe = h('div', { class: 'caso-detalhe' });
     if (aberto) desenharDetalhe(run, caso, detalhe);
+    const podeSaltar = run.ativo && (caso.estado === 'por-correr' || caso.estado === 'a-correr');
     return h(
       'li',
       { class: 'caso', 'data-estado': caso.estado, 'data-chave': caso.chave },
+      podeSaltar &&
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'botao botao-pequeno-livre botao-saltar',
+            'aria-label': `Saltar o caso ${caso.casoId}`,
+            title: 'Este caso não corre (ou pára no próximo passo) e a execução segue para o seguinte.',
+            onclick: () => void api.runs.saltar(caso.chave),
+          },
+          'Saltar',
+        ),
       h(
         'button',
         {

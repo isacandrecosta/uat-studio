@@ -26,6 +26,10 @@ interface ItemPlano {
 
 let runAtual: EstadoRun | null = null;
 let pararPedido = false;
+/** Em pausa: os casos esperam entre passos até alguém carregar em "Continuar". */
+let pausado = false;
+/** Casos (idDaJornada/idDoCaso) que o utilizador mandou saltar. */
+const saltar = new Set<string>();
 let notificar: (estado: EstadoRun) => void = () => undefined;
 let ultimaNotificacao = 0;
 
@@ -131,10 +135,11 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
     nome,
     ativo: true,
     aParar: false,
+    emPausa: false,
     inicio: inicio.toISOString(),
     ambiente: ambiente.nome,
     tipoAmbiente: ambiente.tipo,
-    opcoes: { canal: opcoes.canal, visivel: opcoes.visivel, paralelo },
+    opcoes: { canal: opcoes.canal, visivel: opcoes.visivel, paralelo, velocidade: opcoes.velocidade ?? 'normal', pausarNoErro: Boolean(opcoes.pausarNoErro) },
     casos: itens.map((item) => ({
       chave: `${item.jornada.id}/${item.caso.id}`,
       jornadaId: item.jornada.id,
@@ -152,6 +157,13 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   };
   runAtual = run;
   pararPedido = false;
+  pausado = false;
+  saltar.clear();
+  const definirPausa = (valor: boolean): void => {
+    pausado = valor;
+    run.emPausa = valor;
+    avisar(true);
+  };
 
   const ficheiroLog = path.join(pastaRun, 'run.log');
   const log = (linha: string): void =>
@@ -182,6 +194,13 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             continue;
           }
           const item = itens[indice];
+          const chave = run.casos[indice].chave;
+          if (saltar.has(chave)) {
+            run.casos[indice].estado = 'SALTADO';
+            log(`${item.jornada.nome} / ${item.caso.id}: saltado`);
+            avisar(true);
+            continue;
+          }
           const relativa = run.casos[indice].pasta ?? pastaDoCaso(item);
           log(`A correr ${item.jornada.nome} / ${item.caso.id}`);
           run.casos[indice].estado = 'a-correr';
@@ -206,10 +225,23 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
               avisar();
             },
             devePararAgora: () => pararPedido,
+            deveSaltar: () => saltar.has(chave),
+            entrePassos: async () => {
+              // Passo a passo: pára antes de cada passo, à espera de "Continuar".
+              if (opcoes.velocidade === 'passo' && !pararPedido) definirPausa(true);
+              else if (opcoes.velocidade === 'lenta') await new Promise((r) => setTimeout(r, 1000));
+              while (pausado && !pararPedido && !saltar.has(chave)) await new Promise((r) => setTimeout(r, 150));
+            },
           });
           run.casos[indice] = { ...resultado, pasta: relativa };
           const resumo = resultado.estado === 'ERRO' ? `ERRO: ${resultado.erro?.mensagem ?? ''}` : resultado.estado;
           log(`${item.jornada.nome} / ${item.caso.id}: ${resumo} (${(resultado.duracaoMs / 1000).toFixed(1)} s)`);
+          // "Pausar no 1.º ERRO": fica em pausa para se poder ver o que se passou antes de continuar.
+          if (resultado.estado === 'ERRO' && opcoes.pausarNoErro && proximo < itens.length && !pararPedido) {
+            log('Em pausa por causa de um ERRO (opção "pausar no erro").');
+            definirPausa(true);
+            while (pausado && !pararPedido) await new Promise((r) => setTimeout(r, 150));
+          }
           avisar(true);
         }
       };
@@ -227,6 +259,8 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
       await browser?.close().catch(() => undefined);
       run.ativo = false;
       run.aParar = false;
+      run.emPausa = false;
+      pausado = false;
       run.fim = new Date().toISOString();
       const conta = (estado: ResultadoCaso['estado']): number => run.casos.filter((c) => c.estado === estado).length;
       log(`Fim: ${conta('OK')} OK, ${conta('KO')} KO, ${conta('ERRO')} ERRO${conta('PARADO') ? `, ${conta('PARADO')} parados` : ''}`);
@@ -243,9 +277,39 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   return run;
 }
 
+/** Põe a execução em pausa (os casos param entre passos, nunca a meio de uma ação). */
+export function pausarRun(): EstadoRun | null {
+  if (runAtual?.ativo && !pararPedido) {
+    pausado = true;
+    runAtual.emPausa = true;
+    avisar(true);
+  }
+  return runAtual;
+}
+
+export function continuarRun(): EstadoRun | null {
+  if (runAtual?.ativo) {
+    pausado = false;
+    runAtual.emPausa = false;
+    avisar(true);
+  }
+  return runAtual;
+}
+
+/** Salta um caso: se ainda não começou, não corre; se está a correr, pára no próximo passo. */
+export function saltarCaso(chave: string): EstadoRun | null {
+  if (runAtual?.ativo) {
+    saltar.add(chave);
+    avisar(true);
+  }
+  return runAtual;
+}
+
 export function pararRun(): EstadoRun | null {
   if (runAtual?.ativo) {
     pararPedido = true;
+    pausado = false;
+    runAtual.emPausa = false;
     runAtual.aParar = true;
     avisar(true);
   }
@@ -268,7 +332,8 @@ export function listarHistorico(pasta: string): EstadoRun[] {
     try {
       const run = JSON.parse(fs.readFileSync(path.join(pastaExecucoes, nome, 'run.json'), 'utf8')) as EstadoRun;
       // Uma execução interrompida à força (app fechada) fica marcada como terminada.
-      runs.push({ ...run, pasta: nome, ativo: runAtual?.ativo === true && runAtual.pasta === nome });
+      const ativo = runAtual?.ativo === true && runAtual.pasta === nome;
+      runs.push({ ...run, pasta: nome, ativo, emPausa: ativo && Boolean(runAtual?.emPausa) });
     } catch {
       // Pasta sem run.json válido: ignora.
     }

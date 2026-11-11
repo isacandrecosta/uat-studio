@@ -8,7 +8,9 @@ import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from '../
 import { exportarCasos, importarCasos } from '../excel/casosExcel';
 import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
-import { caminhoNaExecucao, estadoRun, iniciarRun, listarHistorico, pararRun } from './execucao';
+import { criarAmbienteApi } from '../api/ambiente';
+import { caminhoNaExecucao, continuarRun, estadoRun, iniciarRun, listarHistorico, pararRun, pausarRun, saltarCaso } from './execucao';
+import { verificarAntesDeCorrer } from './verificar';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
 
@@ -16,6 +18,17 @@ export function registarIpcExecucoes(): void {
   ipcMain.handle('run:estado', () => estadoRun());
   ipcMain.handle('run:iniciar', (_e, ambito: AmbitoRun, opcoes: OpcoesRun) => iniciarRun(pastaDoProjeto(), ambito ?? {}, opcoes));
   ipcMain.handle('run:parar', () => pararRun());
+  ipcMain.handle('run:pausar', () => pausarRun());
+  ipcMain.handle('run:continuar', () => continuarRun());
+  ipcMain.handle('run:saltar', (_e, chave: string) => saltarCaso(String(chave)));
+  // Verificação antes de correr: o que falta ou está mal, sem abrir o browser.
+  ipcMain.handle('run:verificar', (_e, ambito: AmbitoRun) => {
+    const pasta = pastaDoProjeto();
+    return verificarAntesDeCorrer(pasta, ambito ?? {}, {
+      segredosPreenchidos: (nomes) => segredosPreenchidos(pasta, nomes),
+      fetch: criarAmbienteApi(pasta).fetch,
+    });
+  });
   ipcMain.handle('run:historico', () => listarHistorico(pastaDoProjeto()));
 
   // Abre a pasta ou um ficheiro da execução no Windows (Explorador, Excel, browser...).

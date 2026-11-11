@@ -489,3 +489,18 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .passo-edicao .campo-numero { width: 100%; }
 .passo-edicao .erro-campo { grid-column: 3 / -1; }
 .passo-cabecalho { padding-bottom: 2px; color: var(--texto-suave); font-size: 12px; font-weight: 600; }
+/* Verificação antes de correr e controlo das execuções */
+.opcao-run { align-self: end; display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
+.zona-verificacao { width: 100%; }
+.verificacao { margin-top: 8px; padding: 10px 14px; border-radius: 8px; border-left: 4px solid var(--ok); background: var(--ok-fundo); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.verificacao[data-estado="erro"] { border-left-color: var(--erro); background: var(--erro-fundo); }
+.verificacao[data-estado="aviso"] { border-left-color: #e0a100; background: var(--aviso-fundo); }
+.verificacao-titulo { font-weight: 600; }
+.lista-problemas { margin: 0; padding-left: 18px; line-height: 1.6; }
+.lista-problemas li[data-gravidade="aviso"] { color: var(--aviso); }
+.caso { display: flex; flex-wrap: wrap; align-items: center; }
+.caso .caso-topo { flex: 1; min-width: 0; width: auto; order: 1; }
+.caso .botao-saltar { order: 2; margin-left: 8px; }
+.caso .caso-detalhe { order: 3; flex-basis: 100%; }
+#run-progresso[data-pausa="true"] { background: var(--aviso-fundo); color: var(--aviso); font-weight: 600; }
+.caso[data-estado="SALTADO"] .estado-caso, .caso[data-estado="PARADO"] .estado-caso { background: var(--neutro-fundo); color: var(--texto-suave); }

@@ -130,7 +130,7 @@ export interface VariavelCalculada {
 // ---------- Execuções (runs) ----------
 
 /** OK: tudo coincide. KO: chegou ao fim mas há valores diferentes. ERRO: não chegou ao fim. */
-export type EstadoCaso = 'por-correr' | 'a-correr' | 'OK' | 'KO' | 'ERRO' | 'PARADO';
+export type EstadoCaso = 'por-correr' | 'a-correr' | 'OK' | 'KO' | 'ERRO' | 'PARADO' | 'SALTADO';
 
 /** Um valor que não coincidiu numa verificação. */
 export interface Diferenca {
@@ -188,6 +188,10 @@ export interface OpcoesRun {
   visivel: boolean;
   /** Quantos casos correm ao mesmo tempo (1, 2, 4 ou 8). */
   paralelo: number;
+  /** normal; lenta: 1 segundo entre passos; passo: pára antes de cada passo, à espera de "Continuar". */
+  velocidade?: 'normal' | 'lenta' | 'passo';
+  /** Pôr a execução em pausa quando um caso der ERRO (para se poder ver o que se passou). */
+  pausarNoErro?: boolean;
   /** O utilizador confirmou que quer mesmo correr num ambiente de produção. */
   confirmouProducao?: boolean;
 }
@@ -208,6 +212,8 @@ export interface EstadoRun {
   ativo: boolean;
   /** Foi pedido para parar. */
   aParar: boolean;
+  /** Em pausa (os casos param entre passos, nunca a meio de uma ação). */
+  emPausa: boolean;
   inicio: string;
   fim?: string;
   ambiente: string;
@@ -395,4 +401,19 @@ export interface ProjetoRecente {
   pasta: string;
   nome: string;
   abertoEm: string;
+}
+
+/** Um problema encontrado na verificação antes de correr. */
+export interface Problema {
+  /** erro: o caso não vai conseguir correr; aviso: convém ver, mas não impede. */
+  gravidade: 'erro' | 'aviso';
+  /** Onde está o problema (jornada, bloco, perfil...). */
+  onde: string;
+  mensagem: string;
+}
+
+export interface ResultadoVerificacao {
+  /** Quantos casos seriam corridos com esta escolha. */
+  casos: number;
+  problemas: Problema[];
 }

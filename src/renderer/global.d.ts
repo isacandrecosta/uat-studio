@@ -11,6 +11,7 @@ import type {
   PedidoGravacao,
   ProjetoRecente,
   ResultadoApi,
+  ResultadoVerificacao,
   VariavelCalculada,
 } from '../shared/modelo';
 
@@ -48,6 +49,13 @@ declare global {
         estado(): Promise<EstadoRun | null>;
         iniciar(ambito: AmbitoRun, opcoes: OpcoesRun): Promise<EstadoRun>;
         parar(): Promise<EstadoRun | null>;
+        /** Pausa entre passos (nunca a meio de uma ação). */
+        pausar(): Promise<EstadoRun | null>;
+        continuar(): Promise<EstadoRun | null>;
+        /** Salta um caso (`idDaJornada/idDoCaso`), esteja por correr ou a correr. */
+        saltar(chave: string): Promise<EstadoRun | null>;
+        /** Verificação antes de correr: o que falta ou está mal para esta escolha. */
+        verificar(ambito: AmbitoRun): Promise<ResultadoVerificacao>;
         historico(): Promise<EstadoRun[]>;
         /** Abre no Windows uma pasta ou ficheiro dentro de `execucoes/`. */
         abrir(...partes: string[]): Promise<void>;

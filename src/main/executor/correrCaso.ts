@@ -51,11 +51,16 @@ export interface PedidoCaso {
   /** Chamado sempre que há novidades, para a interface acompanhar. */
   aoProgredir(resultado: ResultadoCaso): void;
   devePararAgora(): boolean;
+  /** O utilizador mandou saltar este caso? */
+  deveSaltar(): boolean;
+  /** Chamado antes de cada passo: é aqui que a execução espera se estiver em pausa (ou em modo lento). */
+  entrePassos(): Promise<void>;
 }
 
 /** Erro nos dados ou na definição do teste (não na aplicação). */
 class ErroDados extends Error {}
 class Parado extends Error {}
+class Saltado extends Error {}
 
 const hora = (): string => new Date().toLocaleTimeString('pt-PT', { hour12: false });
 const segundos = (ms: number): string => `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
@@ -271,6 +276,13 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     }
   };
 
+  /** Entre passos: espera se a execução estiver em pausa e pára se foi pedido para parar ou saltar o caso. */
+  const pontoDeControlo = async (): Promise<void> => {
+    await pedido.entrePassos();
+    if (pedido.devePararAgora()) throw new Parado();
+    if (pedido.deveSaltar()) throw new Saltado();
+  };
+
   /** Marca o caso como ERRO (não chegou ao fim) e guarda a explicação e o print do momento. */
   const registarErro = async (erro: unknown): Promise<void> => {
     resultado.estado = 'ERRO';
@@ -317,7 +329,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       evento({ tipo: 'bloco-inicio', bloco: bloco.nome });
 
       if (bloco.tipo === 'API') {
-        if (pedido.devePararAgora()) throw new Parado();
+        await pontoDeControlo();
         const definicao = bloco.pedido;
         if (!definicao) throw new ErroDados(`O bloco "${bloco.nome}" não tem um pedido definido.`);
         passoAtual = `${definicao.metodo} ${definicao.url}`;
@@ -380,7 +392,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       }
 
       for (const passo of bloco.passos) {
-        if (pedido.devePararAgora()) throw new Parado();
+        await pontoDeControlo();
         passoAtual = passo.descricao;
         resultado.passoAtual = `${bloco.nome}: ${passo.descricao}`;
         pedido.aoProgredir(resultado);
@@ -407,7 +419,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       try {
         await correrBloco(indice, item);
       } catch (erro) {
-        if (erro instanceof Parado) throw erro;
+        if (erro instanceof Parado || erro instanceof Saltado) throw erro;
         if (houveErro) {
           // Uma limpeza que falha não muda o resultado do caso, mas fica registada.
           registar(blocoAtual, passoAtual || 'Limpeza', 'erro', 0, `A limpeza falhou: ${explicarErro(erro, limiteMs)}`);
@@ -550,6 +562,9 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
     if (erro instanceof Parado) {
       resultado.estado = 'PARADO';
       escrever('Parado a pedido do utilizador.');
+    } else if (erro instanceof Saltado) {
+      resultado.estado = 'SALTADO';
+      escrever('Caso saltado a pedido do utilizador.');
     } else if (resultado.estado !== 'ERRO') {
       await registarErro(erro);
     }
