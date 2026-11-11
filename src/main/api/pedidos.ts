@@ -29,6 +29,8 @@ export interface AmbienteApi {
    * de regresso (com ?code=...&state=...). Sem isto, os perfis com login não funcionam.
    */
   loginInterativo?(pedido: LoginInterativo): Promise<string>;
+  /** mTLS: um "fetch" que apresenta o certificado de cliente do perfil (dá erro se o ficheiro não existir). */
+  fetchComCertificado?(perfil: PerfilAutenticacao): typeof fetch;
 }
 
 export interface LoginInterativo {
@@ -61,9 +63,19 @@ function exigirSegredo(amb: AmbienteApi, perfil: PerfilAutenticacao, campo: stri
   return valor;
 }
 
+/** O "fetch" a usar com este perfil: com certificado de cliente (mTLS), o do ambiente que o sabe apresentar. */
+function fetchDoPerfil(amb: AmbienteApi, perfil: PerfilAutenticacao | undefined): typeof fetch {
+  if (!perfil?.certificado?.ficheiro?.trim()) return amb.fetch;
+  if (!amb.fetchComCertificado) throw new ErroApi(`O perfil "${perfil.nome}" usa um certificado de cliente, que não está disponível aqui.`);
+  return amb.fetchComCertificado(perfil);
+}
+
 function explicarRede(erro: unknown, limiteMs: number, oQue: string): ErroApi {
   const texto = erro instanceof Error ? `${erro.name} ${erro.message} ${String((erro as { cause?: unknown }).cause ?? '')}` : String(erro);
   if (/TimeoutError|AbortError|timed out|aborted/i.test(texto)) return new ErroApi(`${oQue}: o servidor não respondeu em ${Math.round(limiteMs / 1000)} segundos.`);
+  // Erros do certificado de cliente (mTLS) já vêm explicados: "certificate: ...".
+  const detalhe = erro instanceof Error && erro.message.startsWith('certificate: ') ? erro.message.slice('certificate: '.length) : '';
+  if (detalhe) return new ErroApi(`${oQue}: problema de certificados (${detalhe}).`);
   if (/ERR_CERT|ERR_SSL|certificate|CERT_/i.test(texto)) return new ErroApi(`${oQue}: problema de certificados.`);
   if (/ERR_PROXY|ERR_TUNNEL/i.test(texto)) return new ErroApi(`${oQue}: problema de proxy.`);
   if (/ECONNREFUSED|ERR_CONNECTION_REFUSED/i.test(texto)) return new ErroApi(`${oQue}: o servidor recusou a ligação (está ligado? o endereço e a porta estão certos?).`);
@@ -145,7 +157,7 @@ async function enviarPedidoDeToken(amb: AmbienteApi, perfil: PerfilAutenticacao,
   const cabecalhos: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', ...extra };
   let resposta: Response;
   try {
-    resposta = await amb.fetch(perfil.urlToken ?? '', { method: 'POST', headers: cabecalhos, body: corpo.toString(), signal: AbortSignal.timeout(30_000) });
+    resposta = await fetchDoPerfil(amb, perfil)(perfil.urlToken ?? '', { method: 'POST', headers: cabecalhos, body: corpo.toString(), signal: AbortSignal.timeout(30_000) });
   } catch (erro) {
     throw explicarRede(erro, 30_000, `Pedido de token (perfil "${perfil.nome}")`);
   }
@@ -226,6 +238,9 @@ async function autenticar(amb: AmbienteApi, perfil: PerfilAutenticacao | undefin
       const chave = exigirSegredo(amb, perfil, 'chave', 'Chave da API');
       return { cabecalhos: { [perfil.cabecalho?.trim() || 'X-API-Key']: chave }, secretos: [chave] };
     }
+    case 'mtls':
+      // Só o certificado de cliente (apresentado na ligação), sem cabeçalhos.
+      return { cabecalhos: {}, secretos: [] };
   }
 }
 
@@ -380,7 +395,7 @@ export async function executarBlocoApi(pedidoBloco: PedidoBloco, amb: AmbienteAp
     cabecalhos = { ...cabecalhosBase, ...autenticacao.cabecalhos };
     const inicio = Date.now();
     try {
-      resposta = await amb.fetch(url, { method: pedido.metodo, headers: cabecalhos, body: corpo, signal: AbortSignal.timeout(limiteMs) });
+      resposta = await fetchDoPerfil(amb, perfil)(url, { method: pedido.metodo, headers: cabecalhos, body: corpo, signal: AbortSignal.timeout(limiteMs) });
       texto = await resposta.text();
     } catch (erro) {
       throw explicarRede(erro, limiteMs, `${pedido.metodo} ${url}`);

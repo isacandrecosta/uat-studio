@@ -2,6 +2,7 @@
 import { ondeEUsado } from '../../shared/blocos.js';
 import { importarPedidos, type PedidoImportado } from '../../shared/importar.js';
 import {
+  SEGREDO_CERTIFICADO,
   SEGREDOS_DO_PERFIL,
   type Bloco,
   type MetodoHttp,
@@ -25,6 +26,7 @@ const NOMES_PERFIL: Record<TipoPerfil, string> = {
   apikey: 'API Key',
   basic: 'Basic',
   bearer: 'Token fixo (Bearer)',
+  mtls: 'Só certificado de cliente (mTLS)',
 };
 const METODOS: MetodoHttp[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const TIPOS_CORPO: Array<[TipoCorpo, string]> = [
@@ -108,7 +110,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
   const aplicacoesApi = aplicacoes.filter((a) => a.tipo === 'API');
   const ambiente = estado.projeto.ambientes.find((a) => a.id === estado.projeto.ambienteAtivo);
   const exemplos = jornadas.flatMap((j) => (conjuntos.find((c) => c.id === j.id)?.casos ?? []).map((c) => ({ chave: `${j.id}/${c.id}`, texto: `${j.nome} › ${c.id}` })));
-  const nomesSegredos = perfis.flatMap((p) => SEGREDOS_DO_PERFIL[p.tipo].map((s) => `${p.id}.${s.campo}`));
+  const nomesSegredos = perfis.flatMap((p) => [...SEGREDOS_DO_PERFIL[p.tipo], SEGREDO_CERTIFICADO].map((s) => `${p.id}.${s.campo}`));
   const preenchidos = await api.cofre.preenchidos(nomesSegredos);
 
   const redesenhar = (): void => irPara('api');
@@ -178,6 +180,24 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
         ajuda: guardado ? 'Já está guardado no cofre. Deixa vazio para manter.' : 'Fica guardado no cofre encriptado deste PC, fora da pasta do projeto.',
       });
     }
+    // mTLS (em qualquer tipo): certificado de cliente .pfx/.p12, autoridade do servidor e password no cofre.
+    const certificadoGuardado = existente ? preenchidos[`${existente.id}.${SEGREDO_CERTIFICADO.campo}`] : false;
+    campos.push(
+      {
+        id: 'certificado',
+        rotulo: tipo === 'mtls' ? 'Certificado de cliente (.pfx ou .p12)' : 'Certificado de cliente (.pfx ou .p12), opcional',
+        valor: existente?.certificado?.ficheiro,
+        obrigatorio: tipo === 'mtls',
+        ajuda: 'Caminho do ficheiro. De preferência dentro da pasta do projeto (por exemplo certificados/cliente.pfx), para viajar com o projeto. Os pedidos com certificado não passam pelo proxy do Windows.',
+      },
+      { id: 'ca', rotulo: 'Autoridade do servidor (CA, .crt ou .pem), opcional', valor: existente?.certificado?.ca, ajuda: 'Só se o servidor usar um certificado de uma autoridade interna que o Windows não conheça.' },
+      {
+        id: `segredo:${SEGREDO_CERTIFICADO.campo}`,
+        rotulo: `${SEGREDO_CERTIFICADO.rotulo} (se tiver)`,
+        tipo: 'segredo',
+        ajuda: certificadoGuardado ? 'Já está guardada no cofre. Deixa vazio para manter.' : 'Fica guardada no cofre encriptado deste PC.',
+      },
+    );
     const valores = await pedirFormulario(`${NOMES_PERFIL[tipo]}`, campos);
     if (!valores) return;
     try {
@@ -204,7 +224,10 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
           : {}),
         ...(valores.utilizador !== undefined ? { utilizador: valores.utilizador.trim() } : {}),
         ...(valores.cabecalho !== undefined ? { cabecalho: valores.cabecalho.trim() } : {}),
+        ...(valores.certificado?.trim() ? { certificado: { ficheiro: valores.certificado.trim(), ...(valores.ca?.trim() ? { ca: valores.ca.trim() } : {}) } } : {}),
       });
+      const passwordCertificado = valores[`segredo:${SEGREDO_CERTIFICADO.campo}`];
+      if (passwordCertificado) await api.cofre.definir(`${perfil.id}.${SEGREDO_CERTIFICADO.campo}`, passwordCertificado);
       for (const segredo of SEGREDOS_DO_PERFIL[tipo]) {
         const valor = valores[`segredo:${segredo.campo}`];
         if (valor) await api.cofre.definir(`${perfil.id}.${segredo.campo}`, valor);

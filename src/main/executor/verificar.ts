@@ -1,5 +1,7 @@
 // Verificação antes de correr: procura o que vai impedir (ou atrapalhar) uma execução,
 // para o utilizador saber antes de esperar por ela. Não abre o browser.
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { validarFormula } from '../../shared/formulas';
 import {
   AmbitoRun,
@@ -147,6 +149,16 @@ export async function verificarAntesDeCorrer(pasta: string, ambito: AmbitoRun, o
     if (eOAuth && (!perfil.urlToken?.trim() || !perfil.clientId?.trim())) {
       juntar('erro', `Perfil de autenticação "${perfil.nome}"`, 'Falta o endereço do token ou o client ID.');
     }
+    // mTLS: os ficheiros do certificado têm de existir neste PC.
+    for (const [ficheiro, oQue] of [
+      [perfil.certificado?.ficheiro, 'o certificado de cliente'],
+      [perfil.certificado?.ca, 'o ficheiro da autoridade (CA)'],
+    ] as const) {
+      if (!ficheiro?.trim()) continue;
+      const caminho = path.isAbsolute(ficheiro) ? ficheiro : path.join(pasta, ficheiro);
+      if (!fs.existsSync(caminho)) juntar('erro', `Perfil de autenticação "${perfil.nome}"`, `Não encontro ${oQue}: ${caminho}`);
+    }
+    if (perfil.tipo === 'mtls' && !perfil.certificado?.ficheiro?.trim()) juntar('erro', `Perfil de autenticação "${perfil.nome}"`, 'Falta escolher o certificado de cliente.');
     if (perfil.tipo === 'oauth2-pkce') {
       if (!perfil.urlAutorizacao?.trim()) juntar('erro', `Perfil de autenticação "${perfil.nome}"`, 'Falta o endereço da página de login (autorização).');
       else juntar('aviso', `Perfil de autenticação "${perfil.nome}"`, 'Usa login no browser: se não houver sessão guardada neste PC, abre-se o Edge para entrar (uma vez por execução).');

@@ -338,7 +338,7 @@ export interface PedidoApi {
   guardar: GuardarApi[];
 }
 
-export type TipoPerfil = 'oauth2-cliente' | 'oauth2-password' | 'oauth2-pkce' | 'apikey' | 'basic' | 'bearer';
+export type TipoPerfil = 'oauth2-cliente' | 'oauth2-password' | 'oauth2-pkce' | 'apikey' | 'basic' | 'bearer' | 'mtls';
 
 /**
  * Forma de autenticação reutilizável. Os segredos (client secret, password, chave, token)
@@ -362,6 +362,12 @@ export interface PerfilAutenticacao {
   utilizador?: string;
   /** API Key: nome do cabeçalho (por omissão, X-API-Key). */
   cabecalho?: string;
+  /**
+   * mTLS (opcional, em qualquer tipo de perfil): certificado de cliente .pfx/.p12 e, se for preciso,
+   * a autoridade (CA) do servidor. Caminhos absolutos ou relativos à pasta do projeto.
+   * A password do certificado fica no cofre (`<perfil>.certificadoPassword`).
+   */
+  certificado?: { ficheiro: string; ca?: string };
 }
 
 /** Campos secretos de cada tipo de perfil (os nomes usados no cofre). */
@@ -376,7 +382,11 @@ export const SEGREDOS_DO_PERFIL: Record<TipoPerfil, Array<{ campo: string; rotul
   apikey: [{ campo: 'chave', rotulo: 'Chave da API' }],
   basic: [{ campo: 'password', rotulo: 'Password' }],
   bearer: [{ campo: 'token', rotulo: 'Token' }],
+  mtls: [],
 };
+
+/** Segredo da password do certificado de cliente (mTLS), em qualquer tipo de perfil. */
+export const SEGREDO_CERTIFICADO = { campo: 'certificadoPassword', rotulo: 'Password do certificado de cliente', opcional: true };
 
 /** O que aconteceu ao executar um bloco de API (segredos já mascarados). */
 export interface ResultadoApi {

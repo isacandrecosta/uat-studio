@@ -1080,6 +1080,18 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         console.log(`[smoke]   login PKCE no browser OK; 2.º pedido com a sessão guardada em ${Date.now() - inicioSessao} ms`);
         apagarSegredosDoPerfil(pasta, 'login-pkce');
 
+        // mTLS: certificado de cliente (fictício, do servidor de teste) com a password no cofre.
+        const certificados = path.join(path.dirname(SERVIDOR_TESTE), 'certificados');
+        if (fs.existsSync(path.join(certificados, 'cliente.pfx'))) {
+          repo.guardar(pasta, 'perfis', { id: 'so-certificado', nome: 'Só certificado', tipo: 'mtls', certificado: { ficheiro: path.join(certificados, 'cliente.pfx'), ca: path.join(certificados, 'ca.crt') } });
+          definirSegredo(pasta, 'so-certificado.certificadoPassword', 'pfx-de-teste');
+          const blocoMtls = { ...blocoPkce, id: 'com-certificado', nome: 'Com certificado', pedido: { ...blocoPkce.pedido, url: `https://localhost:${porta + 1}/api/mtls`, perfilId: 'so-certificado' } };
+          const comCertificado = await testarBloco(pasta, blocoMtls, undefined);
+          confirmar(comCertificado.verificacoes[0]?.ok && comCertificado.resposta.corpo.includes('uat-cliente-mtls'), `O pedido com certificado de cliente devia dar 200: ${comCertificado.resposta.estado} ${comCertificado.resposta.corpo}`);
+          console.log('[smoke]   mTLS com certificado de cliente OK');
+          apagarSegredosDoPerfil(pasta, 'so-certificado');
+        }
+
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');
       },

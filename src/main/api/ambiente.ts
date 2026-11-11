@@ -1,12 +1,17 @@
 // Liga o motor de API ao Electron: pedidos pela rede do Windows (proxy e certificados) e segredos do cofre.
 import { avaliarFormula, contextoDeExemplo, ErroFormula, preencherTexto } from '../../shared/formulas';
-import { Bloco, ResultadoApi } from '../../shared/modelo';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { Bloco, PerfilAutenticacao, ResultadoApi, SEGREDO_CERTIFICADO } from '../../shared/modelo';
+import { criarFetchComCertificado } from './certificado';
 import { definirSegredo, lerSegredo } from '../cofre';
 import { loginNoBrowser } from './login';
 import * as repo from '../projeto/repositorio';
 import { AmbienteApi, ErroApi, executarBlocoApi } from './pedidos';
 
 export function criarAmbienteApi(pasta: string): AmbienteApi {
+  /** mTLS: um "fetch" por perfil, reutilizado só durante esta execução (lê a password do cofre uma vez). */
+  const certificados = new Map<string, typeof fetch>();
   return {
     // O Electron só é carregado aqui, para este módulo poder ser importado em testes sem Electron.
     fetch: ((entrada: Parameters<typeof fetch>[0], opcoes?: Parameters<typeof fetch>[1]) => {
@@ -18,6 +23,7 @@ export function criarAmbienteApi(pasta: string): AmbienteApi {
     // Sessão do login PKCE (refresh token): encriptada no cofre, nunca na pasta do projeto.
     guardarSegredo: (nome, valor) => definirSegredo(pasta, nome, valor ?? ''),
     loginInterativo: (pedido) => loginNoBrowser(pedido),
+    fetchComCertificado: (perfil) => fetchComCertificadoDoPerfil(pasta, perfil, certificados),
     tokens: new Map(),
   };
 }
@@ -71,4 +77,30 @@ export async function testarBloco(pasta: string, bloco: Bloco, chaveCaso: string
     },
     criarAmbienteApi(pasta),
   );
+}
+
+/** Caminho de um ficheiro do perfil: absoluto, ou relativo à pasta do projeto (para viajar com o projeto). */
+export function caminhoDoProjeto(pasta: string, ficheiro: string): string {
+  return path.isAbsolute(ficheiro) ? ficheiro : path.join(pasta, ficheiro);
+}
+
+/** mTLS: lê o certificado (e a autoridade, se houver) e a password do cofre. */
+function fetchComCertificadoDoPerfil(pasta: string, perfil: PerfilAutenticacao, cache: Map<string, typeof fetch>): typeof fetch {
+  const certificado = perfil.certificado;
+  if (!certificado?.ficheiro) throw new ErroApi(`O perfil "${perfil.nome}" não tem certificado de cliente.`);
+  const chave = `${perfil.id}|${certificado.ficheiro}|${certificado.ca ?? ''}`;
+  const existente = cache.get(chave);
+  if (existente) return existente;
+  const ler = (ficheiro: string, oQue: string): Buffer => {
+    const caminho = caminhoDoProjeto(pasta, ficheiro);
+    if (!fs.existsSync(caminho)) throw new ErroApi(`O ${oQue} do perfil "${perfil.nome}" não existe: ${caminho}`);
+    return fs.readFileSync(caminho);
+  };
+  const novo = criarFetchComCertificado({
+    pfx: ler(certificado.ficheiro, 'certificado de cliente'),
+    passphrase: lerSegredo(pasta, `${perfil.id}.${SEGREDO_CERTIFICADO.campo}`),
+    ...(certificado.ca ? { ca: ler(certificado.ca, 'ficheiro da autoridade (CA)') } : {}),
+  });
+  cache.set(chave, novo);
+  return novo;
 }

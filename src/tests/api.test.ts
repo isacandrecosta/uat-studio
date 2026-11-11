@@ -5,6 +5,7 @@ import { ChildProcess, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { after, before, test } from 'node:test';
+import { criarFetchComCertificado } from '../main/api/certificado';
 import { AmbienteApi, ErroApi, escaparJson, executarBlocoApi, lerCaminho } from '../main/api/pedidos';
 import { contextoDeExemplo, preencherTexto, variaveisDoTexto } from '../shared/formulas';
 import type { Bloco, PedidoApi, PerfilAutenticacao } from '../shared/modelo';
@@ -12,13 +13,14 @@ import type { Bloco, PedidoApi, PerfilAutenticacao } from '../shared/modelo';
 const SERVIDOR = process.env.UAT_SERVIDOR_TESTE ?? path.resolve(__dirname, '..', '..', '..', 'uat-servidor-teste', 'servidor.mjs');
 const PORTA = 4317;
 const BASE = `http://localhost:${PORTA}`;
+const PORTA_MTLS = 4327;
 const haServidor = fs.existsSync(SERVIDOR);
 let processo: ChildProcess | null = null;
 
 before(async () => {
   if (!haServidor) return;
   // Tokens de 2 segundos, para testar a renovação.
-  processo = spawn(process.execPath, [SERVIDOR, String(PORTA)], { env: { ...process.env, TOKEN_SEGUNDOS: '2' }, stdio: 'ignore' });
+  processo = spawn(process.execPath, [SERVIDOR, String(PORTA)], { env: { ...process.env, TOKEN_SEGUNDOS: '2', PORTA_MTLS: String(PORTA_MTLS) }, stdio: 'ignore' });
   for (let i = 0; i < 50; i++) {
     try {
       if ((await fetch(BASE)).ok) return;
@@ -212,4 +214,32 @@ test('OAuth 2.0 com login (Authorization Code + PKCE): login, troca do código, 
   // Um "state" diferente no regresso é recusado.
   const desconfiado = { ...amb, tokens: new Map(), segredo: (n: string) => (n === 'pkce.refreshToken' ? undefined : cofre[n]), loginInterativo: async () => `http://127.0.0.1/uat-studio/callback?code=x&state=outro` };
   await assert.rejects(correr({ url: '/api/clientes', ...verificar }, 'pkce', {}, desconfiado), /state/);
+});
+
+test('mTLS: certificado de cliente aceite, certificado intruso recusado, password errada e CA desconhecida explicadas', { skip: !haServidor || !fs.existsSync(path.join(path.dirname(SERVIDOR), 'certificados', 'cliente.pfx')) }, async () => {
+  const pasta = path.join(path.dirname(SERVIDOR), 'certificados');
+  const ler = (nome: string) => fs.readFileSync(path.join(pasta, nome));
+  const comCertificado = (pfx: string, passphrase: string, comCa = true): AmbienteApi => ({
+    fetch,
+    segredo: () => undefined,
+    tokens: new Map(),
+    fetchComCertificado: () => criarFetchComCertificado({ pfx: ler(pfx), passphrase, ...(comCa ? { ca: ler('ca.crt') } : {}) }),
+  });
+  PERFIS.cert = { id: 'cert', nome: 'Só certificado', tipo: 'mtls', certificado: { ficheiro: 'cliente.pfx', ca: 'ca.crt' } };
+  const pedido = {
+    url: `https://localhost:${PORTA_MTLS}/api/mtls`,
+    verificacoes: [
+      { id: 'v1', alvo: 'estado' as const, operador: 'igual' as const, esperado: '200' },
+      { id: 'v2', alvo: 'corpo' as const, caminho: 'cliente', operador: 'igual' as const, esperado: 'uat-cliente-mtls' },
+    ],
+  };
+  const bom = await correr(pedido, 'cert', {}, comCertificado('cliente.pfx', 'pfx-de-teste'));
+  assert.deepEqual(bom.verificacoes.map((v) => v.ok), [true, true]);
+  const intruso = await correr(pedido, 'cert', {}, comCertificado('intruso.pfx', 'pfx-de-teste'));
+  assert.equal(intruso.resposta.estado, 401);
+  await assert.rejects(correr(pedido, 'cert', {}, comCertificado('cliente.pfx', 'errada')), /password está errada/);
+  await assert.rejects(correr(pedido, 'cert', {}, comCertificado('cliente.pfx', 'pfx-de-teste', false)), /não é de confiança/);
+  await assert.rejects(correr({ ...pedido, url: `${BASE}/api/clientes` }, 'cert', {}, comCertificado('cliente.pfx', 'pfx-de-teste')), /só funciona com https/);
+  // Sem suporte de certificados no ambiente, o erro é claro.
+  await assert.rejects(correr(pedido, 'cert', {}, ambiente()), /certificado de cliente/);
 });
