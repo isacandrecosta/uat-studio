@@ -129,7 +129,70 @@ export function scriptGravador(): void {
   const CONTROLOS =
     'input, select, textarea, button, a[href], [role="button"], [role="link"], [role="checkbox"], [role="switch"], [role="radio"], [role="tab"], [role="menuitem"], [contenteditable="true"]';
 
+  // Widgets do OutSystems UI (as mesmas regras do motor, em motor/acoes.ts): calendários (Flatpickr), sliders
+  // (noUiSlider), listas com pesquisa (VirtualSelect), classificação, grupos de opções e grupos de botões.
+  type TipoWidget = 'data' | 'slider' | 'pesquisa' | 'classificacao' | 'opcoes' | 'botoes';
+  const temFlatpickr = (i: Element): boolean => Boolean((i as unknown as { _flatpickr?: unknown })._flatpickr);
+  function tipoDeWidget(e: Element): TipoWidget | null {
+    const dentro = (s: string): Element | null => (e.matches(s) ? e : e.querySelector(s));
+    const entradas = [e, ...Array.from(e.querySelectorAll('input'))];
+    if (entradas.some(temFlatpickr)) return 'data';
+    if (dentro('.noUi-target')) return 'slider';
+    if (dentro('.vscomp-ele')) return 'pesquisa';
+    if (dentro('input.rating-input')) return 'classificacao';
+    if (dentro('input[type="radio"]') && !e.matches('input')) return 'opcoes';
+    if (dentro('[role="radio"]') && !e.matches('[role="radio"]')) return 'botoes';
+    return null;
+  }
+  /** O elemento "inteiro" de um widget onde se clicou (de preferência o que tem o data-testid). */
+  function raizDeWidget(origem: Element): Element | null {
+    const comTestid = (e: Element): Element => {
+      const t = e.closest('[data-testid]');
+      return t && t.contains(e) && tipoDeWidget(t) === tipoDeWidget(e) && t.querySelectorAll('*').length < 300 ? t : e;
+    };
+    const grupo = origem.closest('[role="radiogroup"], .radio-group, .button-group');
+    if (grupo && tipoDeWidget(grupo)) return comTestid(grupo);
+    const especial = origem.closest('.vscomp-ele, .vscomp-wrapper, .noUi-target, .rating-item');
+    if (especial) {
+      const base = especial.closest('.vscomp-ele') ?? especial.closest('.noUi-target') ?? especial.closest('[data-testid]') ?? especial;
+      if (tipoDeWidget(base)) return comTestid(base);
+    }
+    // Calendários: o campo visível é uma cópia; o verdadeiro (com o Flatpickr) está ao lado.
+    let a: Element | null = origem;
+    for (let n = 0; a && n < 4; n++, a = a.parentElement) {
+      if (a.querySelectorAll('input').length <= 3 && Array.from(a.querySelectorAll('input')).some(temFlatpickr)) return comTestid(a);
+    }
+    return null;
+  }
+  function opcoesDoWidget(e: Element, tipo: TipoWidget): string[] {
+    if (tipo === 'pesquisa') {
+      const vs = (e.matches('.vscomp-ele') ? e : e.querySelector('.vscomp-ele')) as unknown as { virtualSelect?: { options?: Array<{ label: string }> } } | null;
+      return (vs?.virtualSelect?.options ?? []).map((o) => limpar(String(o.label)));
+    }
+    if (tipo === 'botoes') return Array.from(e.querySelectorAll('[role="radio"]')).map((b) => limpar((b as HTMLElement).innerText));
+    if (tipo === 'classificacao') return Array.from(e.querySelectorAll('input.rating-input')).map((i) => (i as HTMLInputElement).value);
+    if (tipo === 'opcoes') return Array.from(e.querySelectorAll('input[type="radio"]')).map((i) => limpar((i as HTMLInputElement).labels?.[0]?.innerText ?? i.parentElement?.innerText) || (i as HTMLInputElement).value);
+    return [];
+  }
+  function valorDoWidget(e: Element, tipo: TipoWidget): string {
+    if (tipo === 'data') {
+      const fp = (Array.from(e.querySelectorAll('input')).find(temFlatpickr) as unknown as { _flatpickr: { input: HTMLInputElement; altInput?: HTMLInputElement } } | undefined)?._flatpickr;
+      return fp ? fp.altInput?.value || fp.input.value : '';
+    }
+    if (tipo === 'slider') {
+      const s = (e.matches('.noUi-target') ? e : e.querySelector('.noUi-target')) as unknown as { noUiSlider?: { get(): string | string[] } } | null;
+      return s?.noUiSlider ? ([] as string[]).concat(s.noUiSlider.get()).map((x) => String(Number(x))).join('-') : '';
+    }
+    if (tipo === 'pesquisa') return limpar((e.querySelector('.vscomp-value') as HTMLElement | null)?.innerText);
+    if (tipo === 'botoes') return limpar((e.querySelector('[role="radio"][aria-checked="true"]') as HTMLElement | null)?.innerText);
+    const marcado = e.querySelector('input[type="radio"]:checked') as HTMLInputElement | null;
+    if (!marcado) return '';
+    return tipo === 'classificacao' ? marcado.value : limpar(marcado.labels?.[0]?.innerText ?? marcado.parentElement?.innerText) || marcado.value;
+  }
+
   function normalizar(origem: Element): Element {
+    const widget = raizDeWidget(origem);
+    if (widget) return widget;
     const controlo = origem.closest(CONTROLOS);
     if (controlo) return controlo;
     const etiqueta = origem.closest('label') as HTMLLabelElement | null;
@@ -139,6 +202,8 @@ export function scriptGravador(): void {
 
   type Especie = 'texto' | 'lista' | 'marca' | 'botao' | 'outro';
   function especieDe(e: Element): Especie {
+    const w = e.tagName === 'INPUT' || e.tagName === 'SELECT' ? null : tipoDeWidget(e);
+    if (w) return w === 'data' || w === 'slider' ? 'texto' : 'lista';
     const tag = e.tagName;
     const role = e.getAttribute('role') ?? '';
     if (tag === 'SELECT') return 'lista';
@@ -176,6 +241,8 @@ export function scriptGravador(): void {
   }
 
   function valorAtual(e: Element): string {
+    const w = e.tagName === 'INPUT' || e.tagName === 'SELECT' ? null : tipoDeWidget(e);
+    if (w) return valorDoWidget(e, w);
     if (e instanceof HTMLSelectElement) return limpar(e.selectedOptions[0]?.text);
     if (e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement) return e.value;
     return textoDe(e);
@@ -298,7 +365,8 @@ export function scriptGravador(): void {
     if (!secreto) acoes.push('verificar', 'guardar');
     let acao: Acao = acoes[0];
 
-    const opcoes = alvo instanceof HTMLSelectElement ? Array.from(alvo.options).map((o) => limpar(o.text)).filter(Boolean) : [];
+    const tipoWidget = alvo.tagName === 'INPUT' || alvo.tagName === 'SELECT' ? null : tipoDeWidget(alvo);
+    const opcoes = alvo instanceof HTMLSelectElement ? Array.from(alvo.options).map((o) => limpar(o.text)).filter(Boolean) : tipoWidget ? opcoesDoWidget(alvo, tipoWidget).filter(Boolean) : [];
     const atual = secreto ? '' : valorAtual(alvo);
 
     const idLista = '__uat-colunas';

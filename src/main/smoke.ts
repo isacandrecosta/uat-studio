@@ -1015,6 +1015,90 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      'gravar widgets do OutSystems UI: lista com pesquisa, slider, calendário e grupo de botões (app Catálogo)',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const base = 'https://personal-e5m9c9gh-dev.outsystems.app/CatalogoComponentesPOC';
+        repo.guardar(pasta, 'aplicacoes', { id: 'catalogo', nome: 'Catálogo de Componentes', tipo: 'FO', cor: '#7b4bd1', urls: { dev: base } });
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"gravar\"]').click()");
+        await esperar(j, "document.getElementById('btn-gravar') && document.querySelector('#gravar-aplicacao option[value=\"catalogo\"]')");
+        await naPagina(
+          j,
+          "(() => { document.getElementById('gravar-aplicacao').value = 'catalogo'; document.getElementById('gravar-nome').value = 'Widgets do catálogo'; document.getElementById('btn-gravar').click(); })()",
+        );
+        await esperar(j, "document.getElementById('gravacao-ativa')", 120_000);
+        const p = paginaDoGravador();
+        if (!p) throw new Error('O gravador não tem página.');
+        const popup = p.locator('#__uat-gravador .popup');
+        const numeroDePassos = (): number => estadoGravador().bloco?.passos.length ?? 0;
+        const gravar = async (): Promise<void> => {
+          const antes = numeroDePassos();
+          await popup.getByRole('button', { name: 'Gravar passo' }).click();
+          const fim = Date.now() + 20_000;
+          while (numeroDePassos() === antes) {
+            if (Date.now() > fim) throw new Error(`O passo não foi gravado: ${await p.locator('#__uat-gravador .aviso').textContent()}`);
+            await p.waitForTimeout(100);
+          }
+          await popup.waitFor({ state: 'detached' });
+        };
+        const res = (id: string): Promise<string> => p.locator(`[data-testid="${id}"]`).innerText();
+        /** O OutSystems atualiza o resultado um instante depois do passo: esperar até 5 s pelo valor. */
+        const esperarRes = async (id: string, valor: string): Promise<string> => {
+          const fim = Date.now() + 5_000;
+          let atual = await res(id);
+          while (atual !== valor && Date.now() < fim) {
+            await p.waitForTimeout(200);
+            atual = await res(id);
+          }
+          return atual;
+        };
+        await p.goto(`${base}/Selecao`, { waitUntil: 'networkidle', timeout: 90_000 });
+        await p.locator('[data-testid="cc_ddsPais"] .vscomp-ele').waitFor({ state: 'attached', timeout: 60_000 });
+        await p.locator('#__uat-gravador .barra').waitFor();
+
+        // Lista com pesquisa (VirtualSelect): o clique é do widget inteiro e o popup mostra as opções.
+        await p.locator('[data-testid="cc_ddsPais"]').click();
+        await popup.waitFor();
+        const opcoesPais = await popup.getByLabel('Opção a escolher').locator('option').allTextContents();
+        confirmar(opcoesPais.includes('Espanha'), `O popup devia mostrar os países: ${opcoesPais.join(' | ')}`);
+        await popup.getByLabel('Opção a escolher').selectOption({ label: 'Espanha' });
+        await gravar();
+        confirmar((await esperarRes('cc_resPais', 'Espanha')) === 'Espanha', `A lista com pesquisa devia ficar em Espanha: ${await res('cc_resPais')}`);
+
+        // Grupo de botões: escolher pelo texto.
+        await p.locator('[data-testid="cc_bgFrequencia"] [role="radio"]').first().click();
+        await popup.waitFor();
+        await popup.getByLabel('Opção a escolher').selectOption({ label: 'Anual' });
+        await gravar();
+        confirmar((await esperarRes('cc_resFrequencia', 'Anual')) === 'Anual', `O grupo de botões devia ficar em Anual: ${await res('cc_resFrequencia')}`);
+
+        // Slider: escrever o número.
+        await p.locator('[data-testid="cc_sldMontante"] .noUi-handle').first().click();
+        await popup.waitFor();
+        await popup.getByLabel('Texto a escrever').fill('35');
+        await gravar();
+        confirmar((await esperarRes('cc_resMontante', '35')) === '35', `O slider devia ficar em 35: ${await res('cc_resMontante')}`);
+
+        // Calendário (Flatpickr): clicar no campo visível e escrever a data como em Portugal.
+        await p.goto(`${base}/Datas`, { waitUntil: 'networkidle', timeout: 90_000 });
+        await p.locator('#__uat-gravador .barra').waitFor();
+        await p.locator('[data-testid="cc_dpData"] input[role="combobox"]').click();
+        await popup.waitFor();
+        await popup.getByLabel('Texto a escrever').fill('20/04/2026');
+        await gravar();
+        confirmar((await esperarRes('cc_resData', '2026-04-20')) === '2026-04-20', `O calendário devia ficar em 2026-04-20: ${await res('cc_resData')}`);
+
+        await naPagina(j, "document.getElementById('btn-guardar-bloco').click()");
+        await esperar(j, "document.getElementById('btn-gravar')");
+        const bloco = repo.ler(pasta, 'blocos', 'widgets-do-catalogo');
+        const resumo = bloco.passos.slice(1).map((x) => `${x.acao}:${x.alvo?.localizadores[0]?.valor}`).join(' ');
+        confirmar(
+          resumo === 'escolher:cc_ddsPais escolher:cc_bgFrequencia escrever:cc_sldMontante escrever:cc_dpData',
+          `Os passos dos widgets deviam usar o data-testid do widget inteiro: ${resumo}`,
+        );
+      },
+    ],
+    [
       'blocos de API: aplicação, perfil OAuth 2.0 com segredo no cofre, testar um bloco e correr uma jornada só de API',
       async (j) => {
         if (!fs.existsSync(SERVIDOR_TESTE)) {

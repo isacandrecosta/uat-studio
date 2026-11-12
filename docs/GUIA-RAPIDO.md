@@ -34,7 +34,12 @@ Há vídeos curtos (um por tema, com legendas) e um guia com imagens, gerados pe
 2. Cada bloco **"Receita: ..."** mostra como se testa um componente ou uma situação típica (campos, password, listas, números, botões e resultados, linha de tabela, MFA de teste, dados que chegam depois do ecrã). A descrição diz **COMO** se faz e as **ARMADILHAS**.
 3. Cada receita tem uma jornada **"Prova: ..."** que corre contra as apps de teste: se der OK, a ferramenta sabe testar aquele componente.
 4. Para usar uma receita no seu projeto: **Exportar blocos** (na Wiki) e **Importar pacote** (no seu projeto); depois troque os data-testid pelos da sua app.
-5. Ações para situações especiais (no editor de passos, **"Acrescentar outro passo"**): carregar um ficheiro, descarregar e verificar um ficheiro, responder a uma pergunta do browser (confirm/alert), mudar de separador; e, em qualquer passo, um campo dentro de um iframe.
+5. Componentes do OutSystems UI que a ferramenta trata sozinha (no gravador basta clicar no componente):
+   - **Calendários** (data, intervalo, hora, mês): "Escrever" 15/03/2026, 01/03/2026 a 15/03/2026, 14:30 ou 03/2026.
+   - **Listas com pesquisa e de várias escolhas**: "Escolher" pelo texto; várias opções com ";" (Português; Inglês).
+   - **Slider**: "Escrever" 60; slider de intervalo: 20-80.
+   - **Grupo de opções, grupo de botões e classificação (estrelas)**: "Escolher" pelo texto ou pelo número de estrelas.
+6. Ações para situações especiais (no editor de passos, **"Acrescentar outro passo"**): carregar um ficheiro, descarregar e verificar um ficheiro, responder a uma pergunta do browser (confirm/alert), mudar de separador; e, em qualquer passo, um campo dentro de um iframe.
 
 ## Tarefas do dia a dia
 

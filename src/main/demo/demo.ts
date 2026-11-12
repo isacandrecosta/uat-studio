@@ -211,7 +211,7 @@ const gravarBloco: FuncaoCapitulo = async (r) => {
   const p = paginaDoGravador();
   if (!p) throw new Error('O gravador não tem página.');
   await p.bringToFront().catch(() => undefined);
-  r.noEdge = await r.video.mostrarEdge();
+  r.noEdge = await r.video.mostrarPagina(p);
   const popup = p.locator('#__uat-gravador .popup');
   const tid = (id: string) => p.locator(`[data-testid="${id}"]`);
   const numeroDePassos = (): number => estadoGravador().bloco?.passos.length ?? 0;
@@ -465,7 +465,7 @@ const quandoAlgoFalha: FuncaoCapitulo = async (r, pasta) => {
     const p = paginaDoGravador();
     if (!p) throw new Error('O gravador não tem página.');
     await p.bringToFront().catch(() => undefined);
-    r.noEdge = await r.video.mostrarEdge();
+    r.noEdge = await r.video.mostrarPagina(p);
     await r.realcarNoEdge(p, '#__uat-gravador .barra');
     await r.legenda('A variante do caso já foi escolhida. A barra diz o que apontar: "Campo Valor".');
     await r.realcarNoEdge(p, null);
@@ -514,7 +514,7 @@ const usarAWiki: FuncaoCapitulo = async (r, pasta) => {
   await naPagina(r.janela, "(() => { const e = document.getElementById('escolha-projeto'); e.value = '__wiki'; e.dispatchEvent(new Event('change')); })()");
   await esperar(r.janela, "document.querySelector('.cartao-epico') && document.body.innerText.includes('Campos de formulário')", 30_000);
   const pastaWiki = await naPagina<string>(r.janela, "document.getElementById('escolha-projeto').value");
-  await r.legenda('A Wiki é um projeto à parte, organizado por tipo de componente: campos de formulário, botões e tabelas, e situações típicas do OutSystems.');
+  await r.legenda('A Wiki é um projeto à parte, organizado por tipo de componente: campos de formulário, botões e tabelas, situações típicas, datas e ficheiros, navegação e janelas.');
   await r.realcar(await marcar(r, '.cartao-epico', 'A. Campos'));
   await r.legenda('Cada receita tem uma jornada "Prova": se a prova der OK nas apps de teste, a ferramenta sabe testar aquele componente.');
   await naPagina(r.janela, "document.querySelector('[data-descricao=\"receita-lista-e-numero\"]')?.setAttribute('open', '')");
@@ -524,18 +524,20 @@ const usarAWiki: FuncaoCapitulo = async (r, pasta) => {
   await r.realcar('#btn-exportar-pacote');
   await r.legenda('Para usar uma receita no seu projeto: "Exportar blocos" aqui e "Importar pacote" no seu projeto. Depois troque os identificadores pelos da sua app.');
   await r.realcar(null);
-  await r.irPara('mapa', 'Correr a Wiki inteira mostra o que a ferramenta já cobre.');
-  await esperar(r.janela, "document.getElementById('mapa-run')");
-  const jornadas = repo.listar(pastaWiki, 'jornadas').map((j) => j.id);
+  // Começar a execução antes de abrir o mapa: sem nenhuma execução, o mapa não tem o que mostrar.
+  // Só 4 provas do catálogo, para o vídeo não ficar longo (a Wiki inteira tem 16).
+  const jornadas = ['prova-catalogo-listas', 'prova-catalogo-opcoes', 'prova-catalogo-slider-classificacao', 'prova-catalogo-datas'];
   await iniciarRun(pastaWiki, { jornadaIds: jornadas }, { canal: 'msedge', visivel: false, paralelo: 2 });
+  await r.irPara('mapa', 'Correr a Wiki inteira mostra o que a ferramenta já cobre.');
+  await esperar(r.janela, "document.getElementById('mapa-run')", 60_000);
   await r.pausa(10);
   await r.realcar('#workers');
-  await r.legenda('As provas correm em paralelo contra o Simulador e o Portal de Crédito.', 6);
+  await r.legenda('Aqui correm 4 provas, em paralelo, contra o Catálogo de Componentes: listas, opções, slider e calendários. A Wiki inteira tem 16.', 7);
   await r.realcar(null);
   await esperarFimDoRun(600_000);
   await r.clicar('.separador[data-vista="epicos"]', 'No fim, cada épico mostra o resultado das suas provas.');
   await r.pausa(1);
-  await r.legenda('Em breve, mais receitas: calendários, listas com pesquisa, sliders, classificação, separadores, popups, assistentes e paginação.');
+  await r.legenda('A app de teste "Catálogo de Componentes" tem todos os widgets do OutSystems UI: calendários, listas com pesquisa, sliders, classificação, separadores, popups, assistente, paginação... e há uma receita para cada um.');
   // Voltar ao projeto da demo.
   await naPagina(r.janela, `(() => { const e = document.getElementById('escolha-projeto'); e.value = ${JSON.stringify(pasta)}; e.dispatchEvent(new Event('change')); })()`);
   await esperar(r.janela, `document.getElementById('escolha-projeto').value === ${JSON.stringify(pasta)}`, 30_000).catch(() => undefined);

@@ -29,7 +29,8 @@ const { iniciarRun, esperarFimDoRun } = require(raiz + '/dist/main/executor/exec
       for (const p of c.passos) if (p.estado !== 'ok') console.log(`    ${p.estado} | ${p.bloco} | ${p.descricao} | ${p.detalhe ?? ''}`);
     }
   }
-  fs.rmSync(pasta, { recursive: true, force: true });
+  // Um ficheiro ainda pode estar a ser escrito (trace): tentar algumas vezes e não falhar por isso.
+  try { fs.rmSync(pasta, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* fica na pasta temporária */ }
   console.log(todosOk ? 'Todos os casos deram OK.' : 'Há casos que não deram OK.');
   process.exit(todosOk ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -4,7 +4,10 @@
 // blocos ("Exportar blocos" / "Importar pacote") e só trocam os data-testid.
 // A descrição de cada bloco explica a receita: o que fazer, o localizador que funciona e as armadilhas.
 import { Bloco, BlocoDaJornada, Passo, Valor } from '../../shared/modelo';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { definirAmbienteAtivo, guardar } from './repositorio';
+import { receitasDoCatalogo, URL_CATALOGO } from './wikiCatalogo';
 
 const URL_SIMULADOR = 'https://personal-e5m9c9gh-dev.outsystems.app/SimuladorFinanceiroPOC';
 const URL_PORTAL = 'https://personal-e5m9c9gh-dev.outsystems.app/PortalCreditoPOC';
@@ -29,9 +32,15 @@ export function criarWiki(pasta: string): void {
   guardar(pasta, 'aplicacoes', { id: 'simulador-bo', nome: 'Simulador: Backoffice (app de teste)', tipo: 'BO', cor: '#e07b00', urls: { dev: `${URL_SIMULADOR}/Backoffice` } });
   guardar(pasta, 'aplicacoes', { id: 'portal-bo', nome: 'Portal de Crédito: Backoffice (app de teste)', tipo: 'BO', cor: '#e07b00', urls: { dev: `${URL_PORTAL}/BOLogin` } });
   // As receitas usam o ambiente "dev" (onde as apps de teste estão publicadas).
-  guardar(pasta, 'epicos', { id: 'wiki-a-campos', nome: 'A. Campos de formulário', descricao: 'Texto, número, password, listas e mensagens de validação.' });
+  guardar(pasta, 'aplicacoes', { id: 'catalogo', nome: 'Catálogo de Componentes (app de teste)', tipo: 'FO', cor: '#7b4bd1', urls: { dev: URL_CATALOGO } });
+  // Ficheiro para a receita do Upload (os ficheiros de teste ficam dentro da pasta do projeto).
+  fs.mkdirSync(path.join(pasta, 'ficheiros'), { recursive: true });
+  fs.writeFileSync(path.join(pasta, 'ficheiros', 'exemplo.txt'), 'Ficheiro de exemplo.');
+  guardar(pasta, 'epicos', { id: 'wiki-a-campos', nome: 'A. Campos de formulário', descricao: 'Texto, números, password, listas (normal, com pesquisa, várias escolhas), checkbox, interruptor, opções, slider e classificação.' });
   guardar(pasta, 'epicos', { id: 'wiki-b-acoes', nome: 'B. Botões, resultados e tabelas', descricao: 'Clicar, verificar resultados (números e textos) e agir numa linha de tabela.' });
-  guardar(pasta, 'epicos', { id: 'wiki-c-situacoes', nome: 'C. Situações típicas do OutSystems', descricao: 'Dados que chegam depois do ecrã, MFA de teste, login reutilizado.' });
+  guardar(pasta, 'epicos', { id: 'wiki-c-situacoes', nome: 'C. Situações típicas do OutSystems', descricao: 'Dados que chegam depois do ecrã, carregamentos lentos, mensagens temporárias, MFA de teste, login reutilizado.' });
+  guardar(pasta, 'epicos', { id: 'wiki-d-datas', nome: 'D. Datas e ficheiros', descricao: 'Date Picker, intervalo de datas, hora, mês, data do browser e Upload.' });
+  guardar(pasta, 'epicos', { id: 'wiki-e-navegacao', nome: 'E. Navegação e janelas', descricao: 'Separadores, acordeão, assistente, popup, painel lateral, pergunta do browser, descarregar, iframe e novo separador.' });
 
   // ---------- Blocos de apoio (abrir as apps, preparar dados) ----------
   const apoio: Bloco[] = [
@@ -175,6 +184,8 @@ export function criarWiki(pasta: string): void {
       },
     },
   ];
+
+  receitas.push(...receitasDoCatalogo());
 
   for (const r of receitas) {
     // As armadilhas num parágrafo à parte (a interface mostra as quebras de linha).

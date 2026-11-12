@@ -1,11 +1,19 @@
-// Gravação dos vídeos da demo: uma janela escondida (gravador.html) recebe a imagem de uma janela do Windows
-// (a da app ou a do Edge), desenha por cima o título do capítulo e as legendas, e grava tudo em .webm.
-// Só é usada pelo modo demo (npm.cmd run demo); a app normal nunca grava o ecrã.
-import { BrowserWindow, desktopCapturer } from 'electron';
+// Gravação dos vídeos da demo: uma janela escondida (gravador.html) recebe imagens da janela da app
+// (capturePage) ou da página do Edge (screenshot do Playwright), cerca de 10 por segundo, desenha por cima
+// o título do capítulo e as legendas, e grava tudo em .webm com o MediaRecorder (sem ffmpeg).
+// Pedir as imagens à app (em vez de capturar o ecrã do Windows) funciona com a janela tapada ou o ecrã
+// bloqueado. Só é usada pelo modo demo (npm.cmd run demo); a app normal nunca grava o ecrã.
+import { BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { Page } from 'playwright-core';
+
+const INTERVALO_MS = 100;
 
 export class GravadorDeVideo {
+  private laco: NodeJS.Timeout | null = null;
+  private ocupado = false;
+
   private constructor(private readonly janela: BrowserWindow) {}
 
   static async criar(raiz: string): Promise<GravadorDeVideo> {
@@ -23,23 +31,39 @@ export class GravadorDeVideo {
     return this.janela.webContents.executeJavaScript(codigo) as Promise<T>;
   }
 
-  /** Passa a mostrar a janela da app. */
-  async mostrarJanela(janela: BrowserWindow): Promise<void> {
-    await this.correr(`window.demo.fonte(${JSON.stringify(janela.getMediaSourceId())})`);
+  private pararLaco(): void {
+    if (this.laco) clearInterval(this.laco);
+    this.laco = null;
   }
 
-  /** Passa a mostrar a janela do Edge cujo título contém o texto (devolve falso se não a encontrar). */
-  async mostrarEdge(titulo = 'Edge'): Promise<boolean> {
-    for (let tentativa = 0; tentativa < 20; tentativa++) {
-      const fontes = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
-      const edge = fontes.find((f) => f.name.includes(titulo) && f.name.includes('Edge'));
-      if (edge) {
-        await this.correr(`window.demo.fonte(${JSON.stringify(edge.id)})`);
-        return true;
+  /** Vai buscando imagens (JPEG) e entregando-as à tela do gravador. */
+  private iniciarLaco(capturar: () => Promise<Buffer>): void {
+    this.pararLaco();
+    const passo = async (): Promise<void> => {
+      if (this.ocupado || this.janela.isDestroyed()) return;
+      this.ocupado = true;
+      try {
+        const jpg = await capturar();
+        await this.correr(`window.demo.imagem(${JSON.stringify(`data:image/jpeg;base64,${jpg.toString('base64')}`)})`);
+      } catch {
+        // Uma imagem que falha (página a mudar) não interrompe o vídeo.
+      } finally {
+        this.ocupado = false;
       }
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    return false;
+    };
+    void passo();
+    this.laco = setInterval(() => void passo(), INTERVALO_MS);
+  }
+
+  /** Passa a mostrar a janela da app. */
+  async mostrarJanela(janela: BrowserWindow): Promise<void> {
+    this.iniciarLaco(async () => (await janela.webContents.capturePage()).toJPEG(85));
+  }
+
+  /** Passa a mostrar uma página do Edge (o browser do gravador). */
+  async mostrarPagina(pagina: Page): Promise<boolean> {
+    this.iniciarLaco(() => pagina.screenshot({ type: 'jpeg', quality: 80 }));
+    return true;
   }
 
   legenda(texto: string): Promise<void> {
@@ -63,6 +87,7 @@ export class GravadorDeVideo {
   }
 
   fechar(): void {
+    this.pararLaco();
     if (!this.janela.isDestroyed()) this.janela.destroy();
   }
 }
