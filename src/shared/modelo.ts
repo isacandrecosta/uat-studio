@@ -553,6 +553,8 @@ export interface Jornada {
   id: string;
   nome: string;
   epicoId: string;
+  /** Descrição em texto corrido: objetivo do teste, pré-condições, dados necessários. */
+  descricao?: string;
   requisitoId?: string;
   etiquetas: string[];
   blocos: BlocoDaJornada[];

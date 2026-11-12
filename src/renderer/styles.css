@@ -600,6 +600,7 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 /* Passo manual */
 .tipo-bloco[data-tipo="MANUAL"] { background: #7b4bd1; }
 .campo-area { width: 100%; resize: vertical; font: inherit; }
+.campo-largo { margin-top: 14px; }
 .caixa-manual { display: block !important; border: 2px solid #7b4bd1; margin-bottom: 16px; }
 .caixa-manual h2 { margin: 0 0 4px; }
 .manual-instrucao { white-space: pre-wrap; font-size: 15px; padding: 10px 12px; background: #f4effc; border-radius: 6px; }

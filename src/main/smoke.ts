@@ -9,7 +9,7 @@ import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
 import { testarBloco } from './api/ambiente';
 import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from './cofre';
 import * as repo from './projeto/repositorio';
-import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun } from './executor/execucao';
+import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun, listarHistorico } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { abrirProjeto, criarProjeto } from './projeto/ipc';
 
@@ -1096,6 +1096,86 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
           resumo === 'escolher:cc_ddsPais escolher:cc_bgFrequencia escrever:cc_sldMontante escrever:cc_dpData',
           `Os passos dos widgets deviam usar o data-testid do widget inteiro: ${resumo}`,
         );
+      },
+    ],
+    [
+      'transformar valores fixos em colunas, descrições de blocos e jornadas, e criar um defeito a partir de um caso com ERRO',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        // O bloco gravado no início tem o valor 1000 fixo: passa a vir da coluna ValorGravado.
+        repo.guardar(pasta, 'jornadas', { id: 'usa-gravado', nome: 'Usa o bloco gravado', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'simulacao-gravada' }] });
+        repo.guardar(pasta, 'casos', { id: 'usa-gravado', colunas: ['Variante'], casos: [{ id: 'G1', etiquetas: [], dados: { Variante: 'CP12' } }, { id: 'G2', etiquetas: [], dados: { Variante: 'CA48' } }] });
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('[data-jornada=\"usa-gravado\"]')");
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"gravar\"]').click()");
+        await esperar(j, "document.querySelector('[data-editar-bloco=\"simulacao-gravada\"]')");
+        await naPagina(j, "document.querySelector('[data-editar-bloco=\"simulacao-gravada\"]').click()");
+        await esperar(j, "document.getElementById('btn-parametrizar') && document.getElementById('bloco-descricao')");
+        await naPagina(j, "(() => { const d = document.getElementById('bloco-descricao'); d.value = 'Simula um crédito no Front Office.'; d.dispatchEvent(new Event('change')); })()");
+        await esperar(j, "document.getElementById('btn-parametrizar')");
+        await new Promise((r) => setTimeout(r, 500));
+        confirmar(repo.ler(pasta, 'blocos', 'simulacao-gravada').descricao === 'Simula um crédito no Front Office.', 'A descrição do bloco não foi gravada.');
+        await naPagina(j, "document.getElementById('btn-parametrizar').click()");
+        await esperar(j, "document.querySelector('dialog[open] input.campo')");
+        const sugestoes = await naPagina<string[]>(j, "[...document.querySelectorAll('dialog[open] input.campo')].map((i) => i.value)");
+        console.log(`[smoke]   colunas sugeridas: ${sugestoes.join(', ')}`);
+        await naPagina(
+          j,
+          "(() => { const c = [...document.querySelectorAll('dialog[open] input.campo')]; c.forEach((i, n) => { i.value = n === 0 ? 'ValorGravado' : ''; }); [...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Transformar').click(); })()",
+        );
+        await esperar(j, "[...document.querySelectorAll('dialog[open] button')].some((b) => b.textContent === 'Fechar') && document.querySelector('dialog[open]').innerText.includes('ValorGravado')", 15_000);
+        await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Fechar').click()");
+        const passoValor = repo.ler(pasta, 'blocos', 'simulacao-gravada').passos.find((x) => x.valor?.tipo === 'variavel' && x.valor.nome === 'ValorGravado');
+        confirmar(passoValor?.acao === 'escrever', 'O passo do valor devia passar a usar a coluna ValorGravado.');
+        // As jornadas que usam o bloco ganham a coluna com o valor gravado (as outras não mexem).
+        const queUsam = repo.listar(pasta, 'jornadas').filter((x) => x.blocos.some((b) => b.blocoId === 'simulacao-gravada'));
+        confirmar(queUsam.some((x) => x.id === 'usa-gravado'), 'O bloco gravado devia ser usado pela jornada "usa-gravado".');
+        for (const jornadaQueUsa of queUsam) {
+          const casos = repo.ler(pasta, 'casos', jornadaQueUsa.id);
+          confirmar(
+            casos.colunas.includes('ValorGravado') && casos.casos.every((c) => c.dados.ValorGravado === '1000'),
+            `Os casos de "${jornadaQueUsa.nome}" deviam ter a coluna ValorGravado com 1000: ${JSON.stringify(casos.casos.map((c) => c.dados.ValorGravado))}`,
+          );
+        }
+
+        // Descrição da jornada, no editor.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('[data-jornada=\"simular-credito\"]')");
+        await naPagina(j, "document.querySelector('[data-jornada=\"simular-credito\"]').click()");
+        await esperar(j, "document.getElementById('jornada-descricao')");
+        await naPagina(j, "(() => { const d = document.getElementById('jornada-descricao'); d.value = 'Confirma a simulação de crédito para cada variante.'; d.dispatchEvent(new Event('change')); })()");
+        const fimDescricao = Date.now() + 5_000;
+        while (repo.ler(pasta, 'jornadas', 'simular-credito').descricao !== 'Confirma a simulação de crédito para cada variante.' && Date.now() < fimDescricao) await new Promise((r) => setTimeout(r, 100));
+        confirmar(repo.ler(pasta, 'jornadas', 'simular-credito').descricao === 'Confirma a simulação de crédito para cada variante.', 'A descrição da jornada não foi gravada.');
+
+        // Criar defeito: o caso com ERRO do passo "erro explicado" (localizador estragado).
+        const comErro = listarHistorico(pasta).find((r) => r.casos.some((c) => c.estado === 'ERRO' && c.jornadaId === 'simular-credito'));
+        const casoErro = comErro?.casos.find((c) => c.estado === 'ERRO' && c.jornadaId === 'simular-credito');
+        if (!comErro?.pasta || !casoErro) throw new Error('Não encontrei uma execução com um caso ERRO.');
+        const defeito = await naPagina<{ titulo: string; texto: string; evidencias: string[] }>(j, `window.uatStudio.runs.defeito(${JSON.stringify(comErro.pasta)}, ${JSON.stringify(casoErro.chave)})`);
+        console.log(`[smoke]   defeito: ${defeito.titulo}`);
+        confirmar(defeito.titulo.startsWith('[DEV] Simular crédito › TC0001: não chega ao fim'), `O título do defeito não está como esperado: ${defeito.titulo}`);
+        confirmar(/PASSOS PARA REPRODUZIR/.test(defeito.texto) && /Confirma a simulação de crédito/.test(defeito.texto) && defeito.evidencias.includes('caso.log'), 'O texto do defeito devia ter os passos, o objetivo e as evidências.');
+        const ficheiroDefeito = await naPagina<string>(j, `window.uatStudio.runs.guardarDefeito(${JSON.stringify(comErro.pasta)}, ${JSON.stringify(casoErro.chave)}, 'Título revisto', 'Texto revisto')`);
+        confirmar(fs.readFileSync(ficheiroDefeito, 'utf8').startsWith('Título revisto'), 'O defeito devia ficar gravado em defeito.txt.');
+
+        // Segredos de teste: guardados no cofre pela interface; nos casos fica só {SEGREDO:nome}.
+        await naPagina(j, "window.uatStudio.cofre.definirSegredoDeTeste('smoke.valor', '1000')");
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"dados\"]').click()");
+        await esperar(j, "document.querySelector('#lista-segredos code')?.textContent === '{SEGREDO:smoke.valor}'");
+        confirmar(!(await naPagina<string>(j, "document.getElementById('cartao-segredos').innerText")).includes('1000'), 'O cartão dos segredos nunca deve mostrar o valor.');
+        const comSegredo = repo.ler(pasta, 'casos', 'usa-gravado');
+        comSegredo.casos = comSegredo.casos.filter((c) => c.id === 'G1').map((c) => ({ ...c, dados: { ...c.dados, ValorGravado: '{SEGREDO:smoke.valor}' } }));
+        repo.guardar(pasta, 'casos', comSegredo);
+        await iniciarRun(pasta, { jornadaIds: ['usa-gravado'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const execSegredo = await esperarFimDoRun(120_000);
+        const casoSegredo = execSegredo?.casos[0];
+        console.log(`[smoke]   G1 com {SEGREDO}=${casoSegredo?.estado} ${casoSegredo?.erro?.mensagem ?? ''}`);
+        confirmar(casoSegredo?.estado === 'OK' || casoSegredo?.estado === 'KO', `O caso com o segredo devia chegar ao fim: ${casoSegredo?.estado} ${casoSegredo?.erro?.mensagem ?? ''}`);
+        const logSegredo = fs.readFileSync(path.join(pasta, 'execucoes', execSegredo?.pasta ?? '', casoSegredo?.pasta ?? '', 'caso.log'), 'utf8');
+        confirmar(logSegredo.includes('ValorGravado=***') && !logSegredo.includes('valor: "1000"'), 'O valor do segredo não pode aparecer no caso.log.');
+        confirmar(!(casoSegredo?.evidencias ?? []).some((e) => e.endsWith('.zip')), 'Um bloco com segredos corre sem trace.');
+        await naPagina(j, "window.uatStudio.cofre.definirSegredoDeTeste('smoke.valor', '')");
       },
     ],
     [

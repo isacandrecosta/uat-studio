@@ -1,5 +1,7 @@
 # UAT Studio: ficha para a equipa de segurança
 
+> Ver também a [auditoria de compliance ao código](AUDITORIA-COMPLIANCE.md).
+
 Resumo para quem tem de aprovar a ferramenta no PC da empresa. Pormenores técnicos em `ESPECIFICACAO.md`; lista completa de componentes em `LICENCAS.md`.
 
 ## O que é
@@ -24,6 +26,7 @@ Aplicação desktop **portátil** para Windows (`UAT-Studio.exe`, não precisa d
 | Resultados das execuções | Na pasta do projeto, em `execucoes/`: logs, relatórios (Excel, HTML, PDF), prints, traces do Playwright e evidências de API/email. |
 | Segredos (client secrets, passwords de contas de teste, tokens, password do certificado, sessão de login) | **Cofre local encriptado** com o `safeStorage` do Electron (no Windows: **DPAPI**, ligado ao utilizador do Windows), em `%APPDATA%\UAT Studio\cofre\`. **Nunca** vão para os ficheiros do projeto, logs, relatórios ou pacotes exportados. A interface só consegue gravar um segredo ou saber se está preenchido; nunca o lê de volta. Noutro PC é preciso voltar a preenchê-los. |
 | Sessões de login reutilizadas entre casos | **Só em memória**, durante uma execução (nunca em disco). |
+| Passwords de teste dos ecrãs (login) | Também no cofre (**Segredos de teste**, ecrã Dados de teste). Nos casos e no Excel fica só a referência `{SEGREDO:nome}`; o valor é trocado na execução. A verificação antes de correr avisa se encontrar uma password escrita nos casos. |
 | Logs e relatórios | Os valores secretos aparecem como `***`. Os blocos com passwords correm **sem trace** (o trace do Playwright grava tudo o que acontece no ecrã). |
 | Registo de quem correu | Cada execução regista o utilizador do Windows, a data e o ambiente (`run.log`, `run.json` e o PDF para assinatura). |
 | Prints | Não são mascarados (os testes correm sobre dados fictícios em QA). Mascarar prints fica para mais tarde, só se for pedido. |

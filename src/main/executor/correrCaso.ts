@@ -37,6 +37,9 @@ import { controloDe, descreverLocalizador, encontrar, ErroElemento } from '../mo
 import { criarSlug } from '../projeto/repositorio';
 import { compararComTolerancia, formatar, lerNumero } from './numeros';
 
+/** Referência a uma password de teste guardada no cofre: {SEGREDO:nome}. */
+export const REFERENCIA_SEGREDO = /^\{SEGREDO:([^{}]+)\}$/;
+
 export interface PedidoCaso {
   browser: Browser;
   ambiente: Ambiente;
@@ -60,6 +63,8 @@ export interface PedidoCaso {
   proximoContador(nome: string): number;
   /** Chamado sempre que há novidades, para a interface acompanhar. */
   aoProgredir(resultado: ResultadoCaso): void;
+  /** Passwords de teste guardadas no cofre deste PC ({SEGREDO:nome} nos casos). Nunca vão para logs. */
+  lerSegredoDeTeste?(nome: string): string | undefined;
   devePararAgora(): boolean;
   /** O utilizador mandou saltar este caso? */
   deveSaltar(): boolean;
@@ -225,6 +230,30 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       }
     }
   }
+
+  // Passwords de teste no cofre: nos casos fica só {SEGREDO:nome}; o valor é trocado aqui e a coluna é
+  // sempre mascarada. Um segredo que não esteja preenchido neste PC dá ERRO no 1.º bloco, com a explicação.
+  const segredosEmFalta: string[] = [];
+  for (const [coluna, valor] of Object.entries(variaveis)) {
+    const m = REFERENCIA_SEGREDO.exec(String(valor ?? '').trim());
+    if (!m) continue;
+    segredos.add(coluna);
+    const guardado = pedido.lerSegredoDeTeste?.(m[1].trim());
+    if (guardado === undefined) {
+      segredosEmFalta.push(`"${m[1].trim()}" (coluna ${coluna})`);
+      variaveis[coluna] = '';
+    } else {
+      variaveis[coluna] = guardado;
+    }
+  }
+
+  /** Um passo é secreto se estiver marcado, ou se o valor vier de uma coluna com segredo ({SEGREDO:nome}). */
+  const passoSecreto = (passo: Passo, item: BlocoDaJornada): boolean => {
+    if (passo.secreto) return true;
+    if (passo.valor?.tipo !== 'variavel') return false;
+    const troca = item.parametros?.[passo.valor.nome];
+    return segredos.has(troca?.tipo === 'variavel' ? troca.nome : passo.valor.nome);
+  };
 
   fs.mkdirSync(pedido.pasta, { recursive: true });
   const ficheiroLog = path.join(pedido.pasta, 'caso.log');
@@ -456,6 +485,9 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       const bloco = pedido.blocos.get(item.blocoId);
       if (!bloco) throw new ErroDados(`O bloco "${item.blocoId}" já não existe.`);
       blocoAtual = bloco.nome;
+      if (segredosEmFalta.length > 0) {
+        throw new ErroDados(`Segredo de teste por preencher neste PC: ${segredosEmFalta.join(', ')}. Preencha-o em Dados de teste › Segredos de teste.`);
+      }
       inicioBloco = Date.now();
       passoAtual = '';
       blocoIdAtual = bloco.id;
@@ -628,7 +660,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       const mon = monitor as MonitorDePedidos;
 
       // Blocos com segredos (por exemplo, login) correm sem trace, para a password não ficar gravada.
-      const temSegredos = bloco.passos.some((p) => p.secreto);
+      const temSegredos = bloco.passos.some((p) => passoSecreto(p, item));
       if (pedido.trace) {
         if (temSegredos) await guardarTrace();
         else if (!traceLigado) {
@@ -734,7 +766,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           const valor = resolver(passo.valor, item).texto;
           const feito = await executarAcao(p, passo, valor, { limiteMs, linha });
           ecraAssente = false;
-          const mostrado = passo.acao === 'clicar' ? undefined : passo.secreto ? 'valor: ***' : feito.detalhe ?? `valor: "${valor}"`;
+          const mostrado = passo.acao === 'clicar' ? undefined : passoSecreto(passo, item) ? 'valor: ***' : feito.detalhe ?? `valor: "${valor}"`;
           return { estado: 'ok', detalhe: juntar(mostrado, notaLinha, alternativa(feito.encontrado)) };
         }
         case 'guardar': {

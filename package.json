@@ -35,5 +35,8 @@
   },
   "allowScripts": {
     "electron@45.2.3": true
+  },
+  "overrides": {
+    "uuid": ">=11.1.1 <12"
   }
 }

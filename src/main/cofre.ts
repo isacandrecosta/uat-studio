@@ -84,3 +84,41 @@ export function apagarSegredosDoPerfil(pastaProjeto: string, perfilId: string): 
   }
   if (mudou) gravar(pastaProjeto, dados);
 }
+
+// ---------------------------------------------------------------- segredos de teste (passwords dos ecrãs)
+// Nos casos fica só a referência {SEGREDO:nome}; o valor fica aqui, encriptado, e é trocado na execução.
+
+const PREFIXO_TESTE = 'teste.';
+
+/** Nomes de segredos de teste: letras, números, ponto, hífen, _ e @ (por exemplo ana.silva ou gestor@qa). */
+export function nomeDeSegredoValido(nome: string): boolean {
+  return /^[A-Za-z0-9._@-]{1,80}$/.test(nome);
+}
+
+export function listarSegredosDeTeste(pastaProjeto: string): string[] {
+  return Object.keys(ler(pastaProjeto))
+    .filter((n) => n.startsWith(PREFIXO_TESTE))
+    .map((n) => n.slice(PREFIXO_TESTE.length))
+    .sort((a, b) => a.localeCompare(b, 'pt'));
+}
+
+/** Guarda (ou, com valor vazio, apaga) um segredo de teste. */
+export function definirSegredoDeTeste(pastaProjeto: string, nome: string, valor: string): void {
+  if (!nomeDeSegredoValido(nome)) throw new ErroProjeto('O nome do segredo só pode ter letras, números, ponto, hífen, _ e @ (por exemplo ana.silva).');
+  definirSegredo(pastaProjeto, `${PREFIXO_TESTE}${nome}`, valor);
+}
+
+/** Só para o processo principal (execução): nunca enviar à interface. */
+export function lerSegredoDeTeste(pastaProjeto: string, nome: string): string | undefined {
+  return lerSegredo(pastaProjeto, `${PREFIXO_TESTE}${nome}`);
+}
+
+/** Troca as referências {SEGREDO:nome} pelos valores do cofre (os que faltam ficam vazios). Só no processo principal. */
+export function resolverSegredosDeTeste(pastaProjeto: string, valores: Record<string, string>): Record<string, string> {
+  const resultado: Record<string, string> = {};
+  for (const [k, v] of Object.entries(valores)) {
+    const m = /^\{SEGREDO:([^{}]+)\}$/.exec(String(v ?? '').trim());
+    resultado[k] = m ? lerSegredoDeTeste(pastaProjeto, m[1].trim()) ?? '' : v;
+  }
+  return resultado;
+}

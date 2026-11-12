@@ -14,6 +14,7 @@ import {
   Valor,
 } from '../../shared/modelo';
 import { validarFormula } from '../../shared/formulas';
+import { resolverSegredosDeTeste } from '../cofre';
 import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, linhasCom, paraLocator } from '../motor/localizar';
 import * as repo from '../projeto/repositorio';
@@ -299,7 +300,7 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
       urlBase,
       modo: 'gravar',
       colunas: [...colunas],
-      ...(pedido.regravar ? { regravar: { passoId: pedido.regravar.passoId, valores: { ...pedido.regravar.valores }, feito: false } } : {}),
+      ...(pedido.regravar ? { regravar: { passoId: pedido.regravar.passoId, valores: resolverSegredosDeTeste(pasta, { ...pedido.regravar.valores }), feito: false } } : {}),
     };
     await contexto.exposeBinding('__uatGravador', async (_origem, mensagem: { tipo: string; modo?: 'gravar' | 'livre' }) => {
       if (sessao !== nova) return null;

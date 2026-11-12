@@ -17,6 +17,7 @@ import {
 } from '../../shared/modelo';
 import { criarAmbienteApi } from '../api/ambiente';
 import * as repo from '../projeto/repositorio';
+import { lerSegredoDeTeste } from '../cofre';
 import { correrCaso, SessaoGuardada } from './correrCaso';
 import { escreverRelatorios } from './relatorios';
 
@@ -262,6 +263,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             api,
             sessoesGuardadas,
             pastaProjeto: pasta,
+            lerSegredoDeTeste: (nome) => lerSegredoDeTeste(pasta, nome),
             proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
             passoManual: () =>
               new Promise<RespostaManual>((resolve) => {

@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EstadoReparo, repararLocalizador } from '../../shared/blocos';
 import { validarFormula } from '../../shared/formulas';
+import { Escolha, parametrizar } from '../../shared/parametrizar';
 import { EstadoProjeto, Localizador, NomeColecao, ProjetoRecente, SugestaoReparo, VariavelCalculada } from '../../shared/modelo';
 import { criarExemplo } from './exemplo';
 import { criarExemploPortais } from './exemploPortais';
@@ -173,5 +174,23 @@ export function registarIpcProjeto(): void {
     const estado = repararLocalizador(bloco, { passoId: String(sugestao.passoId), usado: sugestao.usado, falhou: sugestao.falhou });
     if (estado === 'reparado') repo.guardar(pasta, 'blocos', bloco);
     return estado;
+  });
+  // "Transformar valores fixos em colunas": os passos escolhidos passam a usar {Coluna} e os casos das
+  // jornadas que usam o bloco ganham a coluna com o valor gravado.
+  ipcMain.handle('blocos:parametrizar', (_e, blocoId: string, escolhas: Escolha[]): { colunas: string[]; jornadas: string[] } => {
+    const pasta = pastaDoProjeto();
+    if (!repo.existe(pasta, 'blocos', String(blocoId))) throw new repo.ErroProjeto('O bloco já não existe.');
+    const lista = (Array.isArray(escolhas) ? escolhas : []).map((e) => ({ passoId: String(e?.passoId ?? ''), coluna: String(e?.coluna ?? '') }));
+    const jornadas = repo.listar(pasta, 'jornadas');
+    const conjuntos = repo.listar(pasta, 'casos');
+    let resultado;
+    try {
+      resultado = parametrizar(repo.ler(pasta, 'blocos', String(blocoId)), jornadas, conjuntos, lista);
+    } catch (erro) {
+      throw new repo.ErroProjeto(erro instanceof Error ? erro.message : String(erro));
+    }
+    repo.guardar(pasta, 'blocos', resultado.bloco);
+    for (const c of resultado.conjuntos) repo.guardar(pasta, 'casos', c);
+    return { colunas: resultado.colunas, jornadas: resultado.conjuntos.map((c) => jornadas.find((j) => j.id === c.id)?.nome ?? c.id) };
   });
 }

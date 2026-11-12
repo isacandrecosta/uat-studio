@@ -1,5 +1,5 @@
 // Processo principal do Electron: cria a janela e liga a interface ao resto.
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, session } from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -52,6 +52,11 @@ function criarJanela(): BrowserWindow {
     },
   });
   janela.setMenuBarVisibility(false);
+  // Endurecimento: a interface não abre janelas novas nem navega para fora dos seus próprios ficheiros.
+  janela.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  janela.webContents.on('will-navigate', (evento, destino) => {
+    if (!destino.startsWith('file://')) evento.preventDefault();
+  });
   void janela.loadFile(path.join(RAIZ, 'src', 'renderer', 'index.html'));
   return janela;
 }
@@ -68,6 +73,9 @@ ipcMain.handle('gravador:sobre-print', (_e, pedido: PassoSobrePrint) => gravarSo
 ipcMain.handle('gravador:terminar', (_e, guardar: boolean) => terminarGravacao(Boolean(guardar)));
 
 void app.whenReady().then(() => {
+  // Permissões do browser (câmara, microfone, localização, notificações...): recusadas, exceto copiar texto
+  // (botões "Copiar log", "Criar defeito"). Vale para as janelas da app, não para o Edge dos testes.
+  session.defaultSession.setPermissionRequestHandler((_wc, permissao, responder) => responder(permissao === 'clipboard-sanitized-write'));
   const janela = criarJanela();
   aoMudarGravador((estado) => {
     if (!janela.isDestroyed()) janela.webContents.send('gravador:atualizado', estado);

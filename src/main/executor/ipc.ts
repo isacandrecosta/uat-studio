@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AmbitoRun, Bloco, OpcoesRun } from '../../shared/modelo';
 import { testarBloco } from '../api/ambiente';
-import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from '../cofre';
+import { apagarSegredosDoPerfil, definirSegredo, definirSegredoDeTeste, listarSegredosDeTeste, segredosPreenchidos } from '../cofre';
 import { exportarCasos, importarCasos } from '../excel/casosExcel';
 import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
@@ -13,6 +13,7 @@ import { caminhoNaExecucao, pausarWorker, responderManual, saltarJornada, contin
 import { abrirTrace } from './trace';
 import { htmlParaAssinatura } from './assinatura';
 import { verificarAntesDeCorrer } from './verificar';
+import { defeitoDoCaso, guardarDefeito } from './defeitos';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
 
@@ -85,6 +86,14 @@ export function registarIpcExecucoes(): void {
       janela.destroy();
     }
   });
+  // "Criar defeito": texto sugerido e evidências de um caso KO/ERRO (nada é enviado: copia-se e grava-se).
+  ipcMain.handle('run:defeito', (_e, pastaRun: string, chave: string) => defeitoDoCaso(pastaDoProjeto(), String(pastaRun), String(chave)));
+  ipcMain.handle('run:defeito-guardar', async (_e, pastaRun: string, chave: string, titulo: string, texto: string) => {
+    const ficheiro = guardarDefeito(pastaDoProjeto(), String(pastaRun), String(chave), String(titulo ?? ''), String(texto ?? ''));
+    // Abre a pasta do caso, com as evidências para anexar ao defeito.
+    if (!process.argv.includes('--smoke')) await shell.openPath(path.dirname(ficheiro));
+    return ficheiro;
+  });
   ipcMain.handle('run:ler-texto', (_e, ...partes: string[]) => {
     const destino = caminhoNaExecucao(pastaDoProjeto(), ...partes.map(String));
     return fs.existsSync(destino) ? fs.readFileSync(destino, 'utf8') : '';
@@ -101,6 +110,9 @@ export function registarIpcExecucoes(): void {
   ipcMain.handle('cofre:definir', (_e, nome: string, valor: string) => definirSegredo(pastaDoProjeto(), String(nome), String(valor ?? '')));
   ipcMain.handle('cofre:preenchidos', (_e, nomes: string[]) => segredosPreenchidos(pastaDoProjeto(), (nomes ?? []).map(String)));
   ipcMain.handle('cofre:apagar-perfil', (_e, perfilId: string) => apagarSegredosDoPerfil(pastaDoProjeto(), String(perfilId)));
+  // Passwords de teste: a interface guarda e lista os nomes, nunca lê os valores.
+  ipcMain.handle('cofre:segredos-teste', () => listarSegredosDeTeste(pastaDoProjeto()));
+  ipcMain.handle('cofre:segredo-teste', (_e, nome: string, valor: string) => definirSegredoDeTeste(pastaDoProjeto(), String(nome ?? '').trim(), String(valor ?? '')));
 
   ipcMain.handle('casos:importar', async (evento, jornadaId: string) => {
     const pasta = pastaDoProjeto();

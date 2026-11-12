@@ -89,3 +89,23 @@ test('a verificação avisa quando um endereço não responde', async () => {
   assert.match(problemas[0].mensagem, /recusou a ligação/);
   fs.rmSync(pasta, { recursive: true, force: true });
 });
+
+test('passwords de teste: em claro nos casos dá aviso; {SEGREDO:nome} por preencher dá erro', async () => {
+  const pasta = projetoDeExemplo();
+  repo.guardar(pasta, 'blocos', {
+    id: 'login',
+    nome: 'Login',
+    tipo: 'UI',
+    aplicacaoId: 'simulador',
+    passos: [{ id: 'p1', acao: 'escrever', descricao: 'Password', alvo: { descricao: 'Password', localizadores: [{ tipo: 'testid', valor: 'pw' }] }, valor: { tipo: 'variavel', nome: 'Password' }, secreto: true }],
+  });
+  repo.guardar(pasta, 'jornadas', { id: 'com-login', nome: 'Com login', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'login' }] });
+  repo.guardar(pasta, 'casos', { id: 'com-login', colunas: ['Password'], casos: [{ id: 'A', etiquetas: [], dados: { Password: 'em-claro' } }, { id: 'B', etiquetas: [], dados: { Password: '{SEGREDO:ana.silva}' } }] });
+  const { problemas } = await verificarAntesDeCorrer(pasta, { jornadaIds: ['com-login'] }, semSegredos);
+  assert.ok(problemas.some((p) => p.gravidade === 'aviso' && /password da coluna "Password" está escrita/.test(p.mensagem)), JSON.stringify(problemas));
+  assert.ok(problemas.some((p) => p.gravidade === 'erro' && /"ana\.silva" não está preenchido/.test(p.mensagem)), JSON.stringify(problemas));
+  // Com o segredo preenchido neste PC, o erro desaparece.
+  const comSegredo = await verificarAntesDeCorrer(pasta, { jornadaIds: ['com-login'] }, { segredosPreenchidos: (nomes: string[]) => Object.fromEntries(nomes.map((n) => [n, n === 'teste.ana.silva'])) });
+  assert.ok(!comSegredo.problemas.some((p) => /ana\.silva/.test(p.mensagem)));
+  fs.rmSync(pasta, { recursive: true, force: true });
+});

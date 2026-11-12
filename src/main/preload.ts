@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('uatStudio', {
   },
   blocos: {
     reparar: chamar('blocos:reparar'),
+    parametrizar: chamar('blocos:parametrizar'),
   },
   pacotes: {
     exportar: chamar('pacotes:exportar'),
@@ -64,6 +65,8 @@ contextBridge.exposeInMainWorld('uatStudio', {
     historico: chamar('run:historico'),
     abrir: chamar('run:abrir'),
     lerTexto: chamar('run:ler-texto'),
+    defeito: chamar('run:defeito'),
+    guardarDefeito: chamar('run:defeito-guardar'),
     abrirTrace: chamar('run:abrir-trace'),
     pdf: chamar('run:pdf'),
     imagem: chamar('run:imagem'),
@@ -84,6 +87,8 @@ contextBridge.exposeInMainWorld('uatStudio', {
     definir: chamar('cofre:definir'),
     preenchidos: chamar('cofre:preenchidos'),
     apagarPerfil: chamar('cofre:apagar-perfil'),
+    segredosDeTeste: chamar('cofre:segredos-teste'),
+    definirSegredoDeTeste: chamar('cofre:segredo-teste'),
   },
   casos: {
     importar: chamar('casos:importar'),

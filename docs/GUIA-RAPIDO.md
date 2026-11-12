@@ -77,6 +77,15 @@ Há vídeos curtos (um por tema, com legendas) e um guia com imagens, gerados pe
 - **Relatório Excel/HTML** para a equipa; **PDF para assinatura** para o fecho do UAT (preencha o **ID do requisito** nas jornadas).
 - **Matriz de cobertura** (no fundo de Runs): que variantes já passaram em que jornadas.
 
+## Gravar uma vez e criar muitos casos no Excel
+1. Grave o teste "a direito", com os valores que usaria à mão.
+2. No ecrã **Gravar**, abra o bloco e carregue em **Transformar valores fixos em colunas**: escolha o que deve variar (o nome de cada coluna já vem sugerido).
+3. No **Editor de jornada**, **Exportar Excel**, crie as linhas que quiser e **Importar Excel**.
+4. Passwords: nunca as escreva nos casos. Em **Dados de teste › Segredos de teste** crie o segredo (fica encriptado neste PC) e, na célula, escreva `{SEGREDO:nome}`.
+
+## Quando um caso falha: criar o defeito
+No detalhe do caso (KO ou ERRO), **Criar defeito** prepara o título e a descrição (ambiente, passos para reproduzir, esperado vs obtido, erro, evidências). Reveja, confirme: o texto fica copiado para colar no Jira/Azure DevOps e abre-se a pasta com as evidências para anexar.
+
 ## Regras de ouro
 - Testar só em **QA com dados fictícios**. Em **PRD** a ferramenta pede sempre confirmação.
 - Passwords e segredos só no **cofre** (perfis de autenticação), nunca no Excel. Não viajam com o projeto: cada pessoa preenche-os no seu PC.

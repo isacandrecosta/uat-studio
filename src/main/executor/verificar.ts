@@ -121,6 +121,33 @@ export async function verificarAntesDeCorrer(pasta: string, ambito: AmbitoRun, o
         if (erro) juntar('erro', onde, `Um parâmetro do bloco "${bloco.nome}" tem uma fórmula com erro: ${erro}`);
       }
     }
+    // Passwords de teste: devem estar no cofre ({SEGREDO:nome}), nunca escritas no ficheiro dos casos.
+    const colunasSecretas = new Set<string>();
+    for (const item of jornada.blocos) {
+      for (const passo of blocos.get(item.blocoId)?.passos ?? []) {
+        if (!passo.secreto || passo.valor?.tipo !== 'variavel') continue;
+        const troca = item.parametros?.[passo.valor.nome];
+        colunasSecretas.add(troca?.tipo === 'variavel' ? troca.nome : passo.valor.nome);
+      }
+    }
+    const casosDaJornada = itens.filter((i) => i.jornada.id === jornada.id).map((i) => i.caso);
+    const referencias = new Set<string>();
+    const emClaro = new Set<string>();
+    for (const caso of casosDaJornada) {
+      for (const [coluna, valor] of Object.entries(caso.dados)) {
+        const m = /^\{SEGREDO:([^{}]+)\}$/.exec(String(valor ?? '').trim());
+        if (m) referencias.add(m[1].trim());
+        else if (colunasSecretas.has(coluna) && String(valor ?? '').trim()) emClaro.add(coluna);
+      }
+    }
+    for (const coluna of emClaro) {
+      juntar('aviso', onde, `A password da coluna "${coluna}" está escrita no ficheiro dos casos. Guarde-a no cofre (Dados de teste › Segredos de teste) e escreva {SEGREDO:nome} na célula.`);
+    }
+    if (referencias.size > 0) {
+      const preenchidos = opcoes.segredosPreenchidos([...referencias].map((r) => `teste.${r}`));
+      const faltam = [...referencias].filter((r) => !preenchidos[`teste.${r}`]);
+      if (faltam.length > 0) juntar('erro', onde, `${faltam.length === 1 ? 'O segredo de teste' : 'Os segredos de teste'} ${faltam.map((f) => `"${f}"`).join(', ')} não ${faltam.length === 1 ? 'está preenchido' : 'estão preenchidos'} neste PC (Dados de teste › Segredos de teste).`);
+    }
     // Dois casos com o mesmo ID baralham as evidências.
     const ids = (conjuntos.get(jornada.id)?.casos ?? []).map((c) => c.id);
     const repetidos = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];

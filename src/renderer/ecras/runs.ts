@@ -2,7 +2,7 @@
 import { descreverLocalizador, estadoDoReparo, juntarReparos } from '../../shared/blocos.js';
 import type { AmbitoRun, Bloco, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
-import { confirmar, h, mensagemDeErro, plural } from '../dom.js';
+import { confirmar, h, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
 import { cartaoCobertura, cartaoComparacao } from './cobertura.js';
 
 const NOMES_ESTADO: Record<ResultadoCaso['estado'], string> = {
@@ -591,6 +591,17 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
             },
             'Copiar log',
           ),
+          (caso.estado === 'KO' || caso.estado === 'ERRO') &&
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao botao-pequeno-livre botao-defeito',
+                title: 'Texto pronto a colar na ferramenta de defeitos (Jira, Azure DevOps...) e as evidências a anexar.',
+                onclick: () => void criarDefeito(pasta, caso.chave),
+              },
+              'Criar defeito',
+            ),
           traces.map((t) =>
             h(
               'button',
@@ -634,6 +645,32 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
    * "Regravar este elemento": quando o caso parou porque um elemento não foi encontrado (ou há vários iguais),
    * abre o gravador, repete os passos anteriores do bloco com os dados deste caso e pede para apontar o elemento.
    */
+  /** "Criar defeito": mostra o texto sugerido (editável), copia-o e grava-o em defeito.txt; abre a pasta das evidências. */
+  async function criarDefeito(pastaRun: string, chave: string): Promise<void> {
+    try {
+      const d = await api.runs.defeito(pastaRun, chave);
+      const valores = await pedirFormulario(
+        'Criar defeito',
+        [
+          { id: 'titulo', rotulo: 'Título', valor: d.titulo, obrigatorio: true },
+          {
+            id: 'texto',
+            rotulo: 'Descrição (reveja antes de enviar)',
+            tipo: 'area',
+            valor: d.texto,
+            ajuda: `Ao confirmar, o texto é copiado (para colar na ferramenta de defeitos), gravado em defeito.txt e abre-se a pasta do caso com as evidências: ${d.evidencias.join(', ')}.`,
+          },
+        ],
+        'Copiar e abrir as evidências',
+      );
+      if (!valores) return;
+      await api.runs.guardarDefeito(pastaRun, chave, valores.titulo, valores.texto);
+      await navigator.clipboard.writeText(`${valores.titulo}\n\n${valores.texto}`).catch(() => undefined);
+    } catch (e) {
+      await confirmar('Não foi possível criar o defeito', mensagemDeErro(e), 'Fechar');
+    }
+  }
+
   function botaoRegravar(run: EstadoRun, caso: ResultadoCaso): HTMLElement | null {
     const erro = caso.erro;
     if (run.ativo || !erro?.blocoId || !erro.passoId || !/Não encontrei o elemento|Há d+ elementos que correspondem/.test(erro.mensagem)) return null;

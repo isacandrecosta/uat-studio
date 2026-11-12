@@ -2,12 +2,13 @@
 import { AJUDA_FORMULAS, avaliarFormula, contextoDeExemplo, validarFormula } from '../../shared/formulas.js';
 import type { VariavelCalculada } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
-import { confirmar, h, mensagemDeErro, pedirTexto } from '../dom.js';
+import { confirmar, h, mensagemDeErro, pedirFormulario, pedirTexto } from '../dom.js';
 
 export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
   const api = window.uatStudio;
   const [variaveis, jornadas, conjuntos] = await Promise.all([api.variaveis.ler(), api.dados.listar('jornadas'), api.dados.listar('casos')]);
   let contadores = await api.contadores.ler();
+  let segredosTeste = await api.cofre.segredosDeTeste();
 
   // Caso de exemplo para a pré-visualização: o 1.º caso da jornada escolhida.
   const opcoesExemplo = jornadas.flatMap((j) => (conjuntos.find((c) => c.id === j.id)?.casos ?? []).map((caso) => ({ chave: `${j.id}/${caso.id}`, texto: `${j.nome} › ${caso.id}`, caso })));
@@ -66,7 +67,7 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
   }
 
   function desenhar(): void {
-    zona.replaceChildren(cartaoVariaveis(), cartaoExperimentar(), cartaoContadores(), cartaoAjuda());
+    zona.replaceChildren(cartaoVariaveis(), cartaoExperimentar(), cartaoSegredos(), cartaoContadores(), cartaoAjuda());
   }
 
   function cartaoVariaveis(): HTMLElement {
@@ -157,6 +158,70 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
       { class: 'cartao' },
       h('header', { class: 'cartao-topo' }, h('div', {}, h('h2', {}, 'Experimentar uma fórmula'), h('p', { class: 'suave' }, 'Não guarda nada nem gasta contadores.'))),
       h('div', { class: 'formula-caixa' }, campo, resultado),
+    );
+  }
+
+  /** Passwords de teste no cofre do Windows: nos casos escreve-se {SEGREDO:nome}. Os valores nunca voltam à interface. */
+  function cartaoSegredos(): HTMLElement {
+    const definir = async (nomeAtual?: string): Promise<void> => {
+      const valores = await pedirFormulario(nomeAtual ? `Segredo "${nomeAtual}"` : 'Novo segredo de teste', [
+        ...(nomeAtual ? [] : [{ id: 'nome', rotulo: 'Nome', obrigatorio: true, ajuda: 'Por exemplo ana.silva. Nos casos escreve-se {SEGREDO:ana.silva}.' }]),
+        { id: 'valor', rotulo: nomeAtual ? 'Novo valor' : 'Valor (a password de teste)', tipo: 'segredo' as const, obrigatorio: true, ajuda: 'Fica encriptado neste PC (Windows). Nunca vai para os ficheiros do projeto, os logs ou os relatórios.' },
+      ]);
+      if (!valores) return;
+      const nome = nomeAtual ?? valores.nome.trim();
+      try {
+        await api.cofre.definirSegredoDeTeste(nome, valores.valor);
+        segredosTeste = await api.cofre.segredosDeTeste();
+        desenhar();
+      } catch (erro) {
+        await confirmar('Não foi possível guardar', mensagemDeErro(erro), 'Fechar');
+      }
+    };
+    return h(
+      'section',
+      { class: 'cartao', id: 'cartao-segredos' },
+      h(
+        'header',
+        { class: 'cartao-topo' },
+        h(
+          'div',
+          {},
+          h('h2', {}, 'Segredos de teste'),
+          h('p', { class: 'suave' }, 'Passwords de teste (por exemplo, do login): ficam encriptadas no cofre deste PC. Nos casos e no Excel escreva só {SEGREDO:nome}. Noutro PC é preciso voltar a preenchê-las.'),
+        ),
+        h('button', { id: 'btn-novo-segredo', type: 'button', class: 'botao', onclick: () => void definir() }, 'Novo segredo'),
+      ),
+      segredosTeste.length === 0
+        ? h('p', { class: 'suave' }, 'Ainda não há segredos de teste neste PC.')
+        : h(
+            'ul',
+            { class: 'lista-itens', id: 'lista-segredos' },
+            segredosTeste.map((nome) =>
+              h(
+                'li',
+                { class: 'item' },
+                h('code', {}, `{SEGREDO:${nome}}`),
+                h('span', { class: 'item-meta' }, 'guardado (encriptado)'),
+                h('button', { type: 'button', class: 'botao botao-pequeno-livre', onclick: () => void definir(nome) }, 'Mudar'),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'botao botao-discreto-claro',
+                    'aria-label': `Apagar o segredo ${nome}`,
+                    onclick: async () => {
+                      if (!(await confirmar('Apagar segredo', `Apagar o segredo "${nome}" deste PC? Os casos que usam {SEGREDO:${nome}} deixam de correr até voltar a ser preenchido.`))) return;
+                      await api.cofre.definirSegredoDeTeste(nome, '');
+                      segredosTeste = await api.cofre.segredosDeTeste();
+                      desenhar();
+                    },
+                  },
+                  'Apagar',
+                ),
+              ),
+            ),
+          ),
     );
   }
 

@@ -49,6 +49,8 @@ declare global {
       blocos: {
         /** Reparar com um clique: o localizador que funcionou passa a ser o preferido do passo. */
         reparar(sugestao: SugestaoReparo): Promise<EstadoReparo>;
+        /** Os passos escolhidos passam a usar {Coluna}; os casos das jornadas que usam o bloco ganham a coluna. */
+        parametrizar(blocoId: string, escolhas: Array<{ passoId: string; coluna: string }>): Promise<{ colunas: string[]; jornadas: string[] }>;
       };
       /** Pacotes de blocos (exportar/importar para outro projeto). */
       pacotes: {
@@ -95,6 +97,10 @@ declare global {
         /** Abre no Windows uma pasta ou ficheiro dentro de `execucoes/`. */
         abrir(...partes: string[]): Promise<void>;
         lerTexto(...partes: string[]): Promise<string>;
+        /** "Criar defeito": título, texto sugerido e evidências de um caso KO/ERRO. */
+        defeito(pastaRun: string, chave: string): Promise<{ titulo: string; texto: string; evidencias: string[]; ficheiro: string }>;
+        /** Grava o texto revisto em defeito.txt, na pasta do caso. */
+        guardarDefeito(pastaRun: string, chave: string, titulo: string, texto: string): Promise<string>;
         /** Abre um trace (.zip) numa janela com o visualizador do Playwright. */
         abrirTrace(...partes: string[]): Promise<'janela' | 'pasta'>;
         /** Faz o relatório de UAT para assinatura (PDF) de uma execução terminada e abre-o. Devolve o caminho. */
@@ -123,6 +129,10 @@ declare global {
         definir(nome: string, valor: string): Promise<void>;
         preenchidos(nomes: string[]): Promise<Record<string, boolean>>;
         apagarPerfil(perfilId: string): Promise<void>;
+        /** Nomes das passwords de teste guardadas neste PC (nunca os valores). */
+        segredosDeTeste(): Promise<string[]>;
+        /** Guarda (ou, com valor vazio, apaga) uma password de teste. */
+        definirSegredoDeTeste(nome: string, valor: string): Promise<void>;
       };
       casos: {
         /** Pede um Excel e substitui os casos da jornada. null se o utilizador cancelar. */

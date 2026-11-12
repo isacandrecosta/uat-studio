@@ -50,5 +50,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Demo: capítulo "Perceber o projeto de exemplo" (os épicos 1 a 4 e o que cada um ensina).
 - [x] Demo: capítulo "Usar a Wiki de componentes" (abrir a Wiki, ler uma receita em "Como usar", correr as provas, exportar blocos), já com as receitas do catálogo.
 - [x] Demo: capítulo "Quando algo falha" (erro explicado, sugestões, regravar um elemento, repetir o caso).
+- [x] "Transformar valores fixos em colunas" (gravar a direito e decidir depois o que vem do Excel), descrições em texto corrido nas jornadas e nos blocos, e "Criar defeito" (texto e evidências sugeridos a partir de um caso KO/ERRO).
+- [x] Segredos de teste no cofre (`{SEGREDO:nome}` nos casos) e auditoria de compliance ao código (`docs/AUDITORIA-COMPLIANCE.md`).
+- [ ] Interface: melhorias de navegação e linguagem de QA (propostas à espera de decisão do utilizador).
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

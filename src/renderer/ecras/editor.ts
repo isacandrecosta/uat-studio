@@ -146,7 +146,22 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
           'Por exemplo: REQ-123',
         ),
       ),
+      descricaoDaJornada(),
     );
+  }
+
+  /** Descrição em texto corrido: objetivo, pré-condições e dados de que o teste precisa. */
+  function descricaoDaJornada(): HTMLElement {
+    const area = h(
+      'textarea',
+      { id: 'jornada-descricao', class: 'campo campo-area', rows: 3, maxlength: 4000, placeholder: 'Objetivo do teste, pré-condições (por exemplo, utilizador com perfil Aprovador) e dados de que precisa.' },
+      jornada.descricao ?? '',
+    );
+    area.addEventListener('change', () => {
+      jornada.descricao = area.value.trim() || undefined;
+      void guardarJornada(false);
+    });
+    return h('div', { class: 'campo-grupo campo-largo' }, h('label', { for: 'jornada-descricao' }, 'Descrição do teste'), area);
   }
 
   function linhaParametro(item: BlocoDaJornada, nome: string): HTMLElement {

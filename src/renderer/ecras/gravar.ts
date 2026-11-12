@@ -2,6 +2,7 @@
 import type { Bloco, EstadoGravador, Passo, PrintDoEcra, Valor } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { validarFormula } from '../../shared/formulas.js';
+import { colunaValida, valoresFixos } from '../../shared/parametrizar.js';
 import { confirmar, h, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
 
 const NOMES_ACAO: Record<Passo['acao'], string> = {
@@ -607,6 +608,52 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         login,
         'Bloco de login: reutilizar a sessão entre casos',
       );
+      // Descrição em texto corrido: para que serve o bloco, pré-condições, cuidados.
+      const descricaoBloco = h(
+        'textarea',
+        { id: 'bloco-descricao', class: 'campo campo-area', rows: 3, maxlength: 2000, placeholder: 'Para que serve este bloco, de que precisa antes (por exemplo, estar autenticado) e cuidados a ter.', 'aria-label': 'Descrição do bloco' },
+        bloco.descricao ?? '',
+      );
+      descricaoBloco.addEventListener('change', () => {
+        bloco.descricao = descricaoBloco.value.trim() || undefined;
+        void guardar(false);
+      });
+      // "Transformar valores fixos em colunas": escolher o que passa a vir dos casos (e do Excel).
+      const parametrizarBloco = async (): Promise<void> => {
+        const fixos = valoresFixos(bloco);
+        if (fixos.length === 0) {
+          await confirmar('Valores fixos', 'Este bloco não tem valores fixos para transformar: os valores já vêm de colunas, fórmulas ou geradores.', 'Fechar');
+          return;
+        }
+        const valores = await pedirFormulario(
+          'Transformar valores fixos em colunas',
+          fixos.map((v) => ({
+            id: v.passoId,
+            rotulo: `${v.descricao}: "${v.valor.length > 40 ? `${v.valor.slice(0, 40)}…` : v.valor}"`,
+            valor: v.coluna,
+            ajuda: 'Nome da coluna nos casos. Deixe vazio para manter o valor fixo.',
+          })),
+          'Transformar',
+        );
+        if (!valores) return;
+        const escolhas = fixos.map((v) => ({ passoId: v.passoId, coluna: (valores[v.passoId] ?? '').trim() })).filter((e) => e.coluna);
+        const invalida = escolhas.find((e) => !colunaValida(e.coluna));
+        if (invalida) {
+          await confirmar('Nome de coluna', `"${invalida.coluna}" não serve como nome de coluna: use letras e números, sem espaços (por exemplo NomeEmpresa).`, 'Fechar');
+          return;
+        }
+        if (escolhas.length === 0) return;
+        try {
+          const feito = await api.blocos.parametrizar(bloco.id, escolhas);
+          const ondeFicou = feito.jornadas.length
+            ? `Os casos de ${feito.jornadas.join(', ')} ganharam as colunas, com os valores gravados. Exporte para Excel no editor de jornada para criar mais casos.`
+            : 'O bloco ainda não é usado em nenhuma jornada: quando o acrescentar a uma, os casos precisam destas colunas.';
+          await confirmar('Valores transformados', `${plural(feito.colunas.length, 'coluna')}: ${feito.colunas.join(', ')}. ${ondeFicou}`, 'Fechar');
+        } catch (e) {
+          await confirmar('Não foi possível transformar', mensagemDeErro(e), 'Fechar');
+        }
+        await atualizar();
+      };
       const linhas = bloco.passos.map((passo, indice) => {
         const erro = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
         const descricao = h('input', { type: 'text', class: 'campo', value: passo.descricao, 'aria-label': `Descrição do passo ${indice + 1}` });
@@ -688,7 +735,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         h(
           'header',
           { class: 'cartao-topo' },
-          h('div', { class: 'campo-grupo' }, h('h2', {}, 'Passos do bloco'), nome, opcaoLogin, h('p', { class: 'ajuda-campo' }, usos.length > 0 ? `Usado em: ${usos.join(', ')}. As alterações valem para todas.` : 'Ainda não é usado em nenhuma jornada.')),
+          h('div', { class: 'campo-grupo' }, h('h2', {}, 'Passos do bloco'), nome, descricaoBloco, opcaoLogin, h('p', { class: 'ajuda-campo' }, usos.length > 0 ? `Usado em: ${usos.join(', ')}. As alterações valem para todas.` : 'Ainda não é usado em nenhuma jornada.')),
           h(
             'div',
             { class: 'acoes' },
@@ -721,7 +768,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
           h('span', {}),
         ),
         h('ol', { class: 'lista-passos' }, linhas),
-        h('div', { class: 'acoes' }, h('button', { id: 'btn-passo-rede', type: 'button', class: 'botao botao-pequeno-livre', title: 'Simular a resposta de uma API externa ou intercetar o pedido que a app envia.', onclick: () => void acrescentarPassoDeRede() }, 'Acrescentar passo de rede'), h('button', { id: 'btn-passo-especial', type: 'button', class: 'botao botao-pequeno-livre', title: 'Carregar ou descarregar ficheiros, mudar de separador, responder a perguntas do browser.', onclick: () => void acrescentarPassoEspecial() }, 'Acrescentar outro passo')),
+        h('div', { class: 'acoes' }, h('button', { id: 'btn-passo-rede', type: 'button', class: 'botao botao-pequeno-livre', title: 'Simular a resposta de uma API externa ou intercetar o pedido que a app envia.', onclick: () => void acrescentarPassoDeRede() }, 'Acrescentar passo de rede'), h('button', { id: 'btn-passo-especial', type: 'button', class: 'botao botao-pequeno-livre', title: 'Carregar ou descarregar ficheiros, mudar de separador, responder a perguntas do browser.', onclick: () => void acrescentarPassoEspecial() }, 'Acrescentar outro passo'), h('button', { id: 'btn-parametrizar', type: 'button', class: 'botao botao-pequeno-livre', title: 'Escolher que valores gravados passam a vir de uma coluna dos casos (para criar muitos casos no Excel).', onclick: () => void parametrizarBloco() }, 'Transformar valores fixos em colunas')),
       );
     };
     desenharBlocos();
