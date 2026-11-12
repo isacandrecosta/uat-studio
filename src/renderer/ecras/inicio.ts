@@ -39,8 +39,8 @@ export async function ecraInicio({ estado, corpo, irPara, selecao }: Contexto): 
       ultima
         ? indicador(rotuloComSimbolo('OK'), `${contar(ultima, 'OK')} de ${ultima.casos.length}`, 'na última execução', 'OK')
         : indicador('—', 'Sem execuções', 'corra o primeiro teste em Execuções'),
-      ultima && indicador(rotuloComSimbolo('KO'), String(contar(ultima, 'KO')), EXPLICACAO_RESULTADO.KO.replace(/^KO: /, ''), 'KO'),
-      ultima && indicador(rotuloComSimbolo('ERRO'), String(contar(ultima, 'ERRO')), EXPLICACAO_RESULTADO.ERRO.replace(/^ERRO: /, ''), 'ERRO'),
+      ultima && indicador(rotuloComSimbolo('KO'), String(contar(ultima, 'KO')), EXPLICACAO_RESULTADO.KO.replace(/^KO: /, ''), contar(ultima, 'KO') > 0 ? 'KO' : ''),
+      ultima && indicador(rotuloComSimbolo('ERRO'), String(contar(ultima, 'ERRO')), EXPLICACAO_RESULTADO.ERRO.replace(/^ERRO: /, ''), contar(ultima, 'ERRO') > 0 ? 'ERRO' : ''),
     ),
     ultima && h('p', { class: 'suave' }, `Última execução: ${ultima.nome}, ${new Date(ultima.inicio).toLocaleString('pt-PT')}, ambiente ${ultima.ambiente}${ultima.utilizador ? `, por ${ultima.utilizador}` : ''}.`),
   );

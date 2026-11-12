@@ -21,6 +21,14 @@ Uma página para começar. Não é preciso saber programar.
 | 7. Execuções | Correr, acompanhar, ver resultados, evidências, **Criar defeito**, relatórios (Excel, HTML, **PDF para assinatura**) e histórico. |
 | 8. Execução ao vivo | Ver ao vivo o que está a correr: cenários, blocos, casos e o ecrã de cada worker. |
 
+## Ajudas da própria ferramenta
+- **Tutorial guiado**: aparece na primeira vez e mostra, passo a passo, como se constrói um teste de ponta a ponta. Pode saltá-lo (botão ou Esc) e retomá-lo em **Configurações**.
+- **"i"** ao lado dos títulos e opções: passe o rato (ou chegue lá com Tab) para uma explicação curta.
+- **Procurar (Ctrl+K)**: escreva parte do nome de um cenário, bloco, épico, aplicação ou ecrã e carregue em Enter.
+- **Filtros**: nos Cenários (por nome, épico ou etiqueta), nos blocos (texto, tipo, só os não usados) e nas Execuções (Passou, Falhou, Bloqueado e pesquisa).
+- **"Mais opções"**: as opções pouco usadas ficam escondidas; fechado, mostra um resumo do que está definido.
+- **Configurações**: tema claro, escuro ou igual ao Windows.
+
 ## Primeira vez: experimentar o projeto de exemplo
 1. Na lista **Projeto**, escolher **"Projeto de exemplo (casos de uso)"**.
 2. Em **Cenários**, cada épico mostra um tipo de teste (simulador, entre portais FO→BO, APIs e serviços externos, passos manuais...). Abra um cenário no editor para ver como está montado.

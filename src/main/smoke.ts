@@ -707,12 +707,12 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         const pedidoId = anterior?.variaveis.PedidoId;
         confirmar(anterior?.estado === 'KO' && pedidoId, 'Falta o caso KO da execução anterior.');
         await esperar(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .caso-topo')");
-        await naPagina(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .caso-topo').click()");
-        await esperar(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .botao-retomar')");
-        const sugerido = await naPagina<string>(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .retomar-bloco').value");
+        await naPagina(j, "document.querySelector('.painel-caso[aria-label=\"Detalhe do caso TC0002\"]') || document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .caso-topo').click()");
+        await esperar(j, "document.querySelector('.painel-caso .botao-retomar')");
+        const sugerido = await naPagina<string>(j, "document.querySelector('.painel-caso .retomar-bloco').value");
         confirmar(sugerido === '1', `Devia sugerir retomar no bloco do KO (2.º), sugeriu ${Number(sugerido) + 1}.`);
         await tirarPrint(j, raiz, 'retomar');
-        await naPagina(j, "document.querySelector('.caso[data-chave=\"com-passo-manual/TC0002\"] .botao-retomar').click()");
+        await naPagina(j, "document.querySelector('.painel-caso .botao-retomar').click()");
         await esperar(j, "document.querySelector('.caixa-manual[data-chave=\"com-passo-manual/TC0002\"]')", 60_000);
         const instrucao = await naPagina<string>(j, "document.querySelector('.caixa-manual .manual-instrucao').textContent");
         confirmar(instrucao.includes(`pedido ${pedidoId} `), `Ao retomar, a instrução devia usar o {PedidoId} guardado (${pedidoId}): ${instrucao}`);
@@ -1527,6 +1527,70 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
 
         // Não deixar o segredo de teste no cofre deste PC.
         apagarSegredosDoPerfil(pasta, 'oauth-de-teste');
+      },
+    ],
+    [
+      'interface: pesquisa rápida, filtros, "mais opções", modo escuro e tutorial (saltar e retomar)',
+      async (j) => {
+        const clicarBotao = (texto: string): Promise<void> => naPagina(j, `[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === ${JSON.stringify(texto)}).click()`);
+        // Pesquisa rápida: escrever parte do nome e Enter abre o cenário no editor, com o caminho no topo.
+        await naPagina(j, "document.getElementById('btn-pesquisa').click()");
+        await esperar(j, "document.querySelector('#pesquisa-rapida .pesquisa-campo')");
+        await naPagina(j, "(() => { const c = document.querySelector('#pesquisa-rapida .pesquisa-campo'); c.value = 'simular credito'; c.dispatchEvent(new Event('input')); })()");
+        await esperar(j, "document.querySelector('#pesquisa-resultados .pesquisa-item[aria-selected=\"true\"] .pesquisa-nome')?.textContent === 'Simular crédito'");
+        await naPagina(j, "document.querySelector('#pesquisa-rapida .pesquisa-campo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))");
+        await esperar(j, "document.getElementById('titulo-ecra').textContent === 'Editor do cenário' && document.getElementById('caminho').textContent.includes('Simular crédito')");
+        confirmar(!(await naPagina<boolean>(j, "Boolean(document.getElementById('pesquisa-rapida'))")), 'A pesquisa devia fechar depois de abrir o cenário.');
+        // "Mais opções" no percurso: as opções raras ficam escondidas, com um resumo do que está definido.
+        await naPagina(j, "document.querySelector('.separador[data-painel=\"passos\"]').click()");
+        await esperar(j, "document.querySelector('#percurso .mais-opcoes summary')");
+        // Filtros no ecrã Cenários: um texto que não existe esconde tudo; limpar mostra outra vez.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.getElementById('filtro-cenarios')");
+        await naPagina(j, "(() => { const c = document.getElementById('filtro-cenarios'); c.value = 'zzzz-nada'; c.dispatchEvent(new Event('input')); })()");
+        confirmar(await naPagina<boolean>(j, "[...document.querySelectorAll('.cartao-epico')].every((c) => c.hidden)"), 'Um filtro sem resultados devia esconder os épicos.');
+        await naPagina(j, "(() => { const c = document.getElementById('filtro-cenarios'); c.value = 'simular'; c.dispatchEvent(new Event('input')); })()");
+        const visiveis = await naPagina<string[]>(j, "[...document.querySelectorAll('.cartao-epico li[data-pesquisa]')].filter((li) => !li.hidden && !li.closest('.cartao-epico').hidden).map((li) => li.textContent)");
+        confirmar(visiveis.length > 0 && visiveis.every((t) => /simular/i.test(t)), `O filtro "simular" devia deixar só esses cenários: ${visiveis.join(' | ')}`);
+        // Execuções: filtrar os casos pelo resultado.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+        await esperar(j, "document.querySelector('#run-atual') || document.getElementById('historico')");
+        if (await naPagina<boolean>(j, "Boolean(document.querySelector('.separador[data-filtro=\"OK\"]'))")) {
+          await naPagina(j, "document.querySelector('.separador[data-filtro=\"OK\"]').click()");
+          await esperar(j, "document.querySelector('.separador[data-filtro=\"OK\"][aria-selected=\"true\"]')");
+          confirmar(await naPagina<boolean>(j, "[...document.querySelectorAll('.lista-casos .caso')].every((c) => c.dataset.estado === 'OK')"), 'O filtro "Passou" devia mostrar só casos OK.');
+          await naPagina(j, "document.querySelector('.separador[data-filtro=\"todos\"]').click()");
+        }
+        // Modo escuro.
+        await naPagina(j, "document.getElementById('btn-configuracoes').click()");
+        await esperar(j, "document.querySelector('#configuracoes input[value=\"escuro\"]')");
+        await naPagina(j, "(() => { const r = document.querySelector('#configuracoes input[value=\"escuro\"]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+        confirmar((await naPagina<string>(j, 'document.documentElement.dataset.tema')) === 'escuro', 'O tema devia passar a escuro.');
+        await clicarBotao('Fechar');
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"inicio\"]').click()");
+        await esperar(j, "document.getElementById('inicio-resumo')");
+        await tirarPrint(j, raiz, 'modo-escuro');
+        await naPagina(j, "document.getElementById('btn-configuracoes').click()");
+        await esperar(j, "document.querySelector('#configuracoes input[value=\"claro\"]')");
+        await naPagina(j, "(() => { const r = document.querySelector('#configuracoes input[value=\"claro\"]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+        confirmar((await naPagina<string>(j, 'document.documentElement.dataset.tema')) === 'claro', 'O tema devia voltar a claro.');
+        // Tutorial: começar, avançar dois passos, saltar; retomar no mesmo passo; Esc fecha.
+        await naPagina(j, "document.getElementById('btn-recomecar-tutorial').click()");
+        await esperar(j, "document.querySelector('#tutorial .tutorial-contador')?.textContent.startsWith('Passo 1 de')");
+        await naPagina(j, "document.getElementById('tutorial-seguinte').click()");
+        await esperar(j, "document.querySelector('#tutorial')?.dataset.passo === '1'");
+        await naPagina(j, "document.getElementById('tutorial-seguinte').click()");
+        await esperar(j, "document.querySelector('#tutorial')?.dataset.passo === '2' && !document.querySelector('.tutorial-realce').hidden");
+        await tirarPrint(j, raiz, 'tutorial');
+        await naPagina(j, "document.getElementById('tutorial-saltar').click()");
+        await esperar(j, "!document.getElementById('tutorial')");
+        confirmar((await naPagina<string>(j, "localStorage.getItem('uat.tutorial') + '|' + localStorage.getItem('uat.tutorial.passo')")) === 'saltado|2', 'O tutorial devia ficar marcado como saltado no passo 3.');
+        await naPagina(j, "document.getElementById('btn-configuracoes').click()");
+        await esperar(j, "document.getElementById('btn-retomar-tutorial')?.textContent === 'Retomar no passo 3'");
+        await naPagina(j, "document.getElementById('btn-retomar-tutorial').click()");
+        await esperar(j, "document.querySelector('#tutorial')?.dataset.passo === '2'");
+        await naPagina(j, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
+        await esperar(j, "!document.getElementById('tutorial')");
       },
     ],
     [

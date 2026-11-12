@@ -59,3 +59,18 @@ export function guardarDefeito(pasta: string, pastaRun: string, chave: string, t
   fs.writeFileSync(ficheiro, `${titulo.trim()}\n\n${texto.trim()}\n`, 'utf8');
   return ficheiro;
 }
+
+/** Os defeitos criados numa execução (os casos com defeito.txt): chave do caso e título. */
+export function defeitosDaExecucao(pasta: string, pastaRun: string): Array<{ chave: string; casoId: string; titulo: string; pastaCaso: string }> {
+  const run = listarHistorico(pasta).find((r) => r.pasta === pastaRun);
+  if (!run) return [];
+  const lista: Array<{ chave: string; casoId: string; titulo: string; pastaCaso: string }> = [];
+  for (const caso of run.casos) {
+    if (!caso.pasta) continue;
+    const ficheiro = caminhoNaExecucao(pasta, pastaRun, caso.pasta, 'defeito.txt');
+    if (!fs.existsSync(ficheiro)) continue;
+    const titulo = fs.readFileSync(ficheiro, 'utf8').split(/\r?\n/)[0]?.trim() ?? '';
+    lista.push({ chave: caso.chave, casoId: caso.casoId, titulo, pastaCaso: caso.pasta });
+  }
+  return lista;
+}

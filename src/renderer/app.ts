@@ -11,6 +11,14 @@ import { ecraJornadas } from './ecras/jornadas.js';
 import { ecraRuns } from './ecras/runs.js';
 import { ecraMapa } from './ecras/mapa.js';
 import { ecraInicio } from './ecras/inicio.js';
+import { abrirPesquisa, type DestinoPesquisa } from './pesquisa.js';
+import { abrirConfiguracoes, aplicarTema } from './configuracoes.js';
+import { iniciarTutorial, tutorialJaVisto } from './tutorial.js';
+
+// O tema (claro/escuro) aplica-se logo, antes de desenhar.
+aplicarTema();
+/** O tutorial aparece sozinho só uma vez por sessão e nunca nos testes automáticos nem na demo. */
+let tutorialMostrado = false;
 
 /** O que cada ecrã recebe para se desenhar. */
 export interface Contexto {
@@ -25,6 +33,8 @@ export interface Contexto {
   selecao: Selecao;
   /** Muda para outro ecrã. */
   irPara(ecraId: string): void;
+  /** Caminho no topo ("Projeto › Épico › Cenário"); por omissão, "Projeto › Ecrã". */
+  definirCaminho(partes: string[]): void;
 }
 
 export interface Selecao {
@@ -91,10 +101,21 @@ function desenharAmbiente(atual: EstadoProjeto): void {
   faixaAmbiente.textContent = ativo ? `Ambiente ${ativo.nome} · ${explicacao[ativo.tipo] ?? ativo.tipo} · Projeto: ${atual.projeto.nome}` : '';
 }
 
+/** Caminho no topo: o projeto (abre o Início) e as partes do ecrã atual. */
+function definirCaminho(partes: string[]): void {
+  const nav = obter<HTMLElement>('caminho');
+  const projeto = estado?.projeto.nome ?? '';
+  nav.replaceChildren(
+    h('button', { type: 'button', class: 'caminho-parte ligacao', title: 'Ir para o Início', onclick: () => irPara('inicio') }, projeto),
+    ...partes.flatMap((p) => [h('span', { class: 'caminho-separador', 'aria-hidden': 'true' }, '›'), h('span', { class: 'caminho-parte' }, p)]),
+  );
+}
+
 async function desenharEcra(): Promise<void> {
   if (!estado) return;
   const ecra = ECRAS.find((e) => e.id === ecraAtual) ?? ECRAS[0];
   obter('titulo-ecra').textContent = ecra.nome;
+  definirCaminho([ecra.nome]);
   obter('descricao-ecra').textContent = ecra.descricao;
   for (const item of Array.from(menu.querySelectorAll<HTMLElement>('.menu-item'))) {
     const ativo = item.dataset.ecra === ecra.id;
@@ -116,7 +137,7 @@ async function desenharEcra(): Promise<void> {
     return;
   }
   try {
-    await ecra.desenhar({ estado, corpo, acoes, atualizar, selecao, irPara });
+    await ecra.desenhar({ estado, corpo, acoes, atualizar, selecao, irPara, definirCaminho });
   } catch (erro) {
     corpo.replaceChildren(h('p', { class: 'aviso-erro', role: 'alert' }, mensagemDeErro(erro)));
   }
@@ -133,6 +154,12 @@ async function atualizar(): Promise<void> {
   desenharAmbiente(estado);
   void desenharProjetos(estado);
   mostrarVista('app');
+  if (!tutorialMostrado && !tutorialJaVisto()) {
+    tutorialMostrado = true;
+    void window.uatStudio.app.modo().then((modo) => {
+      if (modo === 'normal') setTimeout(() => iniciarTutorial(irPara), 600);
+    });
+  }
   await desenharEcra();
 }
 
@@ -181,6 +208,70 @@ async function podeMudarDeProjeto(): Promise<boolean> {
   await confirmar('Não é possível mudar de projeto agora', run?.ativo ? 'Há uma execução a correr. Espere que termine (ou pare-a) antes de mudar de projeto.' : 'Há uma gravação em curso. Termine-a antes de mudar de projeto.', 'Fechar');
   return false;
 }
+
+// ---------------------------------------------------------------- pesquisa rápida (Ctrl+K)
+
+/** Depois de mudar de ecrã, escreve um texto numa caixa de filtro (quando ela aparecer). */
+function preencherFiltro(id: string, texto: string): void {
+  const inicio = Date.now();
+  const tentar = (): void => {
+    const campo = document.getElementById(id) as HTMLInputElement | null;
+    if (campo) {
+      campo.value = texto;
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+      campo.focus();
+    } else if (Date.now() - inicio < 3000) {
+      setTimeout(tentar, 100);
+    }
+  };
+  tentar();
+}
+
+async function destinosDaPesquisa(): Promise<DestinoPesquisa[]> {
+  const api = window.uatStudio;
+  const [jornadas, epicos, blocos, aplicacoes] = await Promise.all([api.dados.listar('jornadas'), api.dados.listar('epicos'), api.dados.listar('blocos'), api.dados.listar('aplicacoes')]);
+  const ambiente = estado?.projeto.ambienteAtivo ?? '';
+  const nomesTipo: Record<string, string> = { UI: 'Bloco de ecrã', API: 'Bloco de API', EMAIL: 'Bloco de email', MANUAL: 'Passo manual' };
+  return [
+    ...jornadas.map((j) => ({
+      tipo: 'Cenário',
+      nome: j.nome,
+      detalhe: epicos.find((e) => e.id === j.epicoId)?.nome,
+      abrir: () => {
+        selecao.jornadaId = j.id;
+        irPara('editor');
+      },
+    })),
+    ...blocos.map((b) => ({
+      tipo: nomesTipo[b.tipo] ?? 'Bloco',
+      nome: b.nome,
+      detalhe: aplicacoes.find((a) => a.id === b.aplicacaoId)?.nome,
+      abrir: () => {
+        irPara(b.tipo === 'API' ? 'api' : 'jornadas');
+        if (b.tipo !== 'API') preencherFiltro('filtro-blocos', b.nome);
+      },
+    })),
+    ...epicos.map((e) => ({
+      tipo: 'Épico',
+      nome: e.nome,
+      abrir: () => {
+        irPara('jornadas');
+        preencherFiltro('filtro-cenarios', e.nome);
+      },
+    })),
+    ...aplicacoes.map((a) => ({ tipo: 'Aplicação', nome: a.nome, detalhe: a.urls[ambiente], abrir: () => irPara('jornadas') })),
+    ...ECRAS.map((e) => ({ tipo: 'Ecrã', nome: e.nome, detalhe: e.descricao, abrir: () => irPara(e.id) })),
+  ];
+}
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && document.body.dataset.vista === 'app') {
+    e.preventDefault();
+    void abrirPesquisa(destinosDaPesquisa);
+  }
+});
+obter<HTMLButtonElement>('btn-pesquisa').addEventListener('click', () => void abrirPesquisa(destinosDaPesquisa));
+obter<HTMLButtonElement>('btn-configuracoes').addEventListener('click', () => abrirConfiguracoes(irPara));
 
 escolhaProjeto.addEventListener('change', async () => {
   const escolha = escolhaProjeto.value;

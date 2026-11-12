@@ -46,6 +46,10 @@ declare global {
         ): Promise<Colecoes[C]>;
         apagar(colecao: NomeColecao, id: string): Promise<void>;
       };
+      app: {
+        /** "normal", ou "smoke"/"demo" nos testes automáticos e na gravação da demo (sem tutorial). */
+        modo(): Promise<'normal' | 'smoke' | 'demo'>;
+      };
       blocos: {
         /** Reparar com um clique: o localizador que funcionou passa a ser o preferido do passo. */
         reparar(sugestao: SugestaoReparo): Promise<EstadoReparo>;
@@ -99,6 +103,8 @@ declare global {
         lerTexto(...partes: string[]): Promise<string>;
         /** "Criar defeito": título, texto sugerido e evidências de um caso KO/ERRO. */
         defeito(pastaRun: string, chave: string): Promise<{ titulo: string; texto: string; evidencias: string[]; ficheiro: string }>;
+        /** Os defeitos criados numa execução (casos com defeito.txt). */
+        defeitos(pastaRun: string): Promise<Array<{ chave: string; casoId: string; titulo: string; pastaCaso: string }>>;
         /** Grava o texto revisto em defeito.txt, na pasta do caso. */
         guardarDefeito(pastaRun: string, chave: string, titulo: string, texto: string): Promise<string>;
         /** Abre um trace (.zip) numa janela com o visualizador do Playwright. */

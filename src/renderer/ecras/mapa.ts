@@ -3,7 +3,7 @@
 import { contar, estadoDoBlocoNoCaso, estadoDoCasoNoMapa, juntarEstados, resumoContagem, type EstadoNo } from '../../shared/mapa.js';
 import type { EstadoRun, JornadaDoRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
-import { h, plural } from '../dom.js';
+import { h, info, plural } from '../dom.js';
 
 type Vista = 'epicos' | 'jornadas' | 'casos';
 
@@ -184,7 +184,7 @@ export async function ecraMapa({ corpo, acoes, irPara }: Contexto): Promise<void
       h(
         'section',
         { class: 'cartao' },
-        h('header', { class: 'cartao-topo' }, h('h2', {}, 'Workers ao vivo'), h('span', { class: 'suave' }, r.opcoes.visivel ? 'Browser visível' : 'Em background (o browser desenha a página mesmo sem janela)')),
+        h('header', { class: 'cartao-topo' }, h('h2', {}, 'Workers ao vivo', info("Cada worker é um browser a correr um caso. As miniaturas atualizam sozinhas, mesmo em background. Pode pausar um worker sem parar os outros.")), h('span', { class: 'suave' }, r.opcoes.visivel ? 'Browser visível' : 'Em background (o browser desenha a página mesmo sem janela)')),
         h(
           'div',
           { class: 'workers', id: 'workers' },

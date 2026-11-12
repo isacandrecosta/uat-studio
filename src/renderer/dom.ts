@@ -280,3 +280,65 @@ export function mostrarUsos(nomeBloco: string, usos: UsoDoBloco[], abrirJornada:
   document.body.append(dialogo);
   dialogo.showModal();
 }
+
+// ---------------------------------------------------------------- ajudas, filtros e "mais opções"
+
+/** Ícone "i" com uma ajuda curta: aparece ao passar o rato ou ao chegar lá com o teclado (Tab). */
+export function info(texto: string): HTMLElement {
+  return h('span', { class: 'info', tabindex: 0, role: 'note', 'aria-label': texto, 'data-dica': texto }, 'i');
+}
+
+/** Texto para pesquisar sem acentos nem maiúsculas ("Crédito" encontra "credito"). */
+export function normalizarPesquisa(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Caixa de pesquisa que filtra os itens de uma lista enquanto se escreve. Cada item é procurado no
+ * `data-pesquisa` (se existir) ou no texto. Os itens que não servem ficam escondidos.
+ */
+export function campoFiltro(rotulo: string, lista: () => Iterable<HTMLElement>, id?: string): HTMLInputElement {
+  const campo = h('input', { type: 'search', class: 'campo campo-filtro', placeholder: rotulo, 'aria-label': rotulo, ...(id ? { id } : {}) });
+  campo.addEventListener('input', () => {
+    const procura = normalizarPesquisa(campo.value);
+    for (const item of lista()) {
+      const texto = normalizarPesquisa(item.dataset.pesquisa ?? item.textContent ?? '');
+      item.hidden = Boolean(procura) && !procura.split(/\s+/).every((p) => texto.includes(p));
+    }
+  });
+  return campo;
+}
+
+/**
+ * "Mais opções": esconde opções pouco usadas atrás de um clique. Fechado, mostra um resumo do que
+ * está definido (por exemplo "só se · sessão cliente"), para não se perder nada de vista.
+ */
+export function maisOpcoes(resumo: string[], ...conteudo: Array<Node | false | null | undefined>): HTMLElement {
+  return h(
+    'details',
+    { class: 'mais-opcoes', open: false },
+    h('summary', {}, 'Mais opções', resumo.length > 0 && h('span', { class: 'mais-opcoes-resumo' }, ` · ${resumo.join(' · ')}`)),
+    h('div', { class: 'mais-opcoes-corpo' }, ...conteudo.filter((c): c is Node => Boolean(c))),
+  );
+}
+
+/** Menu pequeno de ações ("Criar ▾"): agrupa botões pouco usados para o cabeçalho ficar limpo. */
+export function menuAcoes(rotulo: string, ...botoes: Array<Node | false | null | undefined>): HTMLElement {
+  const menu = h('details', { class: 'menu-acoes' }, h('summary', { class: 'botao' }, `${rotulo} ▾`), h('div', { class: 'menu-acoes-lista', role: 'menu' }, ...botoes.filter((b): b is Node => Boolean(b))));
+  // Fecha depois de escolher uma ação ou ao clicar fora.
+  menu.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('.menu-acoes-lista button')) menu.open = false;
+  });
+  return menu;
+}
+
+// Um só ouvinte para todos os menus: um clique fora fecha os que estiverem abertos.
+document.addEventListener('click', (e) => {
+  for (const menu of Array.from(document.querySelectorAll<HTMLDetailsElement>('details.menu-acoes[open]'))) {
+    if (!menu.contains(e.target as Node)) menu.open = false;
+  }
+});

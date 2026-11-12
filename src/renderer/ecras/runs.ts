@@ -3,7 +3,7 @@ import { descreverLocalizador, estadoDoReparo, juntarReparos } from '../../share
 import type { AmbitoRun, Bloco, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { EXPLICACAO_RESULTADO, rotuloComSimbolo, SIMBOLO_RESULTADO } from '../../shared/estados.js';
-import { confirmar, h, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
+import { confirmar, h, info, maisOpcoes, mensagemDeErro, normalizarPesquisa, pedirFormulario, plural } from '../dom.js';
 import { cartaoCobertura, cartaoComparacao } from './cobertura.js';
 
 const NOMES_ESTADO: Record<ResultadoCaso['estado'], string> = {
@@ -19,6 +19,10 @@ const NOMES_ESTADO: Record<ResultadoCaso['estado'], string> = {
 let deixarDeOuvir: (() => void) | null = null;
 /** Caso com os detalhes abertos (mantém-se entre atualizações ao vivo). */
 let casoAberto: string | null = null;
+/** Filtro da lista de casos (mantém-se nas atualizações ao vivo e ao mudar de ecrã). */
+type FiltroCasos = 'todos' | 'OK' | 'KO' | 'ERRO' | 'outros';
+let filtroCasos: FiltroCasos = 'todos';
+let pesquisaCasos = '';
 /** Execução do histórico que está a ser mostrada (pasta), ou null para a atual. */
 let historicoAberto: string | null = null;
 
@@ -121,7 +125,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
     const botao = h('button', { id: 'btn-correr', type: 'submit', class: 'botao botao-primario', disabled: aCorrer }, aCorrer ? 'A correr…' : 'Correr');
     const botaoVerificar = h('button', { id: 'btn-verificar', type: 'button', class: 'botao', disabled: aCorrer }, 'Verificar');
     const zonaVerificacao = h('div', { id: 'zona-verificacao', class: 'zona-verificacao' });
-    const grupo = (id: string, rotulo: string, campo: HTMLElement): HTMLElement => h('div', { class: 'campo-grupo' }, h('label', { for: id }, rotulo), campo);
+    const grupo = (id: string, rotulo: string, campo: HTMLElement, ajuda = ''): HTMLElement => h('div', { class: 'campo-grupo' }, h('label', { for: id }, rotulo, ajuda && info(ajuda)), campo);
 
     /** O que foi escolhido para correr. */
     const lerAmbito = (): AmbitoRun => {
@@ -212,19 +216,26 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
             }
           },
         },
-        h('h2', {}, 'Nova execução'),
+        h('h2', {}, 'Nova execução', info("\"Verificar\" mostra o que falta (colunas, segredos, endereços) sem correr nada. \"Correr\" verifica primeiro e só depois executa.")),
         erro,
         h(
           'div',
           { class: 'grelha-run' },
-          grupo('run-ambito', `O que correr (ambiente ${ambiente?.nome ?? '?'})`, ambito),
-          grupo('run-casos', 'Só estes casos (IDs)', casos),
-          grupo('run-etiquetas', 'Só com estas etiquetas', etiquetas),
-          grupo('run-browser', 'Browser', browser),
-          grupo('run-modo', 'Modo', modo),
-          grupo('run-paralelo', 'Em paralelo', paralelo),
-          grupo('run-velocidade', 'Velocidade', velocidade),
-          h('label', { class: 'opcao opcao-run' }, pausarNoErro, 'Pausar quando um caso der ERRO'),
+          grupo('run-ambito', `O que correr (ambiente ${ambiente?.nome ?? '?'})`, ambito, 'Tudo, um épico inteiro ou um cenário. Em "Mais opções" pode escolher só alguns casos ou etiquetas.'),
+          grupo('run-paralelo', 'Em paralelo', paralelo, 'Quantos casos correm ao mesmo tempo, cada um no seu browser. Mais rápido, mas usa mais memória; com 1 é mais fácil acompanhar.'),
+        ),
+        maisOpcoes(
+          [],
+          h(
+            'div',
+            { class: 'grelha-run' },
+            grupo('run-casos', 'Só estes casos (IDs)', casos, 'IDs separados por vírgulas, por exemplo TC0001, TC0005. Vazio: todos.'),
+            grupo('run-etiquetas', 'Só com estas etiquetas', etiquetas, 'Corre só os casos com pelo menos uma destas etiquetas (por exemplo aprovado, CP). Vazio: todos.'),
+            grupo('run-browser', 'Browser', browser, 'O browser já instalado no PC. O Edge é o que vem com o Windows.'),
+            grupo('run-modo', 'Modo', modo, 'Em background não abre janelas (pode continuar a trabalhar); visível mostra o browser, útil para acompanhar ou aprender.'),
+            grupo('run-velocidade', 'Velocidade', velocidade, 'Lenta e passo a passo servem para ver o que cada passo faz. Pausa sempre entre passos, nunca a meio de uma ação.'),
+            h('label', { class: 'opcao opcao-run' }, pausarNoErro, 'Pausar quando um caso ficar bloqueado (ERRO)', info('A execução pára no primeiro caso bloqueado, para poder ver o browser nesse momento antes de continuar.')),
+          ),
         ),
         h('div', { class: 'acoes' }, botao, botaoVerificar),
         zonaVerificacao,
@@ -391,12 +402,118 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
         ),
         cartaoComparacao(run, historicoAtual),
         cartaoReparos(run),
+        cartaoDefeitos(run),
+        zonaCasos(run),
+      ),
+    );
+  }
+
+  /** Defeitos criados nesta execução (com "Criar defeito"): título e botão para abrir o texto. */
+  function cartaoDefeitos(run: EstadoRun): HTMLElement | false {
+    if (run.ativo || !run.pasta) return false;
+    const pasta = run.pasta;
+    const zona = h('div', { class: 'caixa-defeitos', id: 'defeitos-da-execucao', hidden: true });
+    void api.runs.defeitos(pasta).then((lista) => {
+      if (lista.length === 0) return;
+      zona.hidden = false;
+      zona.replaceChildren(
+        h('h3', {}, `Defeitos criados (${lista.length})`),
         h(
           'ul',
-          { class: 'lista-casos' },
-          run.casos.map((caso) => linhaCaso(run, caso)),
+          { class: 'lista-itens' },
+          lista.map((d) =>
+            h(
+              'li',
+              { class: 'item' },
+              h('span', { class: 'item-nome' }, d.titulo || d.casoId),
+              h('button', { type: 'button', class: 'botao botao-pequeno-livre', onclick: () => void api.runs.abrir(pasta, d.pastaCaso, 'defeito.txt') }, 'Abrir texto'),
+              h('button', { type: 'button', class: 'botao botao-pequeno-livre', onclick: () => void api.runs.abrir(pasta, d.pastaCaso) }, 'Evidências'),
+            ),
+          ),
         ),
+      );
+    });
+    return zona;
+  }
+
+  /** Lista de casos com filtros (estado e texto) e o detalhe do caso aberto num painel ao lado. */
+  function zonaCasos(run: EstadoRun): HTMLElement {
+    const grupoDe = (estado: ResultadoCaso['estado']): FiltroCasos => (estado === 'OK' || estado === 'KO' || estado === 'ERRO' ? estado : 'outros');
+    const conta = (fx: FiltroCasos): number => (fx === 'todos' ? run.casos.length : run.casos.filter((c) => grupoDe(c.estado) === fx).length);
+    const termos = normalizarPesquisa(pesquisaCasos).split(/\s+/).filter(Boolean);
+    const visiveis = run.casos.filter((c) => {
+      if (filtroCasos !== 'todos' && grupoDe(c.estado) !== filtroCasos) return false;
+      const texto = normalizarPesquisa(`${c.casoId} ${c.casoNome ?? ''} ${c.jornadaNome}`);
+      return termos.every((t) => texto.includes(t));
+    });
+    const opcao = (fx: FiltroCasos, nome: string): HTMLElement | false =>
+      (fx === 'todos' || conta(fx) > 0) &&
+      h(
+        'button',
+        {
+          type: 'button',
+          role: 'tab',
+          class: 'separador',
+          'data-filtro': fx,
+          'aria-selected': String(filtroCasos === fx),
+          onclick: () => {
+            filtroCasos = fx;
+            desenharRun();
+          },
+        },
+        `${nome} (${conta(fx)})`,
+      );
+    const pesquisa = h('input', { type: 'search', id: 'filtro-casos', class: 'campo campo-filtro', placeholder: 'Procurar caso (ID, descrição, cenário)', 'aria-label': 'Procurar caso', value: pesquisaCasos });
+    pesquisa.addEventListener('change', () => {
+      pesquisaCasos = pesquisa.value;
+      desenharRun();
+    });
+    const filtros =
+      run.casos.length > 3 &&
+      h(
+        'div',
+        { class: 'barra-filtros' },
+        h(
+          'div',
+          { class: 'separadores', role: 'tablist', 'aria-label': 'Filtrar casos pelo resultado' },
+          opcao('todos', 'Todos'),
+          opcao('OK', rotuloComSimbolo('OK')),
+          opcao('KO', rotuloComSimbolo('KO')),
+          opcao('ERRO', rotuloComSimbolo('ERRO')),
+          opcao('outros', 'Outros'),
+        ),
+        pesquisa,
+      );
+    const aberto = run.casos.find((c) => c.chave === casoAberto);
+    const painel =
+      aberto &&
+      h(
+        'aside',
+        { class: 'painel-caso', 'aria-label': `Detalhe do caso ${aberto.casoId}` },
+        h(
+          'header',
+          { class: 'painel-caso-topo' },
+          h('span', { class: 'estado-caso', 'data-estado': aberto.estado }, NOMES_ESTADO[aberto.estado]),
+          h('strong', {}, aberto.casoId),
+          h('span', { class: 'suave' }, aberto.casoNome ?? aberto.jornadaNome),
+          h('button', { type: 'button', class: 'botao botao-icone botao-fechar-painel', 'aria-label': 'Fechar o detalhe', title: 'Fechar', onclick: () => { casoAberto = null; desenharRun(); } }, '×'),
+        ),
+        (() => {
+          const zona = h('div', { class: 'caso-detalhe' });
+          desenharDetalhe(run, aberto, zona);
+          return zona;
+        })(),
+      );
+    return h(
+      'div',
+      { class: painel ? 'casos-zona com-painel' : 'casos-zona' },
+      h(
+        'div',
+        { class: 'casos-lista' },
+        filtros,
+        visiveis.length === 0 ? h('p', { class: 'suave' }, 'Nenhum caso corresponde ao filtro.') : h('ul', { class: 'lista-casos' }, visiveis.map((caso) => linhaCaso(run, caso))),
       ),
+      painel,
     );
   }
 
@@ -472,12 +589,10 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
           : caso.estado === 'KO'
             ? plural(caso.diferencas.length, 'diferença')
             : '';
-    const detalhe = h('div', { class: 'caso-detalhe' });
-    if (aberto) desenharDetalhe(run, caso, detalhe);
     const podeSaltar = run.ativo && (caso.estado === 'por-correr' || caso.estado === 'a-correr');
     return h(
       'li',
-      { class: 'caso', 'data-estado': caso.estado, 'data-chave': caso.chave },
+      { class: 'caso', 'data-estado': caso.estado, 'data-chave': caso.chave, 'data-aberto': String(aberto) },
       podeSaltar &&
         h(
           'button',
@@ -507,7 +622,6 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
         h('span', { class: 'caso-resumo suave' }, resumo),
         h('span', { class: 'suave' }, `${caso.jornadaNome}${caso.duracaoMs ? ` · ${duracao(caso.duracaoMs)}` : ''}`),
       ),
-      aberto && detalhe,
     );
   }
 
@@ -767,7 +881,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
       h(
         'section',
         { class: 'cartao' },
-        h('header', { class: 'cartao-topo' }, h('h2', {}, 'Histórico'), h('span', { class: 'etiqueta' }, plural(runs.length, 'execução', 'execuções'))),
+        h('header', { class: 'cartao-topo' }, h('h2', {}, 'Histórico', info("Todas as execuções deste projeto, a mais recente primeiro. Cada uma tem a sua pasta com logs, prints, traces e relatórios.")), h('span', { class: 'etiqueta' }, plural(runs.length, 'execução', 'execuções'))),
         h(
           'ul',
           { class: 'lista-itens', id: 'historico' },

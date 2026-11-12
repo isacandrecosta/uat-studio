@@ -2,7 +2,7 @@
 import type { Contexto } from '../app.js';
 import { codigoDoBloco } from '../../shared/codigo.js';
 import { ondeEUsado } from '../../shared/blocos.js';
-import { confirmar, h, mostrarCodigo, mostrarUsos, pedirFormulario, pedirTexto, plural } from '../dom.js';
+import { confirmar, h, info, menuAcoes, mostrarCodigo, mostrarUsos, normalizarPesquisa, pedirFormulario, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação', MANUAL: 'Manual' };
 
@@ -48,6 +48,25 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
       ),
     );
   }
+  // Procurar cenários: por nome do cenário, do épico, etiquetas ou descrição. Um épico que corresponda
+  // mostra todos os seus cenários; senão, só os que correspondem (e os épicos sem nenhum ficam escondidos).
+  if (jornadas.length > 3) {
+    const procurar = h('input', { type: 'search', id: 'filtro-cenarios', class: 'campo campo-filtro', placeholder: 'Procurar cenário, épico ou etiqueta', 'aria-label': 'Procurar cenário, épico ou etiqueta' });
+    procurar.addEventListener('input', () => {
+      const termos = normalizarPesquisa(procurar.value).split(/\s+/).filter(Boolean);
+      const serve = (texto: string): boolean => termos.every((t) => normalizarPesquisa(texto).includes(t));
+      for (const cartao of Array.from(corpo.querySelectorAll<HTMLElement>('.cartao-epico'))) {
+        const epicoServe = termos.length === 0 || serve(cartao.dataset.pesquisa ?? '');
+        let algum = false;
+        for (const li of Array.from(cartao.querySelectorAll<HTMLElement>('li[data-pesquisa]'))) {
+          li.hidden = !epicoServe && !serve(li.dataset.pesquisa ?? '');
+          algum ||= !li.hidden;
+        }
+        cartao.hidden = !epicoServe && !algum;
+      }
+    });
+    corpo.append(h('div', { class: 'barra-filtros' }, procurar, info('Procura no nome do cenário, no nome do épico, nas etiquetas e na descrição. Vários termos: todos têm de aparecer.')));
+  }
   // Por nome, com números por ordem natural ("2. ..." antes de "10. ...").
   epicos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt', { numeric: true }));
   for (const epico of epicos) {
@@ -55,7 +74,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
     corpo.append(
       h(
         'section',
-        { class: 'cartao cartao-epico' },
+        { class: 'cartao cartao-epico', 'data-pesquisa': `${epico.nome} ${epico.descricao ?? ''}` },
         h(
           'header',
           { class: 'cartao-topo' },
@@ -103,7 +122,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
               doEpico.map((jornada) =>
                 h(
                   'li',
-                  { class: 'item' },
+                  { class: 'item', 'data-pesquisa': `${jornada.nome} ${jornada.etiquetas.join(' ')} ${jornada.descricao ?? ''} ${jornada.requisitoId ?? ''}` },
                   h(
                     'button',
                     {
@@ -318,27 +337,34 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
       h(
         'header',
         { class: 'cartao-topo' },
-        h('h2', {}, 'Blocos partilhados'),
+        h('h2', {}, 'Blocos partilhados', info('Peças reutilizáveis dos cenários. Os blocos de ecrã criam-se no ecrã Gravar e os de API no ecrã Blocos de API. Uma alteração num bloco vale para todos os cenários que o usam.')),
         h(
           'div',
           { class: 'acoes' },
-          h('button', { id: 'btn-importar-pacote', type: 'button', class: 'botao', title: 'Trazer blocos de outro projeto (ficheiro .uatpack).', onclick: () => void importarPacote() }, 'Importar pacote'),
-          blocos.length > 0 && h('button', { id: 'btn-exportar-pacote', type: 'button', class: 'botao', title: 'Levar blocos para outro projeto ou partilhar com a equipa.', onclick: () => void exportarPacote() }, 'Exportar blocos'),
-          h('button', { id: 'btn-novo-email', type: 'button', class: 'botao', title: 'Esperar que chegue um email à caixa de testes, verificá-lo e guardar valores (por exemplo o código de MFA).', onclick: () => void editarEmail() }, 'Novo bloco de email'),
-          h('button', { id: 'btn-novo-manual', type: 'button', class: 'botao', title: 'A execução pára neste bloco e o testador confirma OK ou KO.', onclick: () => void editarManual() }, 'Novo passo manual'),
+          menuAcoes(
+            'Criar',
+            h('button', { id: 'btn-novo-email', type: 'button', class: 'botao', title: 'Esperar que chegue um email à caixa de testes, verificá-lo e guardar valores (por exemplo o código de MFA).', onclick: () => void editarEmail() }, 'Novo bloco de email'),
+            h('button', { id: 'btn-novo-manual', type: 'button', class: 'botao', title: 'A execução pára neste bloco e o testador confirma que passou ou falhou.', onclick: () => void editarManual() }, 'Novo passo manual'),
+          ),
+          menuAcoes(
+            'Partilhar',
+            h('button', { id: 'btn-importar-pacote', type: 'button', class: 'botao', title: 'Trazer blocos de outro projeto (ficheiro .uatpack).', onclick: () => void importarPacote() }, 'Importar pacote'),
+            blocos.length > 0 && h('button', { id: 'btn-exportar-pacote', type: 'button', class: 'botao', title: 'Levar blocos para outro projeto ou partilhar com a equipa.', onclick: () => void exportarPacote() }, 'Exportar blocos'),
+          ),
         ),
       ),
+      blocos.length > 5 && filtroBlocos(),
       blocos.length === 0
         ? h('p', { class: 'suave' }, 'Ainda não há blocos. Os blocos de UI são criados no ecrã Gravar.')
         : h(
             'ul',
-            { class: 'lista-itens' },
+            { class: 'lista-itens', id: 'lista-blocos' },
             blocos.map((bloco) => {
               const aplicacao = bloco.aplicacaoId ? aplicacaoPorId.get(bloco.aplicacaoId) : undefined;
               const usos = ondeEUsado(bloco.id, jornadas, epicos, conjuntos);
               return h(
                 'li',
-                { class: bloco.descricao ? 'item item-com-descricao' : 'item' },
+                { class: bloco.descricao ? 'item item-com-descricao' : 'item', 'data-pesquisa': `${bloco.nome} ${aplicacao?.nome ?? ''} ${bloco.descricao ?? ''}`, 'data-tipo': bloco.tipo, 'data-sem-uso': String(usos.length === 0) },
                 h('span', { class: 'tipo-bloco', 'data-tipo': bloco.tipo }, NOMES_TIPO_BLOCO[bloco.tipo] ?? bloco.tipo),
                 bloco.tipo === 'EMAIL'
                   ? h('button', { type: 'button', class: 'ligacao item-nome', 'data-email': bloco.id, title: 'Alterar o bloco de email', onclick: () => void editarEmail(bloco) }, bloco.nome)
@@ -420,11 +446,11 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
   corpo.append(
     h(
       'section',
-      { class: 'cartao' },
+      { class: 'cartao', id: 'cartao-aplicacoes' },
       h(
         'header',
         { class: 'cartao-topo' },
-        h('h2', {}, 'Aplicações'),
+        h('h2', {}, 'Aplicações', info("Os sistemas a testar, com o endereço em cada ambiente (DEV, QA, PRD). Os blocos usam o endereço do ambiente ativo.")),
         h('button', { id: 'btn-nova-aplicacao', type: 'button', class: 'botao', onclick: () => void editarAplicacao() }, 'Nova aplicação'),
       ),
       aplicacoes.length === 0
@@ -444,4 +470,30 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
           ),
     ),
   );
+}
+
+/** Filtro dos blocos partilhados: texto (nome, aplicação, descrição), tipo e "só os não usados". */
+function filtroBlocos(): HTMLElement {
+  const texto = h('input', { type: 'search', id: 'filtro-blocos', class: 'campo campo-filtro', placeholder: 'Procurar bloco', 'aria-label': 'Procurar bloco' });
+  const tipo = h(
+    'select',
+    { id: 'filtro-tipo-bloco', class: 'campo campo-filtro-curto', 'aria-label': 'Tipo de bloco' },
+    h('option', { value: '' }, 'Todos os tipos'),
+    h('option', { value: 'UI' }, 'Ecrã (UI)'),
+    h('option', { value: 'API' }, 'API'),
+    h('option', { value: 'EMAIL' }, 'Email'),
+    h('option', { value: 'MANUAL' }, 'Passo manual'),
+  );
+  const semUso = h('input', { type: 'checkbox', id: 'filtro-sem-uso' });
+  const aplicar = (): void => {
+    const termos = normalizarPesquisa(texto.value).split(/\s+/).filter(Boolean);
+    for (const li of Array.from(document.querySelectorAll<HTMLElement>('#lista-blocos > li'))) {
+      const procura = normalizarPesquisa(li.dataset.pesquisa ?? '');
+      li.hidden = !termos.every((t) => procura.includes(t)) || (tipo.value !== '' && li.dataset.tipo !== tipo.value) || (semUso.checked && li.dataset.semUso !== 'true');
+    }
+  };
+  texto.addEventListener('input', aplicar);
+  tipo.addEventListener('change', aplicar);
+  semUso.addEventListener('change', aplicar);
+  return h('div', { class: 'barra-filtros' }, texto, tipo, h('label', { class: 'opcao' }, semUso, 'Só os não usados'));
 }

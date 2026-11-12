@@ -23,6 +23,11 @@
 
       <nav class="menu" id="menu" aria-label="Ecrãs"></nav>
 
+      <div class="lateral-ferramentas">
+        <button id="btn-pesquisa" class="botao botao-discreto" type="button" title="Procurar e abrir um cenário, bloco, épico, aplicação ou ecrã">Procurar <kbd>Ctrl+K</kbd></button>
+        <button id="btn-configuracoes" class="botao botao-discreto" type="button" title="Tema (claro/escuro) e tutorial">Configurações</button>
+      </div>
+
       <div class="lateral-fundo">
         <label class="rotulo-lateral" for="escolha-projeto">Projeto</label>
         <select id="escolha-projeto" class="campo campo-escuro escolha-projeto"></select>
@@ -39,6 +44,7 @@
       <div id="faixa-ambiente" class="faixa-ambiente" role="status"></div>
       <header class="cabecalho">
         <div>
+          <nav id="caminho" class="caminho" aria-label="Onde está"></nav>
           <h1 id="titulo-ecra"></h1>
           <p id="descricao-ecra"></p>
         </div>

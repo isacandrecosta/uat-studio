@@ -2,7 +2,7 @@
 import { AJUDA_FORMULAS, avaliarFormula, contextoDeExemplo, validarFormula } from '../../shared/formulas.js';
 import type { VariavelCalculada } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
-import { confirmar, h, mensagemDeErro, pedirFormulario, pedirTexto } from '../dom.js';
+import { confirmar, h, info, mensagemDeErro, pedirFormulario, pedirTexto } from '../dom.js';
 
 export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
   const api = window.uatStudio;
@@ -117,7 +117,7 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
         h(
           'div',
           {},
-          h('h2', {}, 'Variáveis calculadas'),
+          h('h2', {}, 'Variáveis calculadas', info("Valores calculados por fórmula uma vez por caso (por exemplo a comissão esperada). Usam-se como qualquer coluna: {Nome}.")),
           h('p', { class: 'suave' }, 'Cada uma é calculada por uma fórmula, uma vez por caso, e pode ser usada em qualquer passo como {nome}.'),
         ),
         h(
@@ -187,7 +187,7 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
         h(
           'div',
           {},
-          h('h2', {}, 'Segredos de teste'),
+          h('h2', {}, 'Segredos de teste', info("Passwords de teste guardadas encriptadas neste PC. Nos casos e no Excel escreve-se {SEGREDO:nome}.")),
           h('p', { class: 'suave' }, 'Passwords de teste (por exemplo, do login): ficam encriptadas no cofre deste PC. Nos casos e no Excel escreva só {SEGREDO:nome}. Noutro PC é preciso voltar a preenchê-las.'),
         ),
         h('button', { id: 'btn-novo-segredo', type: 'button', class: 'botao', onclick: () => void definir() }, 'Novo segredo'),
@@ -244,7 +244,7 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
         h(
           'div',
           {},
-          h('h2', {}, 'Contadores'),
+          h('h2', {}, 'Contadores', info("Números que aumentam a cada utilização e ficam guardados entre execuções, para criar dados únicos (por exemplo um número de cliente).")),
           h('p', { class: 'suave' }, '{CONTADOR:nome} dá um número novo de cada vez (o valor atual + 1) e fica guardado entre execuções.'),
         ),
         h(

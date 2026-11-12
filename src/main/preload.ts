@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('uatStudio', {
     guardar: chamar('dados:guardar'),
     apagar: chamar('dados:apagar'),
   },
+  app: {
+    modo: chamar('app:modo'),
+  },
   blocos: {
     reparar: chamar('blocos:reparar'),
     parametrizar: chamar('blocos:parametrizar'),
@@ -66,6 +69,7 @@ contextBridge.exposeInMainWorld('uatStudio', {
     abrir: chamar('run:abrir'),
     lerTexto: chamar('run:ler-texto'),
     defeito: chamar('run:defeito'),
+    defeitos: chamar('run:defeitos'),
     guardarDefeito: chamar('run:defeito-guardar'),
     abrirTrace: chamar('run:abrir-trace'),
     pdf: chamar('run:pdf'),

@@ -5,7 +5,7 @@ import { variaveisDaJornada, variaveisDoBloco } from '../../shared/variaveis.js'
 import type { Contexto } from '../app.js';
 import { codigoDaJornada } from '../../shared/codigo.js';
 import { validarFormula } from '../../shared/formulas.js';
-import { confirmar, h, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from '../dom.js';
+import { campoFiltro, confirmar, h, info, maisOpcoes, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -38,6 +38,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
 
   const jornada: Jornada = jornadas.find((j) => j.id === selecao.jornadaId) ?? jornadas[0];
   selecao.jornadaId = jornada.id;
+  contexto.definirCaminho([epicos.find((e) => e.id === jornada.epicoId)?.nome ?? 'Sem épico', jornada.nome]);
   const conjuntos = await dados.listar('casos');
   const calculadas = await window.uatStudio.variaveis.ler();
   const conjunto: ConjuntoCasos = conjuntos.find((c) => c.id === jornada.id) ?? { id: jornada.id, colunas: [], casos: [] };
@@ -293,19 +294,24 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       item.sessao = nome && nome !== SESSAO_PRINCIPAL ? nome : undefined;
       void guardarJornada(true);
     });
+    // Opções pouco usadas ficam em "Mais opções"; fechado, o resumo mostra o que está definido.
+    const resumo = [item.condicao ? 'só se' : '', item.sessao ? `sessão ${item.sessao}` : '', item.sempre ? 'limpeza' : ''].filter(Boolean);
     return h(
       'div',
       { class: 'opcoes-bloco' },
-      h('label', { class: 'opcao-condicao' }, h('span', {}, 'Só se'), condicao),
-      eUi &&
-        h(
-          'label',
-          { class: 'opcao-condicao', title: 'Blocos com sessões diferentes correm em browsers separados (por exemplo "cliente" e "aprovador"), cada um com o seu login.' },
-          h('span', {}, 'Sessão'),
-          sessao,
-          h('datalist', { id: idLista }, usadas.map((s) => h('option', { value: s }))),
-        ),
-      h('label', { class: 'opcao', title: 'Para blocos de limpeza: correm mesmo que um bloco anterior tenha dado erro.' }, sempre, 'Limpeza: corre sempre'),
+      maisOpcoes(
+        resumo,
+        h('label', { class: 'opcao-condicao' }, h('span', {}, 'Só se', info('O bloco só corre quando a condição se cumpre para o caso. Por exemplo {Decisao} = "Aprovar". Vazio: corre sempre.')), condicao),
+        eUi &&
+          h(
+            'label',
+            { class: 'opcao-condicao' },
+            h('span', {}, 'Sessão', info('Blocos com sessões diferentes correm em browsers separados (por exemplo "cliente" e "aprovador"), cada um com o seu login. Vazio: a sessão principal.')),
+            sessao,
+            h('datalist', { id: idLista }, usadas.map((s) => h('option', { value: s }))),
+          ),
+        h('label', { class: 'opcao' }, sempre, 'Limpeza: corre sempre', info('Para blocos que arrumam os dados no fim: correm mesmo que um bloco anterior tenha dado erro, e uma falha deles não muda o resultado.')),
+      ),
       erro,
     );
   }
@@ -370,7 +376,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
     return h(
       'section',
       { class: 'cartao' },
-      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Percurso'), h('span', { class: 'etiqueta' }, plural(jornada.blocos.length, 'bloco'))),
+      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Percurso', info("Os blocos do cenário, pela ordem em que correm. Cada bloco pode ter parâmetros e, em \"Mais opções\", uma condição, uma sessão ou ser de limpeza.")), h('span', { class: 'etiqueta' }, plural(jornada.blocos.length, 'bloco'))),
       emFalta.length > 0 && h('p', { class: 'aviso-erro', role: 'alert' }, 'Há blocos neste cenário que já não existem. Retira-os do percurso.'),
       jornada.blocos.length === 0
         ? h('p', { class: 'suave' }, 'O cenário ainda não tem blocos. Acrescenta-os a partir da biblioteca, à direita.')
@@ -382,12 +388,13 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
     return h(
       'section',
       { class: 'cartao' },
-      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Biblioteca de blocos')),
+      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Biblioteca de blocos', info('Os blocos de todos os cenários. "Acrescentar" põe o bloco no fim do percurso; a ordem muda-se com as setas.'))),
+      blocos.length > 6 && h('div', { class: 'barra-filtros' }, campoFiltro('Procurar bloco', () => document.querySelectorAll<HTMLElement>('#lista-biblioteca > li'))),
       blocos.length === 0
         ? h('p', { class: 'suave' }, 'Ainda não há blocos. Cria-os no ecrã Gravar.')
         : h(
             'ul',
-            { class: 'lista-itens' },
+            { class: 'lista-itens', id: 'lista-biblioteca' },
             blocos.map((bloco) => {
               const aplicacao = bloco.aplicacaoId ? aplicacaoPorId.get(bloco.aplicacaoId) : undefined;
               return h(
@@ -420,7 +427,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
     return h(
       'section',
       { class: 'cartao' },
-      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Variáveis')),
+      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Variáveis', info("Vêm dos casos: colunas de que os blocos precisam. Guardadas durante o cenário: valores lidos do ecrã ou de uma API (por exemplo {PedidoId})."))),
       h('h3', {}, 'Vêm dos casos'),
       necessarias.length === 0 ? h('p', { class: 'suave' }, 'Nenhuma.') : h('p', { class: 'lista-codigo' }, necessarias.map((n) => h('code', {}, `{${n}}`))),
       h('h3', {}, 'Guardadas durante o cenário'),

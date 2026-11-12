@@ -3,7 +3,7 @@ import type { Bloco, EstadoGravador, Passo, PrintDoEcra, Valor } from '../../sha
 import type { Contexto } from '../app.js';
 import { validarFormula } from '../../shared/formulas.js';
 import { colunaValida, valoresFixos } from '../../shared/parametrizar.js';
-import { confirmar, h, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
+import { confirmar, h, info, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
 
 const NOMES_ACAO: Record<Passo['acao'], string> = {
   navegar: 'Abrir',
@@ -275,7 +275,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
       h(
         'header',
         { class: 'cartao-topo' },
-        h('div', {}, h('h2', {}, 'Modo print'), h('p', { class: 'suave' }, `Clica num elemento destacado (${print.elementos.length}) para gravar um passo sobre o print. Os passos não são executados na página: confirma-os numa execução.${g.browserAberto ? '' : ' O browser foi fechado.'}`)),
+        h('div', {}, h('h2', {}, 'Modo print', info("Grava passos sobre uma captura do ecrã: útil quando a página muda enquanto se tenta clicar (menus, popups).")), h('p', { class: 'suave' }, `Clica num elemento destacado (${print.elementos.length}) para gravar um passo sobre o print. Os passos não são executados na página: confirma-os numa execução.${g.browserAberto ? '' : ' O browser foi fechado.'}`)),
         h(
           'div',
           { class: 'acoes' },
@@ -382,7 +382,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
             }
           },
         },
-        h('h2', {}, 'Gravar um bloco de UI'),
+        h('h2', {}, 'Gravar um bloco de UI', info("Abre a aplicação no Edge. Clique num campo ou botão e escolha no popup o que fazer e de onde vem o valor. Cada passo é executado logo, para confirmar que funciona.")),
         h(
           'p',
           { class: 'suave' },
@@ -406,7 +406,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
       zonaBlocos.replaceChildren(
         h(
           'section',
-          { class: 'cartao cartao-bloco' },
+          { class: 'cartao cartao-bloco', id: 'cartao-blocos-gravados' },
           h('header', { class: 'cartao-topo' }, h('div', {}, h('h2', {}, 'Blocos gravados'), h('p', { class: 'suave' }, 'Abre um bloco para rever os passos: mudar a descrição, pôr uma condição ("só se..."), esperar mais tempo numa verificação, trocar a ordem ou remover.'))),
           blocosUi.length === 0
             ? h('p', { class: 'suave' }, 'Ainda não há blocos gravados.')

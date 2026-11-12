@@ -17,7 +17,7 @@ import {
 } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { codigoDoBloco } from '../../shared/codigo.js';
-import { confirmar, h, mensagemDeErro, mostrarCodigo, mostrarUsos, pedirFormulario, pedirTexto, type CampoFormulario } from '../dom.js';
+import { confirmar, h, info, mensagemDeErro, mostrarCodigo, mostrarUsos, pedirFormulario, pedirTexto, type CampoFormulario } from '../dom.js';
 
 const NOMES_PERFIL: Record<TipoPerfil, string> = {
   'oauth2-cliente': 'OAuth 2.0 (client credentials)',
@@ -245,7 +245,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
       h(
         'header',
         { class: 'cartao-topo' },
-        h('h2', {}, 'Perfis de autenticação'),
+        h('h2', {}, 'Perfis de autenticação', info("Como a ferramenta se autentica nas APIs (OAuth 2.0, API Key, Basic, certificado). Os segredos ficam no cofre deste PC, nunca nos ficheiros.")),
         h('button', { id: 'btn-novo-perfil', type: 'button', class: 'botao botao-pequeno-livre', onclick: () => void editarPerfil() }, 'Novo'),
       ),
       perfis.length === 0
@@ -405,7 +405,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
     return h(
       'section',
       { class: 'cartao' },
-      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Blocos de API')),
+      h('header', { class: 'cartao-topo' }, h('h2', {}, 'Blocos de API', info("Um pedido a uma API (método, endereço, corpo) com verificações e valores a guardar. Pode usar {variáveis} dos casos de teste."))),
       blocosApi.length === 0
         ? h('p', { class: 'suave' }, 'Ainda não há blocos de API.')
         : h(
@@ -595,7 +595,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
       h(
         'header',
         { class: 'cartao-topo' },
-        h('h2', {}, 'Pedido'),
+        h('h2', {}, 'Pedido', info("Método e endereço (relativo ao endereço da aplicação no ambiente). As {variáveis} vêm dos casos de teste ou de blocos anteriores.")),
         h(
           'div',
           { class: 'acoes' },

@@ -13,7 +13,7 @@ import { caminhoNaExecucao, pausarWorker, responderManual, saltarJornada, contin
 import { abrirTrace } from './trace';
 import { htmlParaAssinatura } from './assinatura';
 import { verificarAntesDeCorrer } from './verificar';
-import { defeitoDoCaso, guardarDefeito } from './defeitos';
+import { defeitoDoCaso, defeitosDaExecucao, guardarDefeito } from './defeitos';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
 
@@ -87,6 +87,7 @@ export function registarIpcExecucoes(): void {
     }
   });
   // "Criar defeito": texto sugerido e evidências de um caso KO/ERRO (nada é enviado: copia-se e grava-se).
+  ipcMain.handle('run:defeitos', (_e, pastaRun: string) => defeitosDaExecucao(pastaDoProjeto(), String(pastaRun)));
   ipcMain.handle('run:defeito', (_e, pastaRun: string, chave: string) => defeitoDoCaso(pastaDoProjeto(), String(pastaRun), String(chave)));
   ipcMain.handle('run:defeito-guardar', async (_e, pastaRun: string, chave: string, titulo: string, texto: string) => {
     const ficheiro = guardarDefeito(pastaDoProjeto(), String(pastaRun), String(chave), String(titulo ?? ''), String(texto ?? ''));

@@ -207,6 +207,10 @@ const primeirosPassos: FuncaoCapitulo = async (r, pasta) => {
   }
   await r.realcar('#escolha-projeto');
   await r.legenda('No canto escolhe-se o projeto (incluindo o Projeto de exemplo e a Wiki de componentes) e, ao lado, o ambiente: DEV, QA ou PRD. Produção está protegida.');
+  await r.realcar('#btn-pesquisa');
+  await r.legenda('"Procurar" (ou Ctrl+K) encontra qualquer cenário, bloco, épico ou ecrã escrevendo parte do nome.');
+  await r.realcar('#btn-configuracoes');
+  await r.legenda('Em Configurações escolhe-se o tema (claro, escuro ou igual ao Windows) e retoma-se o tutorial guiado.');
   await r.realcar(null);
 };
 
@@ -438,6 +442,8 @@ const projetoDeExemplo: FuncaoCapitulo = async (r) => {
   await r.realcar(null);
   await r.irPara('runs');
   await esperar(r.janela, "document.getElementById('run-velocidade')");
+  await naPagina(r.janela, "(() => { const d = document.getElementById('run-velocidade')?.closest('details'); if (d) d.open = true; })()");
+  await r.pausa(0.4);
   await r.realcar('#run-velocidade');
   await r.legenda('Para aprender, corra cada cenário com o browser visível e a velocidade "lenta" ou "passo a passo": vê-se o que cada passo faz na app.');
   await r.realcar('#escolha-projeto');

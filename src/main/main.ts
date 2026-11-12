@@ -65,6 +65,7 @@ registarIpcProjeto();
 registarIpcExecucoes();
 registarIpcPacotes();
 
+ipcMain.handle('app:modo', () => (MODO_SMOKE ? 'smoke' : MODO_DEMO ? 'demo' : 'normal'));
 ipcMain.handle('gravador:estado', () => estadoGravador());
 ipcMain.handle('gravador:iniciar', (_e, pedido: PedidoGravacao) => iniciarGravacao(pastaDoProjeto(), pedido));
 ipcMain.handle('gravador:remover-passo', (_e, passoId: string) => removerPasso(String(passoId)));
