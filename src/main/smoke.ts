@@ -67,9 +67,18 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       async (j) => {
         criarProjeto(path.join(pastaProjeto, 'exemplo'), 'Projeto de exemplo', true);
         j.reload();
-        await esperar(j, "document.body.dataset.vista === 'app' && document.querySelector('.cartao-epico')");
+        // Ao entrar num projeto abre o Início (ponto da situação), com a faixa do ambiente.
+        await esperar(j, "document.body.dataset.vista === 'app' && document.getElementById('inicio-resumo')");
         const itens = await naPagina<number>(j, "document.querySelectorAll('.menu-item').length");
-        confirmar(itens === 7, `O menu lateral tem ${itens} itens em vez de 7.`);
+        confirmar(itens === 8, `O menu lateral tem ${itens} itens em vez de 8.`);
+        const ordem = await naPagina<string>(j, "[...document.querySelectorAll('.menu-item')].map((m) => m.dataset.ecra).join(',')");
+        confirmar(ordem === 'inicio,jornadas,editor,gravar,api,dados,runs,mapa', `O menu não está pela ordem do trabalho: ${ordem}`);
+        const faixa = await naPagina<string>(j, "document.getElementById('faixa-ambiente').dataset.tipo + '|' + document.getElementById('faixa-ambiente').textContent");
+        confirmar(faixa.startsWith('DEV|Ambiente DEV'), `A faixa do ambiente devia dizer DEV: ${faixa}`);
+        confirmar((await naPagina<string>(j, "document.getElementById('inicio-resumo').innerText")).includes('cenário'), 'O Início devia mostrar o número de cenários.');
+        await tirarPrint(j, raiz, 'inicio');
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('.cartao-epico')");
         const texto = await naPagina<string>(j, "document.querySelector('.conteudo').innerText");
         confirmar(texto.includes('Simulações de crédito'), 'O épico de exemplo não aparece.');
         confirmar(texto.includes('Simular crédito'), 'A jornada de exemplo não aparece.');
@@ -1530,7 +1539,9 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
         await esperar(j, "document.querySelector('#escolha-projeto option[value=\"__exemplo\"]')");
         await escolher('__exemplo');
-        await esperar(j, `document.getElementById('escolha-projeto').value !== ${JSON.stringify(pastaSmoke)} && document.querySelector('#escolha-projeto option[value="__apagar-exemplo"]') && document.querySelector('.cartao-epico')`, 30_000);
+        await esperar(j, `document.getElementById('escolha-projeto').value !== ${JSON.stringify(pastaSmoke)} && document.querySelector('#escolha-projeto option[value="__apagar-exemplo"]') && document.getElementById('inicio-resumo')`, 30_000);
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('.cartao-epico')");
         const pastaExemplo = await projetoAberto();
         const epicos = await naPagina<number>(j, "document.querySelectorAll('.cartao-epico').length");
         confirmar(epicos >= 2, `O projeto de exemplo devia ter vários épicos (tem ${epicos}).`);
@@ -1553,7 +1564,9 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await esperar(j, "document.body.dataset.vista === 'app' && document.querySelector('#escolha-projeto option[value=\"__wiki\"]')", 30_000);
         await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
         await escolher('__wiki');
-        await esperar(j, "document.querySelector('#escolha-projeto option[value=\"__apagar-exemplo\"]') && document.querySelector('.cartao-epico')", 30_000);
+        await esperar(j, "document.querySelector('#escolha-projeto option[value=\"__apagar-exemplo\"]') && document.getElementById('inicio-resumo')", 30_000);
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.querySelector('.cartao-epico')");
         const pastaWiki = await projetoAberto();
         const textoWiki = await naPagina<string>(j, 'document.body.innerText');
         confirmar(/Campos de formulário/.test(textoWiki) && /Situações típicas/.test(textoWiki), 'A Wiki devia mostrar os épicos das receitas.');

@@ -235,11 +235,11 @@ export function mostrarUsos(nomeBloco: string, usos: UsoDoBloco[], abrirJornada:
       { class: 'dialogo-corpo' },
       h('h2', {}, `Onde é usado: "${nomeBloco}"`),
       usos.length === 0
-        ? h('p', {}, 'Este bloco ainda não é usado em nenhuma jornada. Pode ser apagado sem afetar nada.')
+        ? h('p', {}, 'Este bloco ainda não é usado em nenhum cenário. Pode ser apagado sem afetar nada.')
         : h(
             'p',
             { class: 'suave' },
-            `Usado em ${plural(usos.length, 'jornada')} (corre ${plural(totalCasos, 'vez', 'vezes')} numa execução completa). Uma alteração ao bloco vale para todas.`,
+            `Usado em ${plural(usos.length, 'cenário')} (corre ${plural(totalCasos, 'vez', 'vezes')} numa execução completa). Uma alteração ao bloco vale para todos.`,
           ),
       usos.length > 0 &&
         h(
@@ -254,7 +254,7 @@ export function mostrarUsos(nomeBloco: string, usos: UsoDoBloco[], abrirJornada:
                 {
                   type: 'button',
                   class: 'ligacao item-nome',
-                  title: 'Abrir a jornada no editor',
+                  title: 'Abrir o cenário no editor',
                   onclick: () => {
                     fechar();
                     abrirJornada(u.jornadaId);

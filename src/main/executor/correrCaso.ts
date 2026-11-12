@@ -265,7 +265,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   const dadosVisiveis = Object.entries(caso.dados)
     .map(([nome, valor]) => `${nome}=${segredos.has(nome) ? '***' : valor}`)
     .join('; ');
-  escrever(`Caso ${caso.id}${caso.nome ? ` (${caso.nome})` : ''} | Jornada: ${jornada.nome} | Ambiente: ${pedido.ambiente.nome}`);
+  escrever(`Caso ${caso.id}${caso.nome ? ` (${caso.nome})` : ''} | Cenário: ${jornada.nome} | Ambiente: ${pedido.ambiente.nome}`);
   escrever(`Dados: ${dadosVisiveis || '(sem dados)'}`);
   evento({ tipo: 'caso-inicio', caso: caso.id, jornada: jornada.id, ambiente: pedido.ambiente.id });
 

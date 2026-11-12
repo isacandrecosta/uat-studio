@@ -2,15 +2,16 @@
 import { descreverLocalizador, estadoDoReparo, juntarReparos } from '../../shared/blocos.js';
 import type { AmbitoRun, Bloco, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
+import { EXPLICACAO_RESULTADO, rotuloComSimbolo, SIMBOLO_RESULTADO } from '../../shared/estados.js';
 import { confirmar, h, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
 import { cartaoCobertura, cartaoComparacao } from './cobertura.js';
 
 const NOMES_ESTADO: Record<ResultadoCaso['estado'], string> = {
   'por-correr': 'Por correr',
   'a-correr': 'A correr',
-  OK: 'OK',
-  KO: 'KO',
-  ERRO: 'ERRO',
+  OK: rotuloComSimbolo('OK'),
+  KO: rotuloComSimbolo('KO'),
+  ERRO: rotuloComSimbolo('ERRO'),
   PARADO: 'Parado',
   SALTADO: 'Saltado',
 };
@@ -98,10 +99,10 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
     const ambito = h(
       'select',
       { id: 'run-ambito', class: 'campo' },
-      h('option', { value: 'tudo' }, 'Tudo (todas as jornadas)'),
+      h('option', { value: 'tudo' }, 'Tudo (todos os cenários)'),
       epicos.map((e) => h('option', { value: `epico:${e.id}` }, `Épico: ${e.nome}`)),
       jornadas.map((j) =>
-        h('option', { value: `jornada:${j.id}`, selected: j.id === selecao.jornadaId }, `Jornada: ${j.nome} (${plural(numeroDeCasos(j.id), 'caso')})`),
+        h('option', { value: `jornada:${j.id}`, selected: j.id === selecao.jornadaId }, `Cenário: ${j.nome} (${plural(numeroDeCasos(j.id), 'caso')})`),
       ),
     );
     const casos = h('input', { id: 'run-casos', type: 'text', class: 'campo', placeholder: 'Todos. Ou, por exemplo: TC0001, TC0005' });
@@ -357,7 +358,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
         ),
       );
     }
-    const total = (rotulo: string, valor: number, tipo: string): HTMLElement => h('div', { class: 'total', 'data-tipo': tipo }, h('strong', {}, valor), rotulo);
+    const total = (rotulo: string, valor: number, tipo: string, explicacao = ''): HTMLElement => h('div', { class: 'total', 'data-tipo': tipo, title: explicacao }, h('strong', {}, valor), rotulo);
     zonaRun.replaceChildren(
       h(
         'section',
@@ -382,9 +383,9 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
           'div',
           { class: 'totais' },
           total('casos', run.casos.length, ''),
-          total('OK', totais.OK, 'OK'),
-          total('KO', totais.KO, 'KO'),
-          total('ERRO', totais.ERRO, 'ERRO'),
+          total(rotuloComSimbolo('OK'), totais.OK, 'OK', EXPLICACAO_RESULTADO.OK),
+          total(rotuloComSimbolo('KO'), totais.KO, 'KO', EXPLICACAO_RESULTADO.KO),
+          total(rotuloComSimbolo('ERRO'), totais.ERRO, 'ERRO', EXPLICACAO_RESULTADO.ERRO),
           totais.PARADO > 0 && total('parados', totais.PARADO, ''),
           (totais.SALTADO ?? 0) > 0 && total('saltados', totais.SALTADO, ''),
         ),
@@ -455,7 +456,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
       h(
         'p',
         { class: 'suave' },
-        'Nestes passos o localizador preferido já não encontrou o elemento (o ecrã mudou?) e foi usada uma alternativa. "Reparar" passa a usar a alternativa em primeiro lugar; o antigo fica como último recurso. A alteração vale para todas as jornadas que usam o bloco.',
+        'Nestes passos o localizador preferido já não encontrou o elemento (o ecrã mudou?) e foi usada uma alternativa. "Reparar" passa a usar a alternativa em primeiro lugar; o antigo fica como último recurso. A alteração vale para todos os cenários que usam o bloco.',
       ),
       h('ul', { class: 'lista-itens' }, linhas),
     );
@@ -500,7 +501,7 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
             desenharRun();
           },
         },
-        h('span', { class: 'estado-caso' }, NOMES_ESTADO[caso.estado]),
+        h('span', { class: 'estado-caso', title: caso.estado === 'OK' || caso.estado === 'KO' || caso.estado === 'ERRO' ? EXPLICACAO_RESULTADO[caso.estado] : '' }, NOMES_ESTADO[caso.estado]),
         h('strong', {}, caso.casoId),
         h('span', { class: 'caso-nome' }, caso.casoNome ?? ''),
         h('span', { class: 'caso-resumo suave' }, resumo),
@@ -794,9 +795,9 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
                 'span',
                 { class: 'item-meta' },
                 h('span', {}, new Date(run.inicio).toLocaleString('pt-PT')),
-                h('span', { class: 'mini-total', 'data-tipo': 'OK' }, `${totais.OK} OK`),
-                h('span', { class: 'mini-total', 'data-tipo': 'KO' }, `${totais.KO} KO`),
-                h('span', { class: 'mini-total', 'data-tipo': 'ERRO' }, `${totais.ERRO} ERRO`),
+                h('span', { class: 'mini-total', 'data-tipo': 'OK', title: 'Passou' }, `${SIMBOLO_RESULTADO.OK} ${totais.OK}`),
+                h('span', { class: 'mini-total', 'data-tipo': 'KO', title: 'Falhou' }, `${SIMBOLO_RESULTADO.KO} ${totais.KO}`),
+                h('span', { class: 'mini-total', 'data-tipo': 'ERRO', title: 'Bloqueado' }, `${SIMBOLO_RESULTADO.ERRO} ${totais.ERRO}`),
               ),
             );
           }),

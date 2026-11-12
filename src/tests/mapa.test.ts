@@ -48,7 +48,7 @@ test('a cor de um nó segue a gravidade dos estados', () => {
 });
 
 test('contagens e estado de um bloco (também em execuções antigas, sem estados por bloco)', () => {
-  assert.equal(resumoContagem(contar(['ok', 'ok', 'ko', 'por-correr'])), '2 OK · 1 KO · 1 por correr');
+  assert.equal(resumoContagem(contar(['ok', 'ok', 'ko', 'por-correr'])), '✓ 2 · ✗ 1 · 1 por correr');
   const caso = { estado: 'KO', blocos: ['ok', 'ko'] } as unknown as ResultadoCaso;
   assert.equal(estadoDoBlocoNoCaso(caso, 1), 'ko');
   const antigo = { estado: 'PARADO' } as unknown as ResultadoCaso;

@@ -100,7 +100,7 @@ export async function verificarAntesDeCorrer(pasta: string, ambito: AmbitoRun, o
   const jornadas = new Map(itens.map((i) => [i.jornada.id, i.jornada]));
   const blocosUsados = new Map<string, Bloco>();
   for (const jornada of jornadas.values()) {
-    const onde = `Jornada "${jornada.nome}"`;
+    const onde = `Cenário "${jornada.nome}"`;
     if (jornada.blocos.length === 0) juntar('erro', onde, 'Não tem blocos.');
     const variaveis = variaveisDaJornada(jornada, [...blocos.values()], calculadas);
     for (const id of variaveis.blocosEmFalta) juntar('erro', onde, `Usa o bloco "${id}", que já não existe.`);

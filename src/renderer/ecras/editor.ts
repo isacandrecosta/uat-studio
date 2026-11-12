@@ -9,6 +9,10 @@ import { confirmar, h, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from 
 
 const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
+/** Separador escolhido no editor (mantém-se ao mudar de cenário ou de ecrã). */
+type PainelEditor = 'resumo' | 'passos' | 'casos';
+let painelEditor: PainelEditor = 'passos';
+
 export async function ecraEditor(contexto: Contexto): Promise<void> {
   const { corpo, acoes, selecao, irPara } = contexto;
   const dados = window.uatStudio.dados;
@@ -24,9 +28,9 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       h(
         'div',
         { class: 'vazio' },
-        h('p', { class: 'vazio-titulo' }, 'Ainda não há jornadas'),
-        h('p', {}, 'Cria uma jornada no ecrã Jornadas (botão "Nova jornada" dentro de um épico).'),
-        h('button', { type: 'button', class: 'botao', onclick: () => irPara('jornadas') }, 'Ir para Jornadas'),
+        h('p', { class: 'vazio-titulo' }, 'Ainda não há cenários'),
+        h('p', {}, 'Cria um cenário no ecrã Cenários (botão "Novo cenário" dentro de um épico).'),
+        h('button', { type: 'button', class: 'botao', onclick: () => irPara('jornadas') }, 'Ir para Cenários'),
       ),
     );
     return;
@@ -52,7 +56,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
   // Escolher a jornada (cabeçalho)
   const escolha = h(
     'select',
-    { id: 'editor-jornada', class: 'campo', 'aria-label': 'Jornada' },
+    { id: 'editor-jornada', class: 'campo', 'aria-label': 'Cenário' },
     jornadas.map((j) => {
       const epico = epicos.find((e) => e.id === j.epicoId);
       return h('option', { value: j.id, selected: j.id === jornada.id }, `${epico ? `${epico.nome} › ` : ''}${j.nome}`);
@@ -72,7 +76,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
         class: 'botao',
         onclick: () =>
           mostrarCodigo(
-            `Código da jornada "${jornada.nome}"`,
+            `Código do cenário "${jornada.nome}"`,
             codigoDaJornada(jornada, blocos, aplicacoes, conjunto, contexto.estado.projeto.ambienteAtivo),
           ),
       },
@@ -84,18 +88,18 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
         type: 'button',
         class: 'botao botao-discreto-claro',
         onclick: async () => {
-          if (!(await confirmar('Apagar jornada', `Apagar a jornada "${jornada.nome}" e os seus casos? Os blocos não são apagados.`))) return;
+          if (!(await confirmar('Apagar cenário', `Apagar o cenário "${jornada.nome}" e os seus casos? Os blocos não são apagados.`))) return;
           await dados.apagar('casos', jornada.id);
           await dados.apagar('jornadas', jornada.id);
           selecao.jornadaId = undefined;
           irPara('jornadas');
         },
       },
-      'Apagar jornada',
+      'Apagar cenário',
     ),
   );
 
-  const zona = h('div', { class: 'editor' });
+  const zona = h('div', { class: 'editor-zona' });
   corpo.append(zona);
   await desenhar();
 
@@ -103,9 +107,41 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
     const variaveis = variaveisDaJornada(jornada, blocos, calculadas);
     // Colunas dos casos: as que já existem e as que a jornada precisa.
     for (const nome of variaveis.necessarias) if (!conjunto.colunas.includes(nome)) conjunto.colunas.push(nome);
+    // Separadores: Resumo (o que é o teste) · Passos (o percurso de blocos) · Casos de teste (os dados).
+    // Os três painéis existem sempre na página (só os não escolhidos ficam escondidos).
+    const numeroCasos = conjunto.casos.length;
+    const separador = (id: PainelEditor, nome: string): HTMLElement =>
+      h(
+        'button',
+        {
+          type: 'button',
+          role: 'tab',
+          class: 'separador',
+          'data-painel': id,
+          'aria-selected': String(painelEditor === id),
+          onclick: () => {
+            painelEditor = id;
+            void desenhar();
+          },
+        },
+        nome,
+      );
     zona.replaceChildren(
-      h('div', { class: 'editor-principal' }, cartaoPropriedades(), cartaoPercurso(variaveis.blocosEmFalta), cartaoCasos(variaveis.necessarias)),
-      h('aside', { class: 'editor-lateral' }, cartaoBiblioteca(), cartaoVariaveis(variaveis.necessarias, variaveis.produzidas, variaveis.calculadas)),
+      h(
+        'div',
+        { class: 'separadores separadores-editor', role: 'tablist', 'aria-label': 'Partes do cenário' },
+        separador('resumo', 'Resumo'),
+        separador('passos', `Passos (${plural(jornada.blocos.length, 'bloco')})`),
+        separador('casos', `Casos de teste (${numeroCasos})`),
+      ),
+      h('div', { class: 'editor', 'data-painel': 'resumo', hidden: painelEditor !== 'resumo' }, h('div', { class: 'editor-principal' }, cartaoPropriedades())),
+      h(
+        'div',
+        { class: 'editor', 'data-painel': 'passos', hidden: painelEditor !== 'passos' },
+        h('div', { class: 'editor-principal' }, cartaoPercurso(variaveis.blocosEmFalta)),
+        h('aside', { class: 'editor-lateral' }, cartaoBiblioteca(), cartaoVariaveis(variaveis.necessarias, variaveis.produzidas, variaveis.calculadas)),
+      ),
+      h('div', { class: 'editor', 'data-painel': 'casos', hidden: painelEditor !== 'casos' }, h('div', { class: 'editor-principal' }, cartaoCasos(variaveis.necessarias))),
     );
   }
 
@@ -124,7 +160,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       h(
         'div',
         { class: 'grelha-campos' },
-        campo('jornada-nome', 'Nome da jornada', jornada.nome, (v) => {
+        campo('jornada-nome', 'Nome do cenário', jornada.nome, (v) => {
           if (v) jornada.nome = v;
         }),
         campo(
@@ -335,9 +371,9 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       'section',
       { class: 'cartao' },
       h('header', { class: 'cartao-topo' }, h('h2', {}, 'Percurso'), h('span', { class: 'etiqueta' }, plural(jornada.blocos.length, 'bloco'))),
-      emFalta.length > 0 && h('p', { class: 'aviso-erro', role: 'alert' }, 'Há blocos nesta jornada que já não existem. Retira-os do percurso.'),
+      emFalta.length > 0 && h('p', { class: 'aviso-erro', role: 'alert' }, 'Há blocos neste cenário que já não existem. Retira-os do percurso.'),
       jornada.blocos.length === 0
-        ? h('p', { class: 'suave' }, 'A jornada ainda não tem blocos. Acrescenta-os a partir da biblioteca, à direita.')
+        ? h('p', { class: 'suave' }, 'O cenário ainda não tem blocos. Acrescenta-os a partir da biblioteca, à direita.')
         : h('ol', { id: 'percurso', class: 'percurso' }, itens),
     );
   }
@@ -365,7 +401,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
                     type: 'button',
                     class: 'botao botao-pequeno',
                     'data-adicionar': bloco.id,
-                    'aria-label': `Acrescentar "${bloco.nome}" à jornada`,
+                    'aria-label': `Acrescentar "${bloco.nome}" ao cenário`,
                     onclick: async () => {
                       const numeros = jornada.blocos.map((b) => Number(/^b(\d+)$/.exec(b.id)?.[1] ?? 0));
                       jornada.blocos.push({ id: `b${Math.max(0, ...numeros) + 1}`, blocoId: bloco.id });
@@ -387,7 +423,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       h('header', { class: 'cartao-topo' }, h('h2', {}, 'Variáveis')),
       h('h3', {}, 'Vêm dos casos'),
       necessarias.length === 0 ? h('p', { class: 'suave' }, 'Nenhuma.') : h('p', { class: 'lista-codigo' }, necessarias.map((n) => h('code', {}, `{${n}}`))),
-      h('h3', {}, 'Guardadas durante a jornada'),
+      h('h3', {}, 'Guardadas durante o cenário'),
       produzidas.length === 0 ? h('p', { class: 'suave' }, 'Nenhuma.') : h('p', { class: 'lista-codigo' }, produzidas.map((n) => h('code', {}, `{${n}}`))),
       porFormula.length > 0 && h('h3', {}, 'Calculadas por fórmula (Dados de teste)'),
       porFormula.length > 0 && h('p', { class: 'lista-codigo' }, porFormula.map((n) => h('code', {}, `{${n}}`))),
@@ -471,7 +507,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       h(
         'header',
         { class: 'cartao-topo' },
-        h('div', {}, h('h2', {}, 'Casos'), h('p', { class: 'suave' }, 'Cada linha é uma variante: a jornada corre uma vez por caso, com estes dados.')),
+        h('div', {}, h('h2', {}, 'Casos de teste'), h('p', { class: 'suave' }, 'Cada linha é um caso de teste: o cenário corre uma vez por linha, com estes dados e valores esperados.')),
         h(
           'div',
           { class: 'acoes' },
@@ -547,7 +583,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
                       {},
                       coluna,
                       !necessarias.includes(coluna) &&
-                        h('button', { type: 'button', class: 'botao-mini', 'aria-label': `Apagar a coluna ${coluna}`, title: 'Apagar coluna (a jornada não a usa)', onclick: () => void removerColuna(coluna) }, '×'),
+                        h('button', { type: 'button', class: 'botao-mini', 'aria-label': `Apagar a coluna ${coluna}`, title: 'Apagar coluna (o cenário não a usa)', onclick: () => void removerColuna(coluna) }, '×'),
                     ),
                   ),
                   h('th', {}, 'Etiquetas'),

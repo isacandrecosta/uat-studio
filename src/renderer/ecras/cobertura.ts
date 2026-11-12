@@ -3,7 +3,7 @@ import { compararComAnterior, matrizCobertura, ultimosResultados, type Agrupamen
 import type { ConjuntoCasos, EstadoRun, Jornada } from '../../shared/modelo.js';
 import { h, plural } from '../dom.js';
 
-const NOMES_CELULA: Record<EstadoCelula, string> = { OK: 'OK', KO: 'KO', ERRO: 'ERRO', nunca: 'Nunca corrido', vazio: 'Sem casos' };
+const NOMES_CELULA: Record<EstadoCelula, string> = { OK: '✓ Passou', KO: '✗ Falhou', ERRO: '! Bloqueado', nunca: 'Nunca corrido', vazio: 'Sem casos' };
 
 /** Agrupamento escolhido (mantém-se entre redesenhos): "caso", "etiqueta" ou "coluna:<nome>". */
 let agrupamentoEscolhido: string | null = null;
@@ -79,7 +79,7 @@ export function cartaoCobertura(jornadas: Jornada[], conjuntos: ConjuntoCasos[],
     const agrupar: Agrupamento = valor.startsWith('coluna:') ? { tipo: 'coluna', coluna: valor.slice(7) } : valor === 'etiqueta' ? { tipo: 'etiqueta' } : { tipo: 'caso' };
     const matriz = matrizCobertura(jornadas, conjuntos, ultimos, agrupar);
     if (matriz.jornadas.length === 0) {
-      zona.replaceChildren(h('p', { class: 'suave' }, 'Ainda não há jornadas com casos.'));
+      zona.replaceChildren(h('p', { class: 'suave' }, 'Ainda não há cenários com casos.'));
       return;
     }
     const celulasComCasos = matriz.totais.OK + matriz.totais.KO + matriz.totais.ERRO + matriz.totais.nunca;
@@ -87,7 +87,7 @@ export function cartaoCobertura(jornadas: Jornada[], conjuntos: ConjuntoCasos[],
       h(
         'p',
         { class: 'suave', id: 'cobertura-resumo' },
-        `${plural(matriz.linhas.length, 'variante')} × ${plural(matriz.jornadas.length, 'jornada')} · ${matriz.totais.OK} OK · ${matriz.totais.KO} KO · ${matriz.totais.ERRO} ERRO · ${matriz.totais.nunca} nunca corridas` +
+        `${plural(matriz.linhas.length, 'variante')} × ${plural(matriz.jornadas.length, 'cenário')} · ${matriz.totais.OK} OK · ${matriz.totais.KO} KO · ${matriz.totais.ERRO} ERRO · ${matriz.totais.nunca} nunca corridas` +
           (celulasComCasos > 0 ? ` · cobertura ${Math.round(((celulasComCasos - matriz.totais.nunca) / celulasComCasos) * 100)}%` : ''),
       ),
       h(

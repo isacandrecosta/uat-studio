@@ -10,6 +10,7 @@ import { ecraGravar } from './ecras/gravar.js';
 import { ecraJornadas } from './ecras/jornadas.js';
 import { ecraRuns } from './ecras/runs.js';
 import { ecraMapa } from './ecras/mapa.js';
+import { ecraInicio } from './ecras/inicio.js';
 
 /** O que cada ecrã recebe para se desenhar. */
 export interface Contexto {
@@ -37,14 +38,17 @@ interface Ecra {
   desenhar?: (contexto: Contexto) => void | Promise<void>;
 }
 
+// Menu pela ordem do trabalho de uma equipa de QA: ponto da situação, preparar, construir, dados, executar.
+// (Os ids ficam iguais aos de antes: são usados pelos testes automáticos e pela demo.)
 const ECRAS: Ecra[] = [
-  { id: 'jornadas', nome: 'Jornadas', descricao: 'Épicos, jornadas e blocos partilhados.', desenhar: ecraJornadas },
-  { id: 'editor', nome: 'Editor de jornada', descricao: 'Compor uma jornada com blocos, variáveis e casos.', desenhar: ecraEditor },
+  { id: 'inicio', nome: 'Início', descricao: 'Ponto da situação do projeto, o que precisa de atenção e atalhos.', desenhar: ecraInicio },
+  { id: 'jornadas', nome: 'Cenários', descricao: 'Épicos, cenários de teste, blocos partilhados e aplicações.', desenhar: ecraJornadas },
+  { id: 'editor', nome: 'Editor do cenário', descricao: 'Compor um cenário com blocos, variáveis e casos de teste.', desenhar: ecraEditor },
+  { id: 'gravar', nome: 'Gravar', descricao: 'Gravar ações no browser para criar blocos de ecrã.', desenhar: ecraGravar },
   { id: 'api', nome: 'Blocos de API', descricao: 'Construir pedidos, perfis de autenticação e teste individual.', desenhar: ecraApi },
-  { id: 'gravar', nome: 'Gravar', descricao: 'Gravar ações no browser para criar blocos de UI.', desenhar: ecraGravar },
-  { id: 'dados', nome: 'Dados de teste', descricao: 'Variáveis, fórmulas, geradores e contadores.', desenhar: ecraDados },
-  { id: 'runs', nome: 'Runs e resultados', descricao: 'Correr testes e ver o histórico, os logs e as evidências.', desenhar: ecraRuns },
-  { id: 'mapa', nome: 'Mapa de execução', descricao: 'Grafo ao vivo da execução, workers e controlos.', desenhar: ecraMapa },
+  { id: 'dados', nome: 'Dados de teste', descricao: 'Variáveis, fórmulas, geradores, segredos e contadores.', desenhar: ecraDados },
+  { id: 'runs', nome: 'Execuções', descricao: 'Correr testes e ver os resultados, as evidências, os relatórios e os defeitos.', desenhar: ecraRuns },
+  { id: 'mapa', nome: 'Execução ao vivo', descricao: 'A execução em curso: cenários, blocos, workers e controlos.', desenhar: ecraMapa },
 ];
 
 const vistaBoasVindas = obter<HTMLElement>('vista-boas-vindas');
@@ -55,6 +59,7 @@ const acoes = obter<HTMLElement>('acoes-ecra');
 const escolhaAmbiente = obter<HTMLSelectElement>('escolha-ambiente');
 const escolhaProjeto = obter<HTMLSelectElement>('escolha-projeto');
 const tipoAmbiente = obter<HTMLElement>('tipo-ambiente');
+const faixaAmbiente = obter<HTMLElement>('faixa-ambiente');
 
 let estado: EstadoProjeto | null = null;
 let ecraAtual = ECRAS[0].id;
@@ -80,6 +85,10 @@ function desenharAmbiente(atual: EstadoProjeto): void {
   const ativo = atual.projeto.ambientes.find((a) => a.id === atual.projeto.ambienteAtivo);
   tipoAmbiente.textContent = ativo?.tipo ?? '';
   tipoAmbiente.dataset.tipo = ativo?.tipo ?? '';
+  // Faixa sempre visível com a cor do ambiente: DEV verde, QA azul, PRD vermelho (com aviso).
+  const explicacao: Record<string, string> = { DEV: 'desenvolvimento', QA: 'testes de aceitação', PRD: 'PRODUÇÃO: dados reais, cada execução pede confirmação' };
+  faixaAmbiente.dataset.tipo = ativo?.tipo ?? '';
+  faixaAmbiente.textContent = ativo ? `Ambiente ${ativo.nome} · ${explicacao[ativo.tipo] ?? ativo.tipo} · Projeto: ${atual.projeto.nome}` : '';
 }
 
 async function desenharEcra(): Promise<void> {

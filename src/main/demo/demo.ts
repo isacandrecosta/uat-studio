@@ -179,19 +179,27 @@ const primeirosPassos: FuncaoCapitulo = async (r, pasta) => {
   await r.legenda('Os testes ficam numa pasta de projeto, em ficheiros simples. Aqui vamos usar um projeto já com exemplos.');
   criarProjeto(pasta, 'Projeto da demo', true, true);
   r.janela.reload();
-  await esperar(r.janela, "document.body.dataset.vista === 'app' && document.querySelector('.cartao-epico')", 30_000);
-  await r.legenda('As ideias principais: um ÉPICO junta JORNADAS; uma jornada é um percurso de BLOCOS reutilizáveis; e cada jornada corre com vários CASOS (as linhas de dados, como num Excel).');
+  await esperar(r.janela, "document.body.dataset.vista === 'app' && document.getElementById('inicio-resumo')", 30_000);
+  await r.realcar('#faixa-ambiente');
+  await r.legenda('A faixa no topo diz sempre onde se está a testar: verde DEV, azul QA, vermelho PRODUÇÃO.');
+  await r.realcar('#inicio-resumo');
+  await r.legenda('O Início é o ponto da situação: cenários, casos de teste e o resultado da última execução (✓ Passou, ✗ Falhou, ! Bloqueado).');
+  await r.realcar(null);
+  await r.irPara('jornadas');
+  await esperar(r.janela, "document.querySelector('.cartao-epico')", 30_000);
+  await r.legenda('As ideias principais: um ÉPICO junta CENÁRIOS DE TESTE; um cenário é um percurso de BLOCOS reutilizáveis; e cada cenário corre com vários CASOS (as linhas de dados, como num Excel).');
   await r.realcar('.cartao-epico');
-  await r.legenda('Este é um épico com as suas jornadas. Cada cartão mostra quantos casos tem e o resultado da última execução.');
+  await r.legenda('Este é um épico com os seus cenários. Cada cartão mostra quantos casos tem e o resultado da última execução.');
   await r.realcar(null);
   const menu: Array<[string, string]> = [
-    ['jornadas', 'Jornadas: os épicos, as jornadas e os blocos partilhados por todas.'],
-    ['editor', 'Editor de jornada: montar o percurso de blocos e escrever os casos.'],
-    ['api', 'Blocos de API: pedidos GET/POST/PUT/DELETE com OAuth 2.0 e outras autenticações.'],
+    ['inicio', 'Início: o ponto da situação e o que precisa de atenção.'],
+    ['jornadas', 'Cenários: os épicos, os cenários de teste, os blocos partilhados e as aplicações.'],
+    ['editor', 'Editor do cenário: resumo, passos (o percurso de blocos) e casos de teste.'],
     ['gravar', 'Gravar: abrir a app no Edge e gravar os passos clicando nos campos.'],
-    ['dados', 'Dados de teste: fórmulas, geradores (NIF, IBAN, emails) e contadores.'],
-    ['runs', 'Runs e resultados: correr, ver OK/KO/ERRO, evidências, relatórios e PDF para assinatura.'],
-    ['mapa', 'Mapa de execução: a execução ao vivo, com o browser de cada worker em miniatura.'],
+    ['api', 'Blocos de API: pedidos GET/POST/PUT/DELETE com OAuth 2.0 e outras autenticações.'],
+    ['dados', 'Dados de teste: fórmulas, geradores (NIF, IBAN, emails), segredos e contadores.'],
+    ['runs', 'Execuções: correr, ver o que passou, falhou ou ficou bloqueado, evidências, relatórios e defeitos.'],
+    ['mapa', 'Execução ao vivo: o progresso, com o browser de cada worker em miniatura.'],
   ];
   for (const [ecra, texto] of menu) {
     await r.realcar(`.menu-item[data-ecra="${ecra}"]`);
@@ -281,50 +289,53 @@ const gravarBloco: FuncaoCapitulo = async (r) => {
   await r.realcar('#contagem-passos');
   await r.legenda('De volta ao UAT Studio: os passos gravados aparecem aqui. Para cada elemento a ferramenta guarda várias formas de o encontrar (data-testid, etiqueta, texto, posição): se uma falhar, usa outra.');
   await r.realcar(null);
-  await r.clicar('#btn-guardar-bloco', 'Guardar o bloco: fica na biblioteca e pode ser usado em várias jornadas.');
+  await r.clicar('#btn-guardar-bloco', 'Guardar o bloco: fica na biblioteca e pode ser usado em vários cenários.');
   await esperar(r.janela, "document.getElementById('btn-gravar')");
   if (estadoGravador().ativo) await terminarGravacao(false);
 };
 
 const montarJornada: FuncaoCapitulo = async (r) => {
   await r.irPara('jornadas');
-  await r.clicar('[data-jornada="simular-credito"]', 'Uma jornada abre-se com um clique. Vamos abrir "Simular crédito".');
+  await r.clicar('[data-jornada="simular-credito"]', 'Um cenário abre-se com um clique. Vamos abrir "Simular crédito".');
   await esperar(r.janela, "document.querySelector('#percurso > li')");
+  await naPagina(r.janela, "document.querySelector('.separador[data-painel=\"passos\"]')?.click()");
+  await r.pausa(0.4);
   await r.realcar('#percurso');
   await r.legenda('O percurso: os blocos por ordem. Acrescentam-se da biblioteca, mudam de ordem, e cada bloco pode ter uma condição ("só se...") ou correr sempre, como limpeza.');
   await naPagina(r.janela, "document.querySelector('#percurso > li details')?.setAttribute('open', '')");
   await r.pausa(0.5);
   await r.realcar('#percurso > li details');
   await r.legenda('Cada {variável} de um bloco vem da coluna com o mesmo nome, de outra coluna ou de um valor fixo. Assim o mesmo bloco serve muitos testes.');
+  await r.clicar('.separador[data-painel="casos"]');
   await r.realcar('#tabela-casos');
-  await r.legenda('Os casos: uma linha por teste, com os dados de entrada e os valores esperados. Editam-se aqui ou importam-se e exportam-se em Excel.');
+  await r.legenda('Os casos de teste: uma linha por teste, com os dados de entrada e os valores esperados. Editam-se aqui ou importam-se e exportam-se em Excel.');
   await r.realcar('#btn-ver-codigo');
   await r.legenda('"Ver código" mostra o teste Playwright equivalente, para quem quiser ver o que é executado.');
   await r.realcar(null);
 };
 
 const correrResultados: FuncaoCapitulo = async (r, pasta) => {
-  await r.irPara('runs', 'Para correr, vamos a Runs e resultados.');
+  await r.irPara('runs', 'Para correr, vamos a Execuções.');
   await esperar(r.janela, "document.querySelector('#run-ambito option[value=\"jornada:simular-credito\"]')");
   await r.escolher('#run-ambito', 'jornada:simular-credito');
   await r.realcar('#run-paralelo');
-  await r.legenda('Escolhe-se o que correr (um épico, uma jornada, alguns casos ou etiquetas), o browser (Edge ou Chrome), visível ou em background, e quantos casos em paralelo.');
+  await r.legenda('Escolhe-se o que correr (um épico, um cenário, alguns casos ou etiquetas), o browser (Edge ou Chrome), visível ou em background, e quantos casos em paralelo.');
   await r.escolher('#run-paralelo', '2');
   await r.clicar('#btn-correr', 'Antes de correr, a ferramenta verifica se falta alguma coisa: colunas, fórmulas, endereços, segredos.');
   await esperar(r.janela, "document.querySelector('#run-atual[data-ativo=\"true\"]')", 60_000);
-  await r.irPara('mapa', 'Durante a execução, o Mapa mostra tudo ao vivo.');
+  await r.irPara('mapa', 'Durante a execução, a Execução ao vivo mostra tudo.');
   await esperar(r.janela, "document.querySelector('#workers .worker img')", 90_000).catch(() => undefined);
   await r.realcar('#workers');
   await r.legenda('Cada worker é um browser em background. As miniaturas mostram o que está a fazer. Pode-se pausar um worker ou a execução toda (sempre entre passos).');
   await r.realcar('#mapa');
-  await r.legenda('Os blocos ganham cor: azul a correr, verde OK, laranja KO, vermelho ERRO.');
+  await r.legenda('Os blocos ganham cor: azul a correr, verde passou, vermelho falhou, laranja bloqueado.');
   await r.realcar(null);
   await esperarFimDoRun(600_000);
   await r.clicar('.separador[data-vista="casos"]', 'A vista Casos mostra cada caso e cada bloco, numa matriz.');
   await r.pausa(2);
   await r.irPara('runs');
   await esperar(r.janela, "document.querySelector('.caso .caso-topo')");
-  await r.legenda('OK: tudo coincide. KO: chegou ao fim mas algum valor é diferente. ERRO: não chegou ao fim.');
+  await r.legenda('✓ Passou (OK): tudo coincide. ✗ Falhou (KO): chegou ao fim, mas algum valor é diferente. ! Bloqueado (ERRO): não chegou ao fim.');
   const ko = estadoRun()?.casos.find((c) => c.estado === 'KO');
   const alvo = ko ? `.caso[data-chave="${ko.chave}"] .caso-topo` : '.caso .caso-topo';
   await r.clicar(alvo, 'Abrindo um caso vemos os passos, os prints de cada bloco e, num KO, o valor esperado e o obtido.');
@@ -338,8 +349,10 @@ const correrResultados: FuncaoCapitulo = async (r, pasta) => {
 const entrePortais: FuncaoCapitulo = async (r, pasta) => {
   await r.irPara('jornadas');
   await r.legenda('A segunda app de teste, "Portal de Crédito", tem dois portais: o cliente pede crédito no Front Office e o gestor aprova no Backoffice. O cliente só avança depois da aprovação.');
-  await r.clicar('[data-jornada="pc-pedido-entre-portais"]', 'A jornada "entre portais" usa duas sessões do browser: uma do cliente e outra do gestor, no mesmo teste.');
+  await r.clicar('[data-jornada="pc-pedido-entre-portais"]', 'O cenário "entre portais" usa duas sessões do browser: uma do cliente e outra do gestor, no mesmo teste.');
   await esperar(r.janela, "document.querySelector('#percurso > li')");
+  await naPagina(r.janela, "document.querySelector('.separador[data-painel=\"passos\"]')?.click()");
+  await r.pausa(0.4);
   await r.realcar('#percurso');
   await r.legenda('O login com MFA é feito no 1.º caso e reutilizado nos seguintes. O número do pedido é guardado no FO e usado no BO para encontrar a linha certa da tabela.');
   await r.realcar(null);
@@ -403,7 +416,7 @@ const projetoDeExemplo: FuncaoCapitulo = async (r) => {
   await r.realcar('#escolha-projeto');
   await r.legenda('O "Projeto de exemplo" (na lista Projeto) traz casos de uso prontos a correr contra as apps de teste. É o melhor sítio para aprender: veja como está feito e corra-o.');
   const epicos: Array<[string, string]> = [
-    ['1. Básico', '1. Básico: o Simulador. Um bloco gravado, 6 casos (podem vir do Excel), uma fórmula para o valor esperado e verificações de números. A 2.ª jornada passa o número do pedido ({PedidoId}) para o Backoffice.'],
+    ['1. Básico', '1. Básico: o Simulador. Um bloco gravado, 6 casos (podem vir do Excel), uma fórmula para o valor esperado e verificações de números. O 2.º cenário passa o número do pedido ({PedidoId}) para o Backoffice.'],
     ['2. Entre portais', '2. Entre portais: o cliente pede no Front Office, o gestor decide no Backoffice e o cliente só continua se for aprovado. Duas sessões no mesmo teste, login reutilizado, blocos "só se" e uma confirmação pela API.'],
     ['3. Serviços externos', '3. Serviços externos: o pedido ao prestador de pagamentos é intercetado (verifica-se o que a app envia) e a resposta é simulada (aprovado, recusado, indisponível). Assim testam-se situações difíceis de provocar a sério.'],
     ['4. APIs', '4. APIs e passo manual: regras de negócio testadas só pela API, e um passo em que a execução pára e uma pessoa confirma OK ou KO, com observação.'],
@@ -413,17 +426,20 @@ const projetoDeExemplo: FuncaoCapitulo = async (r) => {
     await r.legenda(texto);
   }
   await r.realcar(null);
-  await r.clicar('[data-jornada="pc-pagamento-simulado"]', 'Abrir uma jornada no editor mostra como foi montada. Aqui, o pagamento com o prestador simulado.');
+  await r.clicar('[data-jornada="pc-pagamento-simulado"]', 'Abrir um cenário no editor mostra como foi montado. Aqui, o pagamento com o prestador simulado.');
   await esperar(r.janela, "document.querySelector('#percurso > li')");
+  await naPagina(r.janela, "document.querySelector('.separador[data-painel=\"passos\"]')?.click()");
+  await r.pausa(0.4);
   await r.realcar('#percurso');
   await r.legenda('Cada bloco diz de onde vêm os dados, quando corre ("só se") e em que sessão. Os blocos com um nome começado por "API:" preparam ou confirmam dados sem passar pelo ecrã.');
+  await r.clicar('.separador[data-painel="casos"]');
   await r.realcar('#tabela-casos');
-  await r.legenda('Os casos mostram as variações testadas: aqui, o prestador responde "aprovado", "recusado" ou não responde.');
+  await r.legenda('Os casos de teste mostram as variações testadas: aqui, o prestador responde "aprovado", "recusado" ou não responde.');
   await r.realcar(null);
   await r.irPara('runs');
   await esperar(r.janela, "document.getElementById('run-velocidade')");
   await r.realcar('#run-velocidade');
-  await r.legenda('Para aprender, corra cada jornada com o browser visível e a velocidade "lenta" ou "passo a passo": vê-se o que cada passo faz na app.');
+  await r.legenda('Para aprender, corra cada cenário com o browser visível e a velocidade "lenta" ou "passo a passo": vê-se o que cada passo faz na app.');
   await r.realcar('#escolha-projeto');
   await r.legenda('Quando já não precisar dele: lista Projeto, "Apagar este projeto de exemplo…". Pode voltar a criá-lo quando quiser.');
   await r.realcar(null);
@@ -481,7 +497,7 @@ const quandoAlgoFalha: FuncaoCapitulo = async (r, pasta) => {
     await r.video.mostrarJanela(r.janela);
     r.janela.focus();
     await esperar(r.janela, "document.querySelector('#gravacao-ativa[data-regravar=\"feito\"]')", 30_000);
-    await r.legenda('O passo foi testado com o elemento novo e o bloco ficou guardado. Vale para todas as jornadas que usam este bloco.');
+    await r.legenda('O passo foi testado com o elemento novo e o bloco ficou guardado. Vale para todos os cenários que usam este bloco.');
     await r.clicar('#btn-terminar-regravar');
     await esperar(r.janela, "!document.getElementById('gravacao-ativa')");
     await r.irPara('runs');
@@ -512,11 +528,13 @@ const usarAWiki: FuncaoCapitulo = async (r, pasta) => {
   await r.legenda('"Como é que testo este componente?" A resposta está na Wiki de componentes OutSystems, que se abre na lista Projeto.');
   await r.realcar(null);
   await naPagina(r.janela, "(() => { const e = document.getElementById('escolha-projeto'); e.value = '__wiki'; e.dispatchEvent(new Event('change')); })()");
+  await esperar(r.janela, "document.getElementById('inicio-resumo') && document.getElementById('faixa-ambiente').textContent.includes('Wiki')", 30_000);
+  await r.irPara('jornadas');
   await esperar(r.janela, "document.querySelector('.cartao-epico') && document.body.innerText.includes('Campos de formulário')", 30_000);
   const pastaWiki = await naPagina<string>(r.janela, "document.getElementById('escolha-projeto').value");
   await r.legenda('A Wiki é um projeto à parte, organizado por tipo de componente: campos de formulário, botões e tabelas, situações típicas, datas e ficheiros, navegação e janelas.');
   await r.realcar(await marcar(r, '.cartao-epico', 'A. Campos'));
-  await r.legenda('Cada receita tem uma jornada "Prova": se a prova der OK nas apps de teste, a ferramenta sabe testar aquele componente.');
+  await r.legenda('Cada receita tem um cenário "Prova": se a prova der OK nas apps de teste, a ferramenta sabe testar aquele componente.');
   await naPagina(r.janela, "document.querySelector('[data-descricao=\"receita-lista-e-numero\"]')?.setAttribute('open', '')");
   await r.pausa(0.5);
   await r.realcar('[data-descricao="receita-lista-e-numero"]');
@@ -546,9 +564,9 @@ const usarAWiki: FuncaoCapitulo = async (r, pasta) => {
 const CAPITULOS: Capitulo[] = [
   { id: 'primeiros-passos', titulo: '1. Primeiros passos', resumo: 'O que é o UAT Studio, as ideias principais e o menu.', correr: primeirosPassos },
   { id: 'gravar', titulo: '2. Gravar um bloco', resumo: 'Abrir a app no Edge e gravar passos com cliques.', correr: gravarBloco },
-  { id: 'jornada', titulo: '3. Montar uma jornada', resumo: 'Percurso de blocos, parâmetros e casos.', correr: montarJornada },
+  { id: 'jornada', titulo: '3. Montar um cenário', resumo: 'Percurso de blocos, parâmetros e casos.', correr: montarJornada },
   { id: 'correr', titulo: '4. Correr e ver os resultados', resumo: 'Execução em paralelo, mapa ao vivo, OK/KO/ERRO e evidências.', correr: correrResultados },
-  { id: 'entre-portais', titulo: '5. Testar entre dois portais', resumo: 'Front Office e Backoffice na mesma jornada, com aprovação.', correr: entrePortais },
+  { id: 'entre-portais', titulo: '5. Testar entre dois portais', resumo: 'Front Office e Backoffice no mesmo cenário, com aprovação.', correr: entrePortais },
   { id: 'dados-apis', titulo: '6. Dados de teste e APIs', resumo: 'Fórmulas, geradores e blocos de API.', correr: dadosEApis },
   { id: 'projeto-exemplo', titulo: '7. Perceber o projeto de exemplo', resumo: 'Os 4 épicos do exemplo e o que cada um ensina.', correr: projetoDeExemplo },
   { id: 'quando-falha', titulo: '8. Quando algo falha', resumo: 'Erro explicado, sugestões, regravar um elemento e repetir o caso.', correr: quandoAlgoFalha },
@@ -614,7 +632,7 @@ export async function correrDemo(janela: BrowserWindow, raiz: string): Promise<v
     if (escolhidos[0]?.id !== 'primeiros-passos') {
       criarProjeto(pastaProjeto, 'Projeto da demo', true, true);
       janela.reload();
-      await esperar(janela, "document.body.dataset.vista === 'app' && document.querySelector('.cartao-epico')", 30_000);
+      await esperar(janela, "document.body.dataset.vista === 'app' && document.getElementById('inicio-resumo')", 30_000);
     }
     for (const [indice, c] of escolhidos.entries()) {
       const numero = String(CAPITULOS.indexOf(c) + 1).padStart(2, '0');

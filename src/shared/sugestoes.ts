@@ -56,9 +56,9 @@ const REGRAS_ERRO: Regra[] = [
   { padrao: /proxy/i, sugestoes: ['Problema de proxy: confirme a ligação à rede da empresa (ou VPN).'] },
   {
     padrao: /endereço não foi encontrado|não há rede|recusou a ligação/,
-    sugestoes: ['Confirme a rede (ou a VPN) e o endereço da aplicação neste ambiente (ecrã Jornadas → Aplicações).'],
+    sugestoes: ['Confirme a rede (ou a VPN) e o endereço da aplicação neste ambiente (ecrã Cenários → Aplicações).'],
   },
-  { padrao: /não tem endereço no ambiente|não tem endereço no ambiente ativo/, sugestoes: ['Preencha o endereço da aplicação para este ambiente no ecrã Jornadas → Aplicações.'] },
+  { padrao: /não tem endereço no ambiente|não tem endereço no ambiente ativo/, sugestoes: ['Preencha o endereço da aplicação para este ambiente no ecrã Cenários → Aplicações.'] },
   { padrao: /Falta preencher .* no perfil/, sugestoes: ['Preencha o segredo em falta no ecrã Blocos de API → Perfis de autenticação.'] },
   {
     padrao: /O email não chegou/,

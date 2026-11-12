@@ -52,6 +52,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Demo: capítulo "Quando algo falha" (erro explicado, sugestões, regravar um elemento, repetir o caso).
 - [x] "Transformar valores fixos em colunas" (gravar a direito e decidir depois o que vem do Excel), descrições em texto corrido nas jornadas e nos blocos, e "Criar defeito" (texto e evidências sugeridos a partir de um caso KO/ERRO).
 - [x] Segredos de teste no cofre (`{SEGREDO:nome}` nos casos) e auditoria de compliance ao código (`docs/AUDITORIA-COMPLIANCE.md`).
-- [ ] Interface: melhorias de navegação e linguagem de QA (propostas à espera de decisão do utilizador).
+- [x] Interface, pacote 1: nomes de QA (cenário de teste, casos de teste, execuções), menu pela ordem do trabalho, ecrã Início, faixa de cor do ambiente, estados Passou/Falhou/Bloqueado com símbolos, separadores no editor do cenário.
+- [ ] Interface, pacote 2 (por decidir): "Mais opções" escondidas no percurso, lista de casos filtrável com detalhe em painel lateral, caminho "Projeto › Épico › Cenário", pesquisa rápida (Ctrl+K), lista de defeitos por execução.
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

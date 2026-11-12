@@ -143,7 +143,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   if (retomar) {
     const blocosDaJornada = itens[0].jornada.blocos.length;
     if (!Number.isInteger(retomar.desdeBloco) || retomar.desdeBloco < 0 || retomar.desdeBloco >= blocosDaJornada) {
-      throw new repo.ErroProjeto(`Não é possível retomar no bloco ${retomar.desdeBloco + 1}: a jornada tem ${blocosDaJornada} blocos.`);
+      throw new repo.ErroProjeto(`Não é possível retomar no bloco ${retomar.desdeBloco + 1}: o cenário tem ${blocosDaJornada} blocos.`);
     }
   }
 

@@ -39,7 +39,7 @@ async function escreverExcel(pastaRun: string, run: EstadoRun): Promise<void> {
 
   const resultados = livro.addWorksheet('Resultados');
   resultados.columns = [
-    { header: 'Jornada', key: 'jornada', width: 28 },
+    { header: 'Cenário', key: 'jornada', width: 28 },
     { header: 'Caso', key: 'caso', width: 12 },
     { header: 'Descrição', key: 'descricao', width: 40 },
     { header: 'Resultado', key: 'resultado', width: 12 },
@@ -71,7 +71,7 @@ async function escreverExcel(pastaRun: string, run: EstadoRun): Promise<void> {
 
   const diferencas = livro.addWorksheet('Diferenças');
   diferencas.columns = [
-    { header: 'Jornada', key: 'jornada', width: 28 },
+    { header: 'Cenário', key: 'jornada', width: 28 },
     { header: 'Caso', key: 'caso', width: 12 },
     { header: 'Bloco', key: 'bloco', width: 26 },
     { header: 'Passo', key: 'passo', width: 44 },

@@ -44,7 +44,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
         'div',
         { class: 'vazio' },
         h('p', { class: 'vazio-titulo' }, 'Ainda não há épicos'),
-        h('p', {}, 'Um épico é uma pasta de jornadas (por exemplo, "Crédito Pessoal"). Cria o primeiro com "Novo épico".'),
+        h('p', {}, 'Um épico é uma pasta de cenários (por exemplo, "Crédito Pessoal"). Cria o primeiro com "Novo épico".'),
       ),
     );
   }
@@ -69,14 +69,14 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                 type: 'button',
                 class: 'botao',
                 onclick: async () => {
-                  const nome = await pedirTexto('Nova jornada', `Nome da jornada em "${epico.nome}"`);
+                  const nome = await pedirTexto('Novo cenário', `Nome do cenário em "${epico.nome}"`);
                   if (!nome) return;
                   const nova = await dados.guardar('jornadas', { nome, epicoId: epico.id, etiquetas: [], blocos: [] });
                   selecao.jornadaId = nova.id;
                   irPara('editor');
                 },
               },
-              'Nova jornada',
+              'Novo cenário',
             ),
             h(
               'button',
@@ -84,7 +84,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                 type: 'button',
                 class: 'botao botao-discreto-claro',
                 disabled: doEpico.length > 0,
-                title: doEpico.length > 0 ? 'Só é possível apagar um épico sem jornadas.' : '',
+                title: doEpico.length > 0 ? 'Só é possível apagar um épico sem cenários.' : '',
                 onclick: async () => {
                   if (!(await confirmar('Apagar épico', `Apagar o épico "${epico.nome}"?`))) return;
                   await dados.apagar('epicos', epico.id);
@@ -96,7 +96,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
           ),
         ),
         doEpico.length === 0
-          ? h('p', { class: 'suave' }, 'Sem jornadas.')
+          ? h('p', { class: 'suave' }, 'Sem cenários.')
           : h(
               'ul',
               { class: 'lista-itens' },
@@ -110,7 +110,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                       type: 'button',
                       class: 'ligacao item-nome',
                       'data-jornada': jornada.id,
-                      title: 'Abrir no editor de jornada',
+                      title: 'Abrir no editor de cenário',
                       onclick: () => {
                         selecao.jornadaId = jornada.id;
                         irPara('editor');
@@ -357,14 +357,14 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                       class: 'botao botao-pequeno-livre',
                       'data-usos': bloco.id,
                       'data-sem-uso': String(usos.length === 0),
-                      title: 'Ver as jornadas que usam este bloco',
+                      title: 'Ver os cenários que usam este bloco',
                       onclick: () =>
                         mostrarUsos(bloco.nome, usos, (jornadaId) => {
                           selecao.jornadaId = jornadaId;
                           irPara('editor');
                         }),
                     },
-                    usos.length === 0 ? 'Não usado' : `Usado em ${plural(usos.length, 'jornada')}`,
+                    usos.length === 0 ? 'Não usado' : `Usado em ${plural(usos.length, 'cenário')}`,
                   ),
                   bloco.tipo === 'UI' &&
                     h(

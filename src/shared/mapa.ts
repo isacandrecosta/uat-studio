@@ -79,15 +79,16 @@ export function estadoDoBlocoNoCaso(caso: ResultadoCaso, posicao: number): Estad
 export function resumoContagem(c: Contagem): string {
   const nomes: Array<[EstadoBlocoCaso, string]> = [
     ['a-correr', 'a correr'],
-    ['ok', 'OK'],
-    ['ko', 'KO'],
-    ['erro', 'ERRO'],
+    ['ok', '✓'],
+    ['ko', '✗'],
+    ['erro', '!'],
     ['ignorado', 'saltado (só se)'],
     ['nao-corrido', 'não corrido'],
     ['por-correr', 'por correr'],
   ];
   return nomes
     .filter(([e]) => (c[e] ?? 0) > 0)
-    .map(([e, n]) => `${c[e]} ${n}`)
+    // Os resultados levam o símbolo antes do número (✓ 2 · ✗ 1); os outros estados, o nome depois.
+    .map(([e, n]) => (e === 'ok' || e === 'ko' || e === 'erro' ? `${n} ${c[e]}` : `${c[e]} ${n}`))
     .join(' · ');
 }

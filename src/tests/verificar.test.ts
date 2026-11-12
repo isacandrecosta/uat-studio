@@ -63,9 +63,9 @@ test('a verificação encontra o que impede de correr', async () => {
 
   const { problemas } = await verificarAntesDeCorrer(pasta, {}, semSegredos);
   const tem = (onde: RegExp, mensagem: RegExp): boolean => problemas.some((p) => p.gravidade === 'erro' && onde.test(p.onde) && mensagem.test(p.mensagem));
-  assert.ok(tem(/Jornada "Simular crédito"/, /Falta a coluna "Valor" nos casos/), JSON.stringify(problemas, null, 1));
+  assert.ok(tem(/Cenário "Simular crédito"/, /Falta a coluna "Valor" nos casos/), JSON.stringify(problemas, null, 1));
   assert.ok(tem(/Bloco "Simular crédito"/, /fórmula com erro/));
-  assert.ok(tem(/Jornada "Simular e validar no Backoffice"/, /bloco "validar-no-backoffice", que já não existe/));
+  assert.ok(tem(/Cenário "Simular e validar no Backoffice"/, /bloco "validar-no-backoffice", que já não existe/));
   assert.ok(tem(/Perfil de autenticação "OAuth QA"/, /Falta preencher neste PC: Client secret/));
   assert.ok(tem(/Aplicação "API de Pedidos"/, /Não tem endereço no ambiente DEV/));
   assert.ok(tem(/Variável calculada \{Ref\}/, /fórmula tem um erro/));

@@ -646,8 +646,8 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         try {
           const feito = await api.blocos.parametrizar(bloco.id, escolhas);
           const ondeFicou = feito.jornadas.length
-            ? `Os casos de ${feito.jornadas.join(', ')} ganharam as colunas, com os valores gravados. Exporte para Excel no editor de jornada para criar mais casos.`
-            : 'O bloco ainda não é usado em nenhuma jornada: quando o acrescentar a uma, os casos precisam destas colunas.';
+            ? `Os casos de ${feito.jornadas.join(', ')} ganharam as colunas, com os valores gravados. Exporte para Excel no editor de cenário para criar mais casos.`
+            : 'O bloco ainda não é usado em nenhum cenário: quando o acrescentar a um, os casos precisam destas colunas.';
           await confirmar('Valores transformados', `${plural(feito.colunas.length, 'coluna')}: ${feito.colunas.join(', ')}. ${ondeFicou}`, 'Fechar');
         } catch (e) {
           await confirmar('Não foi possível transformar', mensagemDeErro(e), 'Fechar');
@@ -735,7 +735,7 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         h(
           'header',
           { class: 'cartao-topo' },
-          h('div', { class: 'campo-grupo' }, h('h2', {}, 'Passos do bloco'), nome, descricaoBloco, opcaoLogin, h('p', { class: 'ajuda-campo' }, usos.length > 0 ? `Usado em: ${usos.join(', ')}. As alterações valem para todas.` : 'Ainda não é usado em nenhuma jornada.')),
+          h('div', { class: 'campo-grupo' }, h('h2', {}, 'Passos do bloco'), nome, descricaoBloco, opcaoLogin, h('p', { class: 'ajuda-campo' }, usos.length > 0 ? `Usado em: ${usos.join(', ')}. As alterações valem para todas.` : 'Ainda não é usado em nenhum cenário.')),
           h(
             'div',
             { class: 'acoes' },

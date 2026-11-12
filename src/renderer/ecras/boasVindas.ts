@@ -61,7 +61,7 @@ export async function mostrarBoasVindas(contentor: HTMLElement, aoEntrar: () => 
         'Escolher…',
       ),
     ),
-    h('label', { class: 'opcao' }, comExemplo, 'Incluir o exemplo do Simulador (jornada, bloco e casos prontos a correr)'),
+    h('label', { class: 'opcao' }, comExemplo, 'Incluir o exemplo do Simulador (cenário, bloco e casos prontos a correr)'),
     h('button', { type: 'submit', class: 'botao botao-primario' }, 'Criar projeto'),
   );
 

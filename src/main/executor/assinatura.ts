@@ -70,8 +70,8 @@ tr { page-break-inside: avoid; } td.n { text-align: right; width: 44px; } .ok { 
 <tr><td>Executado por</td><td>${esc(run.utilizador ?? '—')}</td></tr>
 <tr><td>Resultado</td><td><span class="geral">${resultadoGeral}</span> · ${total} casos: <span class="ok">${conta('OK')} OK</span>, <span class="ko">${conta('KO')} KO</span>, <span class="erro">${conta('ERRO')} ERRO</span>${total - conta('OK') - conta('KO') - conta('ERRO') > 0 ? `, ${total - conta('OK') - conta('KO') - conta('ERRO')} não corridos` : ''}</td></tr>
 </tbody></table>
-<h2>Resumo por requisito e jornada</h2>
-<table><thead><tr><th>Requisito</th><th>Jornada</th><th>Casos</th><th>OK</th><th>KO</th><th>ERRO</th><th>Outros</th></tr></thead><tbody>${linhasJornadas}</tbody></table>
+<h2>Resumo por requisito e cenário</h2>
+<table><thead><tr><th>Requisito</th><th>Cenário</th><th>Casos</th><th>OK</th><th>KO</th><th>ERRO</th><th>Outros</th></tr></thead><tbody>${linhasJornadas}</tbody></table>
 <h2>Resultado dos casos</h2>
 <p class="suave">OK: tudo coincide. KO: chegou ao fim mas um valor difere. ERRO: não chegou ao fim. As evidências (prints, logs e trace) estão na pasta da execução.</p>
 ${detalhe}

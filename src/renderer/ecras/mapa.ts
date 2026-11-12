@@ -9,10 +9,10 @@ type Vista = 'epicos' | 'jornadas' | 'casos';
 
 const NOMES_ESTADO: Record<EstadoNo, string> = {
   'a-correr': 'A correr',
-  ok: 'OK',
-  ko: 'KO',
-  erro: 'ERRO',
-  parcial: 'OK até agora (falta correr)',
+  ok: '✓ Passou',
+  ko: '✗ Falhou',
+  erro: '! Bloqueado',
+  parcial: '✓ até agora (falta correr)',
   ignorado: 'Saltado (só se…)',
   'nao-corrido': 'Não corrido',
   'por-correr': 'Por correr',
@@ -96,7 +96,7 @@ export async function ecraMapa({ corpo, acoes, irPara }: Contexto): Promise<void
     (
       [
         ['epicos', 'Épicos'],
-        ['jornadas', 'Jornadas e blocos'],
+        ['jornadas', 'Cenários e blocos'],
         ['casos', 'Casos'],
       ] as Array<[Vista, string]>
     ).map(([id, nome]) =>
@@ -277,7 +277,7 @@ export async function ecraMapa({ corpo, acoes, irPara }: Contexto): Promise<void
         return h(
           'section',
           { class: 'cartao mapa-linha' },
-          no(epicoNome || 'Sem épico', juntarEstados(estados), resumoContagem(contar(estados)), { sub: plural(jornadas.length, 'jornada'), atributos: { 'data-epico': epicoNome } }),
+          no(epicoNome || 'Sem épico', juntarEstados(estados), resumoContagem(contar(estados)), { sub: plural(jornadas.length, 'cenário'), atributos: { 'data-epico': epicoNome } }),
           h(
             'div',
             { class: 'mapa-ramos' },
@@ -320,10 +320,10 @@ export async function ecraMapa({ corpo, acoes, irPara }: Contexto): Promise<void
                     {
                       type: 'button',
                       class: 'botao botao-pequeno-livre botao-saltar-jornada',
-                      title: 'Os casos desta jornada que ainda não terminaram são saltados (os que estão a correr param no próximo passo).',
+                      title: 'Os casos deste cenário que ainda não terminaram são saltados (os que estão a correr param no próximo passo).',
                       onclick: () => void api.saltarJornada(j.id),
                     },
-                    'Saltar o resto da jornada',
+                    'Saltar o resto do cenário',
                   ),
               ),
               j.blocos.length === 0

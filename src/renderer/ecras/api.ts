@@ -306,7 +306,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
   // ---------- Lista de blocos ----------
   async function novoBloco(): Promise<void> {
     if (aplicacoesApi.length === 0) {
-      await confirmar('Falta uma aplicação de API', 'Cria primeiro uma aplicação do tipo API (ecrã Jornadas, cartão Aplicações), com o endereço da API neste ambiente.', 'Fechar');
+      await confirmar('Falta uma aplicação de API', 'Cria primeiro uma aplicação do tipo API (ecrã Cenários, cartão Aplicações), com o endereço da API neste ambiente.', 'Fechar');
       return;
     }
     const nome = await pedirTexto('Novo bloco de API', 'Nome do bloco (por exemplo: Criar cliente)');
@@ -319,7 +319,7 @@ export async function ecraApi(contexto: Contexto): Promise<void> {
   /** Importar pedidos de um comando cURL, de uma especificação OpenAPI (JSON) ou de uma coleção do Postman. */
   async function importar(): Promise<void> {
     if (aplicacoesApi.length === 0) {
-      await confirmar('Falta uma aplicação de API', 'Cria primeiro uma aplicação do tipo API (ecrã Jornadas, cartão Aplicações), com o endereço da API neste ambiente.', 'Fechar');
+      await confirmar('Falta uma aplicação de API', 'Cria primeiro uma aplicação do tipo API (ecrã Cenários, cartão Aplicações), com o endereço da API neste ambiente.', 'Fechar');
       return;
     }
     let lidos: PedidoImportado[] = [];
