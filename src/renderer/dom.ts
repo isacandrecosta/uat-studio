@@ -342,3 +342,37 @@ document.addEventListener('click', (e) => {
     if (!menu.contains(e.target as Node)) menu.open = false;
   }
 });
+
+/** Janela com várias opções (botões). Devolve o valor escolhido, ou null se cancelar. */
+export function escolherOpcao(titulo: string, texto: string, opcoes: Array<{ valor: string; texto: string; primario?: boolean }>): Promise<string | null> {
+  return new Promise((resolve) => {
+    const terminar = (valor: string | null): void => {
+      dialogo.close();
+      dialogo.remove();
+      resolve(valor);
+    };
+    const dialogo = h(
+      'dialog',
+      { class: 'dialogo', id: 'dialogo-escolha', oncancel: () => terminar(null) },
+      h(
+        'div',
+        { class: 'dialogo-corpo' },
+        h('h2', {}, titulo),
+        h('p', {}, texto),
+        h(
+          'div',
+          { class: 'dialogo-botoes' },
+          h('button', { type: 'button', class: 'botao', onclick: () => terminar(null) }, 'Cancelar'),
+          ...opcoes.map((o) => h('button', { type: 'button', class: o.primario ? 'botao botao-primario' : 'botao', 'data-valor': o.valor, autofocus: o.primario, onclick: () => terminar(o.valor) }, o.texto)),
+        ),
+      ),
+    );
+    document.body.append(dialogo);
+    dialogo.showModal();
+  });
+}
+
+/** "6,2 GB" ou "850 MB". */
+export function formatarMB(mb: number): string {
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1).replace('.', ',')} GB` : `${Math.round(mb)} MB`;
+}

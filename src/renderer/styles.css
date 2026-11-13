@@ -787,3 +787,16 @@ kbd { padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(255, 255, 255
 .tutorial-acoes { display: flex; align-items: center; gap: 8px; }
 .tutorial-espaco { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .tutorial-realce { transition: none; } }
+
+/* Painel Desempenho (Configurações) */
+.desempenho > summary { cursor: pointer; font-weight: 700; }
+.desempenho-corpo { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.desempenho-linhas { display: grid; grid-template-columns: max-content minmax(120px, 1fr) max-content; gap: 8px 12px; align-items: center; font-size: 13px; }
+.barra-uso { position: relative; height: 10px; border-radius: 999px; background: var(--neutro-fundo); overflow: hidden; }
+.barra-uso-preenchida { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--ok); }
+.barra-uso[data-nivel="medio"] .barra-uso-preenchida { background: var(--aviso); }
+.barra-uso[data-nivel="alto"] .barra-uso-preenchida { background: var(--erro); }
+.desempenho-sugestao { margin: 0; font-weight: 600; }
+.tabela-desempenho { width: 100%; font-size: 12.5px; }
+.tabela-desempenho td { padding: 5px 8px; }
+#configuracoes { width: min(720px, 92vw); }

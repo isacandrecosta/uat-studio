@@ -12,14 +12,15 @@ import {
   capturarEcra,
   gravarSobrePrint,
 } from './gravador/gravador';
-import { aoMudarRun, pararRun } from './executor/execucao';
+import { aoMudarRun, estadoRun, listarHistorico, pararRun } from './executor/execucao';
+import { leituraSistema, MB_POR_WORKER, sugerirParalelo } from './desempenho';
 import { registarIpcExecucoes } from './executor/ipc';
 import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
 import { registarIpcPacotes } from './projeto/pacotes';
 import { correrSmoke } from './smoke';
 import { correrDemo } from './demo/demo';
 import { ficheiroDeVerificacao, verificarArranque } from './arranque';
-import { PassoSobrePrint, PedidoGravacao } from '../shared/modelo';
+import { EstadoRun, PassoSobrePrint, PedidoGravacao } from '../shared/modelo';
 
 const RAIZ = path.join(__dirname, '..', '..');
 const MODO_SMOKE = process.argv.includes('--smoke');
@@ -66,6 +67,35 @@ registarIpcExecucoes();
 registarIpcPacotes();
 
 ipcMain.handle('app:modo', () => (MODO_SMOKE ? 'smoke' : MODO_DEMO ? 'demo' : 'normal'));
+// Desempenho: o PC agora, a memória da própria app e a duração média de um caso nas últimas execuções.
+ipcMain.handle('app:desempenho', () => {
+  const sistema = leituraSistema();
+  const metricas = app.getAppMetrics();
+  const appMB = Math.round(metricas.reduce((s, m) => s + (m.memory?.workingSetSize ?? 0), 0) / 1024);
+  const estado = estadoRun();
+  const workers = estado?.ativo ? estado.casos.filter((c) => c.estado === 'a-correr').length : 0;
+  let historico: EstadoRun[] = [];
+  try {
+    historico = listarHistorico(pastaDoProjeto()).filter((r) => !r.ativo && r.desempenho).slice(0, 10);
+  } catch {
+    // Sem projeto aberto: sem histórico.
+  }
+  return {
+    sistema,
+    app: { memMB: appMB, processos: metricas.length },
+    workersAtivos: workers,
+    sugestao: sugerirParalelo(8, sistema.memLivreMB).seguro,
+    mbPorWorker: MB_POR_WORKER,
+    execucoes: historico.map((r) => ({ nome: r.nome, inicio: r.inicio, paralelo: r.opcoes.paralelo, casos: r.casos.length, ...r.desempenho })),
+  };
+});
+// No smoke, UAT_MEMORIA_LIVRE_MB simula pouca memória livre (para testar o aviso); fora do smoke é ignorada.
+ipcMain.handle('app:sugestao-paralelo', (_e, pedido: number) => {
+  const simulada = MODO_SMOKE ? Number(process.env.UAT_MEMORIA_LIVRE_MB) : NaN;
+  // No smoke, o aviso só aparece no passo que o testa (com a memória simulada): os outros passos não dependem da memória livre do PC.
+  if (MODO_SMOKE && !(Number.isFinite(simulada) && simulada > 0)) return { seguro: Number(pedido) || 1, memLivreMB: leituraSistema().memLivreMB, excede: false };
+  return sugerirParalelo(Number(pedido) || 1, Number.isFinite(simulada) && simulada > 0 ? simulada : leituraSistema().memLivreMB);
+});
 ipcMain.handle('gravador:estado', () => estadoGravador());
 ipcMain.handle('gravador:iniciar', (_e, pedido: PedidoGravacao) => iniciarGravacao(pastaDoProjeto(), pedido));
 ipcMain.handle('gravador:remover-passo', (_e, passoId: string) => removerPasso(String(passoId)));

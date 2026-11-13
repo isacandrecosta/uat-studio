@@ -2,7 +2,7 @@
 
 Revisão técnica do código-fonte (12/11/2026), feita para apoiar a avaliação da equipa de segurança de uma entidade financeira ou de uma grande empresa portuguesa. **Não substitui** a avaliação formal da empresa (riscos de TIC, RGPD, regras internas). O documento diz o que foi verificado, como, o que foi corrigido nesta revisão e o que depende da empresa.
 
-Complementa a [ficha para a equipa de segurança](FICHA-SEGURANCA.md) e a [documentação técnica](DOCUMENTACAO-TECNICA.md).
+Complementa a [ficha para a equipa de segurança](FICHA-SEGURANCA.md) e a [manual técnico](MANUAL-TECNICO.md).
 
 ## Resumo
 

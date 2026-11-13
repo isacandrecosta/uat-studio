@@ -15,9 +15,10 @@ Para experimentar: na lista **Projeto** (canto inferior esquerdo) escolha **"Pro
 Estado: Fases 1 a 4 feitas (ver [docs/ROADMAP.md](docs/ROADMAP.md) para o que ficou pendente). Especificação em [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 
 ## Documentos
-- [Guia rápido para a equipa](docs/GUIA-RAPIDO.md)
+- [Manual do utilizador](docs/MANUAL-UTILIZADOR.md): como criar, correr e analisar testes
 - [Guia de instalação e primeiros passos](docs/GUIA-INSTALACAO.md)
-- [Documentação técnica e de compliance](docs/DOCUMENTACAO-TECNICA.md)
+- [Manual técnico](docs/MANUAL-TECNICO.md): arquitetura, dados, segurança, compliance, desempenho, manutenção
+- [Auditoria de compliance ao código](docs/AUDITORIA-COMPLIANCE.md)
 - [Ficha para a equipa de segurança](docs/FICHA-SEGURANCA.md) e [componentes e licenças](docs/LICENCAS.md)
 
 ## Em desenvolvimento

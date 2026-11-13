@@ -20,6 +20,7 @@ import * as repo from '../projeto/repositorio';
 import { lerSegredoDeTeste } from '../cofre';
 import { correrCaso, SessaoGuardada } from './correrCaso';
 import { escreverRelatorios } from './relatorios';
+import { formatarMB, monitorizarExecucao } from '../desempenho';
 
 const PASTA_EXECUCOES = 'execucoes';
 
@@ -209,6 +210,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
   log(`Utilizador: ${run.utilizador ?? '?'}`);
   log(`Browser: ${opcoes.canal === 'msedge' ? 'Edge' : 'Chrome'} | ${opcoes.visivel ? 'visível' : 'em background'} | ${paralelo} em paralelo`);
   gravarRunJson(pastaRun, run);
+  const monitor = monitorizarExecucao();
 
   const aplicacoes = new Map(repo.listar(pasta, 'aplicacoes').map((a) => [a.id, a]));
   const blocos = new Map<string, Bloco>(repo.listar(pasta, 'blocos').map((b) => [b.id, b]));
@@ -329,6 +331,13 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
       run.fim = new Date().toISOString();
       const conta = (estado: ResultadoCaso['estado']): number => run.casos.filter((c) => c.estado === estado).length;
       log(`Fim: ${conta('OK')} OK, ${conta('KO')} KO, ${conta('ERRO')} ERRO${conta('PARADO') ? `, ${conta('PARADO')} parados` : ''}`);
+      // Desempenho: o que a execução usou do PC (para comparar PCs e perceber execuções lentas).
+      const resumo = monitor.parar();
+      const terminados = run.casos.filter((c) => ['OK', 'KO', 'ERRO'].includes(c.estado) && c.duracaoMs > 0);
+      if (resumo) {
+        run.desempenho = { ...resumo, ...(terminados.length ? { duracaoMediaCasoMs: Math.round(terminados.reduce((s, c) => s + c.duracaoMs, 0) / terminados.length) } : {}) };
+        log(`Desempenho: memória livre mínima ${formatarMB(resumo.memLivreMinMB)} (${resumo.memUsadaMaxPct}% em uso no pico), processador ${resumo.cpuMedioPct}% em média e ${resumo.cpuMaxPct}% no pico${run.desempenho.duracaoMediaCasoMs ? `, ${(run.desempenho.duracaoMediaCasoMs / 1000).toFixed(1)} s por caso` : ''}`);
+      }
       try {
         gravarRunJson(pastaRun, run);
         await escreverRelatorios(pastaRun, run);

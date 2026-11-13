@@ -49,6 +49,17 @@ declare global {
       app: {
         /** "normal", ou "smoke"/"demo" nos testes automáticos e na gravação da demo (sem tutorial). */
         modo(): Promise<'normal' | 'smoke' | 'demo'>;
+        /** O PC agora (processador e memória), a memória da app e o desempenho das últimas execuções. */
+        desempenho(): Promise<{
+          sistema: { cpuPct: number; memTotalMB: number; memLivreMB: number; nucleos: number; modelo: string };
+          app: { memMB: number; processos: number };
+          workersAtivos: number;
+          sugestao: number;
+          mbPorWorker: number;
+          execucoes: Array<{ nome: string; inicio: string; paralelo: number; casos: number; memLivreMinMB?: number; memUsadaMaxPct?: number; cpuMedioPct?: number; cpuMaxPct?: number; duracaoMediaCasoMs?: number }>;
+        }>;
+        /** Quantos casos em paralelo cabem na memória livre agora. */
+        sugestaoParalelo(pedido: number): Promise<{ seguro: number; memLivreMB: number; excede: boolean }>;
       };
       blocos: {
         /** Reparar com um clique: o localizador que funcionou passa a ser o preferido do passo. */

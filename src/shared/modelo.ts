@@ -343,6 +343,14 @@ export interface EstadoRun {
   utilizador?: string;
   /** As jornadas envolvidas, como estavam no início (para o mapa de execução). */
   jornadas?: JornadaDoRun[];
+  /** Quanto do PC a execução usou (medido de 5 em 5 segundos). */
+  desempenho?: {
+    memLivreMinMB: number;
+    memUsadaMaxPct: number;
+    cpuMedioPct: number;
+    cpuMaxPct: number;
+    duracaoMediaCasoMs?: number;
+  };
 }
 
 export interface PedidoGravacao {

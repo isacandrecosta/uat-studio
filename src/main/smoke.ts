@@ -1574,6 +1574,10 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await esperar(j, "document.querySelector('#configuracoes input[value=\"claro\"]')");
         await naPagina(j, "(() => { const r = document.querySelector('#configuracoes input[value=\"claro\"]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
         confirmar((await naPagina<string>(j, 'document.documentElement.dataset.tema')) === 'claro', 'O tema devia voltar a claro.');
+        // Painel "Desempenho do PC" (fechado por omissão): abre e mostra o processador e a memória.
+        await naPagina(j, "document.getElementById('config-desempenho').open = true");
+        await esperar(j, "/%$/.test(document.getElementById('desempenho-cpu')?.textContent ?? '') && document.getElementById('desempenho-memoria')?.textContent.includes('livres')", 15_000);
+        await tirarPrint(j, raiz, 'desempenho');
         // Tutorial: começar, avançar dois passos, saltar; retomar no mesmo passo; Esc fecha.
         await naPagina(j, "document.getElementById('btn-recomecar-tutorial').click()");
         await esperar(j, "document.querySelector('#tutorial .tutorial-contador')?.textContent.startsWith('Passo 1 de')");
@@ -1591,6 +1595,37 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await esperar(j, "document.querySelector('#tutorial')?.dataset.passo === '2'");
         await naPagina(j, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
         await esperar(j, "!document.getElementById('tutorial')");
+
+        // Aviso de memória antes de correr: com 1,6 GB "livres" (valor de teste), 4 em paralelo não cabe e
+        // a ferramenta sugere 2; escolher a sugestão corre com 2. No fim, a execução tem o resumo do desempenho.
+        process.env.UAT_MEMORIA_LIVRE_MB = '1600';
+        try {
+          await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"runs\"]').click()");
+          await esperar(j, "document.getElementById('btn-correr') && !document.getElementById('btn-correr').disabled && document.querySelector('#run-ambito option[value=\"jornada:simular-credito\"]')");
+          const antes = estadoRun()?.id;
+          await naPagina(
+            j,
+            "(() => { const a = document.getElementById('run-ambito'); a.value = 'jornada:simular-credito'; a.dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('run-casos').value = 'TC0001, TC0002'; document.getElementById('run-paralelo').value = '4'; document.getElementById('btn-correr').click(); })()",
+          );
+          await esperar(j, "document.querySelector('#dialogo-escolha button[data-valor=\"seguro\"]') || document.getElementById('btn-correr-na-mesma')", 60_000);
+          if (await naPagina<boolean>(j, "Boolean(document.getElementById('btn-correr-na-mesma'))")) {
+            await naPagina(j, "document.getElementById('btn-correr-na-mesma').click()");
+            await esperar(j, "document.querySelector('#dialogo-escolha button[data-valor=\"seguro\"]')", 30_000);
+          }
+          const textoAviso = await naPagina<string>(j, "document.getElementById('dialogo-escolha').innerText");
+          confirmar(textoAviso.includes('1,6 GB') && textoAviso.includes('Sugerimos 2'), `O aviso de memória devia sugerir 2 com 1,6 GB livres: ${textoAviso}`);
+          await naPagina(j, "document.querySelector('#dialogo-escolha button[data-valor=\"seguro\"]').click()");
+          const fimInicio = Date.now() + 30_000;
+          while (estadoRun()?.id === antes && Date.now() < fimInicio) await new Promise((r) => setTimeout(r, 100));
+          confirmar(estadoRun()?.opcoes.paralelo === 2, `Devia correr com 2 em paralelo (a sugestão), correu com ${estadoRun()?.opcoes.paralelo}.`);
+        } finally {
+          delete process.env.UAT_MEMORIA_LIVRE_MB;
+        }
+        const comMedicoes = await esperarFimDoRun(180_000);
+        confirmar(comMedicoes?.desempenho && comMedicoes.desempenho.cpuMaxPct >= 0 && comMedicoes.desempenho.memLivreMinMB > 0, `A execução devia ter o resumo do desempenho: ${JSON.stringify(comMedicoes?.desempenho)}`);
+        await esperar(j, "document.getElementById('desempenho-run')?.textContent.startsWith('Desempenho:')", 15_000);
+        const linhaLog = fs.readFileSync(path.join(pastaProjeto, 'exemplo', 'execucoes', comMedicoes?.pasta ?? '', 'run.log'), 'utf8');
+        confirmar(linhaLog.includes('Desempenho: memória livre mínima'), 'O run.log devia ter a linha do desempenho.');
       },
     ],
     [

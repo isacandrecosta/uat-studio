@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EstadoRun, ResultadoCaso } from '../../shared/modelo';
+import { formatarMB } from '../desempenho';
 
 const CORES: Record<string, string> = { OK: 'FF1A8F4C', KO: 'FFC0392B', ERRO: 'FFE0A100', PARADO: 'FF98A2B3' };
 
@@ -95,6 +96,7 @@ async function escreverExcel(pastaRun: string, run: EstadoRun): Promise<void> {
     ['Início', new Date(run.inicio).toLocaleString('pt-PT')],
     ['Fim', run.fim ? new Date(run.fim).toLocaleString('pt-PT') : ''],
     ['Browser', `${run.opcoes.canal === 'msedge' ? 'Edge' : 'Chrome'}, ${run.opcoes.visivel ? 'visível' : 'em background'}, ${run.opcoes.paralelo} em paralelo`],
+    ['Desempenho', textoDesempenho(run)],
     ['Casos', run.casos.length],
     ['OK', totais.OK],
     ['KO', totais.KO],
@@ -187,6 +189,7 @@ a{color:#2457c8}
 <p class="suave">${esc(run.id)} · Ambiente ${esc(run.ambiente)} (${esc(run.tipoAmbiente)}) · ${esc(new Date(run.inicio).toLocaleString('pt-PT'))} · ${esc(
     run.opcoes.canal === 'msedge' ? 'Edge' : 'Chrome',
   )}, ${run.opcoes.visivel ? 'visível' : 'em background'}, ${run.opcoes.paralelo} em paralelo</p>
+${run.desempenho ? `<p class="suave">Desempenho: ${esc(textoDesempenho(run))}</p>` : ''}
 <div class="totais">
 <div class="total"><b>${run.casos.length}</b>casos</div>
 <div class="total t-OK"><b>${totais.OK}</b>OK</div>
@@ -203,4 +206,12 @@ ${linhas}
 export async function escreverRelatorios(pastaRun: string, run: EstadoRun): Promise<void> {
   escreverHtml(pastaRun, run);
   await escreverExcel(pastaRun, run);
+}
+
+/** Resumo do desempenho da execução (vazio nas execuções antigas, sem medições). */
+function textoDesempenho(run: EstadoRun): string {
+  const d = run.desempenho;
+  if (!d) return '';
+  const porCaso = d.duracaoMediaCasoMs ? `${(d.duracaoMediaCasoMs / 1000).toFixed(1).replace('.', ',')} s por caso; ` : '';
+  return `${porCaso}memória livre mínima ${formatarMB(d.memLivreMinMB)} (${d.memUsadaMaxPct}% em uso no pico); processador ${d.cpuMedioPct}% em média, ${d.cpuMaxPct}% no pico`;
 }

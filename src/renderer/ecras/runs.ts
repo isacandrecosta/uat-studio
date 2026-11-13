@@ -3,7 +3,7 @@ import { descreverLocalizador, estadoDoReparo, juntarReparos } from '../../share
 import type { AmbitoRun, Bloco, EstadoRun, OpcoesRun, ResultadoCaso } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { EXPLICACAO_RESULTADO, rotuloComSimbolo, SIMBOLO_RESULTADO } from '../../shared/estados.js';
-import { confirmar, h, info, maisOpcoes, mensagemDeErro, normalizarPesquisa, pedirFormulario, plural } from '../dom.js';
+import { confirmar, escolherOpcao, formatarMB, h, info, maisOpcoes, mensagemDeErro, normalizarPesquisa, pedirFormulario, plural } from '../dom.js';
 import { cartaoCobertura, cartaoComparacao } from './cobertura.js';
 
 const NOMES_ESTADO: Record<ResultadoCaso['estado'], string> = {
@@ -190,6 +190,23 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
               if (ambiente?.tipo === 'PRD') {
                 confirmouProducao = await confirmar('Ambiente de PRODUÇÃO', `O ambiente ativo (${ambiente.nome}) é de produção. Tens a certeza de que queres correr testes aqui?`, 'Correr em produção');
                 if (!confirmouProducao) return;
+              }
+              // Memória do PC: se o paralelo pedido não couber na memória livre, sugere um número seguro.
+              const pedidoParalelo = Number(paralelo.value);
+              if (pedidoParalelo > 1) {
+                const sugestao = await api.app.sugestaoParalelo(pedidoParalelo).catch(() => null);
+                if (sugestao?.excede) {
+                  const escolha = await escolherOpcao(
+                    'Memória do PC',
+                    `Este PC tem ${formatarMB(sugestao.memLivreMB)} de memória livre. Cada caso em paralelo é um browser à parte (cerca de 250 MB): com ${pedidoParalelo} em paralelo o PC pode ficar lento. Sugerimos ${sugestao.seguro} em paralelo.`,
+                    [
+                      { valor: 'manter', texto: `Correr com ${pedidoParalelo} na mesma` },
+                      { valor: 'seguro', texto: `Usar ${sugestao.seguro} em paralelo`, primario: true },
+                    ],
+                  );
+                  if (!escolha) return;
+                  if (escolha === 'seguro') paralelo.value = String(sugestao.seguro);
+                }
               }
               botao.disabled = true;
               try {
@@ -400,6 +417,13 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
           totais.PARADO > 0 && total('parados', totais.PARADO, ''),
           (totais.SALTADO ?? 0) > 0 && total('saltados', totais.SALTADO, ''),
         ),
+        run.desempenho &&
+          h(
+            'p',
+            { class: 'suave', id: 'desempenho-run' },
+            `Desempenho: ${run.desempenho.duracaoMediaCasoMs ? `${(run.desempenho.duracaoMediaCasoMs / 1000).toFixed(1).replace('.', ',')} s por caso · ` : ''}memória livre mínima ${formatarMB(run.desempenho.memLivreMinMB)} (${run.desempenho.memUsadaMaxPct}% em uso no pico) · processador ${run.desempenho.cpuMedioPct}% em média, ${run.desempenho.cpuMaxPct}% no pico`,
+            info('Medido no PC inteiro de 5 em 5 segundos durante a execução (os browsers dos testes incluídos). Serve para comparar PCs e perceber execuções mais lentas. Mais detalhe em Configurações › Desempenho do PC.'),
+          ),
         cartaoComparacao(run, historicoAtual),
         cartaoReparos(run),
         cartaoDefeitos(run),
