@@ -13,13 +13,13 @@
 ## 3. Primeiro projeto
 1. No ecrã de boas-vindas, **criar um projeto** numa pasta (de preferência uma pasta só para ele; pode ser partilhada ou estar no Git). Para experimentar, marque "com o exemplo".
 2. Escolher o **ambiente** no canto inferior esquerdo (DEV, QA ou PRD). Correr em PRD pede sempre confirmação.
-3. No ecrã **Jornadas**, cartão **Aplicações**: indicar o endereço de cada aplicação neste ambiente.
+3. No ecrã **Cenários**, cartão **Aplicações**: indicar o endereço de cada aplicação neste ambiente.
 4. Se houver APIs com autenticação: ecrã **Blocos de API** → **Perfis de autenticação** → preencher os segredos (ficam no cofre encriptado deste PC, nunca na pasta do projeto).
 
 ## 4. Onde fica cada coisa
 | O quê | Onde |
 |---|---|
-| Projeto (jornadas, blocos, casos) | A pasta do projeto que escolheu (ficheiros JSON). |
+| Projeto (cenários, blocos, casos) | A pasta do projeto que escolheu (ficheiros JSON). |
 | Resultados (relatórios, prints, logs, traces) | `<pasta do projeto>\execucoes\`. |
 | Segredos, projetos recentes | `%APPDATA%\UAT Studio\` (os segredos estão encriptados e só funcionam neste utilizador do Windows). |
 | Certificados de cliente (mTLS) | Onde indicar no perfil; de preferência dentro da pasta do projeto (`certificados\`), para viajarem com ele. A password fica no cofre. |

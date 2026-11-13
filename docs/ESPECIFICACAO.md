@@ -1,5 +1,7 @@
 # UAT Studio: especificação funcional
 
+> Especificação original, escrita antes da construção. Desde então, na interface, "jornada" passou a chamar-se **cenário de teste**, "Runs" **Execuções** e o "Mapa" **Execução ao vivo**, e há um ecrã **Início**. O funcionamento atual está no [manual do utilizador](MANUAL-UTILIZADOR.md) e no [manual técnico](MANUAL-TECNICO.md).
+
 ## 1. Conceitos
 
 | Conceito | O que é |

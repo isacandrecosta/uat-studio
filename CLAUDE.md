@@ -14,7 +14,7 @@ Lê este ficheiro no início de cada sessão. Detalhes em `docs/ESPECIFICACAO.md
 ## O que estamos a construir
 **UAT Studio**: uma aplicação desktop **portátil para Windows (.exe), 100% offline e sem IA**, para a equipa (que não programa) criar e correr testes UAT e de regressão de apps OutSystems com cliques:
 - grava ações no browser (aponta para um campo, abre-se um popup para definir o valor: fixo, coluna do Excel, fórmula, gerador);
-- organiza tudo em **Épicos → Jornadas → Blocos reutilizáveis → Casos**;
+- organiza tudo em **Épicos → Cenários de teste → Blocos reutilizáveis → Casos de teste** (no código e nos ficheiros, os cenários chamam-se `jornadas`);
 - os **blocos** podem ser de UI (passos gravados), de **API** (GET/POST/PUT/PATCH/DELETE com OAuth 2.0) ou de Email, e são todos alimentados pelos dados do caso;
 - corre casos, jornadas ou épicos (visível ou em background, Edge ou Chrome, em paralelo), com mapa ao vivo, pausa/paragem, evidências e logs detalhados numa pasta por execução;
 - tem sempre um botão "ver código" que mostra o Playwright `.ts` equivalente.
@@ -51,6 +51,10 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
 - Achado real: `Round()` do OutSystems arredonda "ao par" (86,405 → 86,40).
 
 ## Estado atual
+
+**Ponto da situação (13/11/2026):** o roadmap está feito, exceto o que depende de coisas externas (ver "Pendente" no fim). Tudo commitado e enviado (repositórios `uat-studio` e `outsystems-simulador-poc`; o servidor de teste `C:\Claude_Projects\uat-servidor-teste` não está em Git). 73 testes unitários e o smoke completo passam. Documentação para a equipa: `docs/MANUAL-UTILIZADOR.md` e `docs/MANUAL-TECNICO.md` (atualizar a cada funcionalidade). Três apps de teste em ODC: Simulador, Portal de Crédito e Catálogo de Componentes. Propostas de simplificação à espera de decisão do utilizador (entrada de 13/11 no fim).
+
+Histórico (do mais antigo para o mais recente):
 - 2026-11-10: Repositório criado com documentação (CLAUDE.md, docs/). Especificação alargada (secções 8 a 12) e roadmap reordenado (novo passo 2: mini .exe de diagnóstico).
 - 2026-11-10: **Fase 1, passo 1 feito.** Esqueleto Electron 45 + TypeScript 7 + `playwright-core`: janela com menu lateral dos 7 ecrãs (vazios) e botão "Abrir Edge na app POC" (testado: abre o Edge e carrega a app POC).
   - Estrutura: `src/main/` (`main.ts` janela e IPC, `preload.ts` ponte segura, `browser.ts` Playwright) e `src/renderer/` (`index.html`, `styles.css`, `renderer.ts`, `global.d.ts`). O `tsc` compila para `dist/`; o HTML carrega `dist/renderer/renderer.js`.
@@ -236,4 +240,5 @@ Protótipo visual (7 ecrãs, privado do utilizador): https://claude.ai/artifact/
   - `src/main/desempenho.ts` (sem executar programas do sistema: `os.cpus()`, `os.freemem()`, `app.getAppMetrics()`): `MedidorCpu`, `leituraSistema`, `sugerirParalelo` (maior de 1/2/4/8 que cabe na memória livre com 250 MB por caso e 1 GB de reserva), `resumir`, `monitorizarExecucao` (5 em 5 s). `EstadoRun.desempenho` (memória livre mínima, % em uso no pico, CPU médio/máx, duração média por caso) no `run.json`, no `run.log`, no relatório Excel/HTML e no detalhe da execução (`#desempenho-run`).
   - IPC `app:desempenho` e `app:sugestao-paralelo`. Antes de correr, se o paralelo não couber, `escolherOpcao` (novo em `dom.ts`) propõe o número seguro. No smoke, o aviso só aparece com `UAT_MEMORIA_LIVRE_MB` (memória simulada); nos outros passos não depende da memória do PC (que às vezes tem só 1 GB livre). Painel em Configurações › Desempenho do PC (`#config-desempenho`, fechado por omissão, atualiza de 2 em 2 s).
   - Documentação: `docs/MANUAL-UTILIZADOR.md` e `docs/MANUAL-TECNICO.md` substituem `GUIA-RAPIDO.md` e `DOCUMENTACAO-TECNICA.md` (que ficaram só com a ligação); a secção de compliance (RGPD, checklist) passou para o manual técnico (5.1).
+- 2026-11-13: **Revisão geral.** Tudo commitado e enviado; documentos com os nomes antigos corrigidos (README, guia de instalação, nota no início da especificação original). Propostas de simplificação dadas ao utilizador (à espera de decisão): assistente "Novo teste" do princípio ao fim; modo simples/avançado; "aceitar os resultados como esperados" (linha de base para regressão); gravar dentro do cenário ("Gravar aqui"); verificações sugeridas depois de um clique; modelo de Excel com explicações; duplicar cenários e casos; esconder termos técnicos (localizadores, data-testid) no modo simples.
 - **Pendente (depende de coisas externas):** correr o `.exe` de diagnóstico no PC da empresa (utilizador); assinatura do `.exe` (certificado da empresa); blocos de email por IMAP (falta uma caixa de testes real). "Só se for pedido": mascarar prints, limpeza automática de execuções, auditoria detalhada. Fora do roadmap: "abrir o browser de um worker" no mapa (não existe janela em background).
