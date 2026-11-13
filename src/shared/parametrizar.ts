@@ -20,6 +20,8 @@ const ACOES_COM_DADOS = ['escrever', 'escolher', 'marcar', 'verificar', 'carrega
 export function nomeDeColuna(descricao: string, acao: string): string {
   const limpo = descricao
     .replace(/^(campo|lista|opção|opcao|botão|botao|elemento|verificar|escrever|escolher|marcar)\s+/i, '')
+    // Prefixos técnicos dos identificadores (resEstado, inpValor, ddVariante, cc_resTotal): ficam de fora.
+    .replace(/(^|[\s"“”«»'])(?:cc_)?(?:res|inp|dds|ddt|dd|txt|lbl|chk|swt|rdg|rdb|sld|dpr|dp|tp|mp|bg|rat|btn|lnk|tbl|ifr|upl|bo|fo)(?=[A-Z])/g, '$1')
     .replace(/["“”«»']/g, ' ')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')

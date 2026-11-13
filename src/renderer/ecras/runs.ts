@@ -427,8 +427,54 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
         cartaoComparacao(run, historicoAtual),
         cartaoReparos(run),
         cartaoDefeitos(run),
+        caixaLinhaDeBase(run),
         zonaCasos(run),
       ),
+    );
+  }
+
+  /**
+   * "Aceitar os resultados como esperados" (linha de base): os valores lidos no ecrã passam a ser os
+   * esperados dos casos. Mostra primeiro o que muda e pede confirmação.
+   */
+  async function aceitarResultados(run: EstadoRun, chaves: string[] | null): Promise<void> {
+    if (!run.pasta) return;
+    try {
+      const mudancas = await api.runs.aceitarEsperados(run.pasta, chaves, true);
+      if (mudancas.length === 0) {
+        await confirmar('Nada a mudar', 'Os valores esperados dos casos já coincidem com os valores lidos nesta execução.', 'Fechar');
+        return;
+      }
+      const linhas = mudancas.slice(0, 8).map((m) => `${m.casoId} · ${m.coluna}: "${m.antes || '(vazio)'}" → "${m.depois}"`);
+      const mais = mudancas.length > 8 ? ` … e mais ${mudancas.length - 8}.` : '';
+      const casos = new Set(mudancas.map((m) => m.chave)).size;
+      const ok = await confirmar(
+        'Aceitar os resultados como esperados',
+        `Vão mudar ${plural(mudancas.length, 'valor esperado', 'valores esperados')} em ${plural(casos, 'caso')}: ${linhas.join('; ')}${mais} Confirme só se o que apareceu no ecrã está certo.`,
+        `Aceitar ${mudancas.length}`,
+      );
+      if (!ok) return;
+      await api.runs.aceitarEsperados(run.pasta, chaves, false);
+      await confirmar('Resultados aceites', `${plural(mudancas.length, 'valor esperado passou', 'valores esperados passaram')} a ser os lidos nesta execução. Na próxima execução, estes casos passam se o ecrã mostrar o mesmo.`, 'Fechar');
+    } catch (e) {
+      await confirmar('Não foi possível aceitar', mensagemDeErro(e), 'Fechar');
+    }
+  }
+
+  /** Caixa da linha de base numa execução terminada (só quando houve valores lidos). */
+  function caixaLinhaDeBase(run: EstadoRun): HTMLElement | false {
+    if (run.ativo || !run.casos.some((c) => Object.keys(c.valoresLidos ?? {}).length > 0)) return false;
+    return h(
+      'div',
+      { class: 'caixa-linha-base', id: 'linha-de-base' },
+      h(
+        'p',
+        {},
+        h('strong', {}, 'Linha de base: '),
+        'os valores que apareceram no ecrã podem passar a ser os valores esperados dos casos.',
+        info('Útil para testes de regressão: grave o teste, corra-o uma vez, confirme que o ecrã está certo e aceite. A partir daí, qualquer valor diferente aparece como ✗ Falhou. Também preenche as colunas de valores esperados que estavam vazias.'),
+      ),
+      h('button', { type: 'button', class: 'botao', id: 'btn-aceitar-esperados', onclick: () => void aceitarResultados(run, null) }, 'Aceitar os resultados como esperados'),
     );
   }
 
@@ -730,6 +776,18 @@ export async function ecraRuns({ estado, corpo, acoes, selecao, irPara }: Contex
             },
             'Copiar log',
           ),
+          !run.ativo &&
+            Object.keys(caso.valoresLidos ?? {}).length > 0 &&
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao botao-pequeno-livre botao-aceitar-caso',
+                title: 'Os valores que apareceram no ecrã passam a ser os valores esperados deste caso (mostra antes o que muda).',
+                onclick: () => void aceitarResultados(run, [caso.chave]),
+              },
+              'Aceitar este resultado',
+            ),
           (caso.estado === 'KO' || caso.estado === 'ERRO') &&
             h(
               'button',

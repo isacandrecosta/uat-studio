@@ -800,3 +800,44 @@ kbd { padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(255, 255, 255
 .tabela-desempenho { width: 100%; font-size: 12.5px; }
 .tabela-desempenho td { padding: 5px 8px; }
 #configuracoes { width: min(720px, 92vw); }
+
+/* Linha de base (aceitar os resultados como esperados) */
+.caixa-linha-base { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--borda); border-left: 4px solid var(--primario); border-radius: 8px; background: var(--primario-fundo); }
+.caixa-linha-base p { margin: 0; }
+
+/* Modo simples: esconde o que é avançado (continua na página; muda-se em Configurações › Modo). */
+[data-modo="simples"] .menu-item[data-ecra="api"],
+[data-modo="simples"] .menu-item[data-ecra="mapa"],
+[data-modo="simples"] #btn-ver-codigo,
+[data-modo="simples"] [data-codigo],
+[data-modo="simples"] #btn-codigo-api,
+[data-modo="simples"] #btn-passo-rede,
+[data-modo="simples"] #btn-modo-print,
+[data-modo="simples"] #percurso .mais-opcoes,
+[data-modo="simples"] .menu-acoes:has(#btn-novo-email),
+[data-modo="simples"] .cartao:has(#lista-variaveis),
+[data-modo="simples"] .cartao:has(#lista-contadores) { display: none !important; }
+.indicador-modo { margin-top: 2px; padding: 4px 6px; border: 0; background: none; color: var(--lateral-texto); font: inherit; font-size: 11.5px; text-align: left; opacity: 0.75; cursor: pointer; }
+.indicador-modo:hover { opacity: 1; text-decoration: underline; }
+
+/* Assistente "Novo teste" */
+.chamada-novo-teste { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-left: 4px solid var(--primario); }
+.chamada-novo-teste h2 { margin: 0 0 4px; }
+.assistente { width: min(680px, 94vw); }
+.assistente-passos { display: flex; gap: 6px; margin: 4px 0 14px; padding: 0; list-style: none; counter-reset: passo; }
+.assistente-passos li { flex: 1; padding: 6px 8px; border-radius: 8px; background: var(--neutro-fundo); color: var(--texto-suave); font-size: 12.5px; font-weight: 600; counter-increment: passo; }
+.assistente-passos li::before { content: counter(passo) ". "; }
+.assistente-passos li[data-estado="atual"] { background: var(--primario); color: #fff; }
+.assistente-passos li[data-estado="feito"] { background: var(--ok-fundo); color: var(--ok); }
+.assistente-corpo { display: flex; flex-direction: column; gap: 8px; }
+.assistente-corpo > label { font-weight: 600; margin-top: 4px; display: flex; align-items: center; }
+.assistente-nova-app { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px dashed var(--borda-forte); border-radius: 8px; }
+.assistente-nova-app label { font-weight: 600; display: flex; align-items: center; }
+.assistente-dica { padding: 10px 12px; border-radius: 8px; background: var(--primario-fundo); }
+.assistente-dica p, .assistente-dica ul { margin: 0 0 4px; }
+.assistente-contagem { font-size: 16px; font-weight: 700; margin: 6px 0 0; }
+.assistente-ultimos { margin: 0; padding-left: 20px; color: var(--texto-suave); font-size: 13px; }
+.assistente-variaveis { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 45vh; overflow: auto; }
+.assistente-variavel { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 10px; align-items: center; padding: 6px 8px; border: 1px solid var(--borda); border-radius: 8px; }
+.assistente-variavel .opcao { font-weight: 400; }
+.assistente-pronto { font-size: 18px; font-weight: 700; color: var(--ok); margin: 0; }

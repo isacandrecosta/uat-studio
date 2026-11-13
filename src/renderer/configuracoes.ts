@@ -27,6 +27,45 @@ escuroNoWindows.addEventListener('change', () => {
   if (temaEscolhido() === 'sistema') aplicarTema();
 });
 
+// ---------------------------------------------------------------- modo simples / avançado
+
+export type Modo = 'simples' | 'avancado';
+const CHAVE_MODO = 'uat.modo';
+/** Nos testes automáticos e na demo, corre sempre em modo avançado (vê-se tudo). */
+let modoForcado: Modo | null = null;
+
+export function modoEscolhido(): Modo {
+  try {
+    return localStorage.getItem(CHAVE_MODO) === 'avancado' ? 'avancado' : 'simples';
+  } catch {
+    return 'simples';
+  }
+}
+
+/** Aplica o modo: no simples, o CSS esconde os ecrãs e opções avançadas (continuam na página). */
+export function aplicarModo(): void {
+  const modo = modoForcado ?? modoEscolhido();
+  document.documentElement.dataset.modo = modo;
+  const indicador = document.getElementById('indicador-modo');
+  if (indicador) indicador.hidden = modo !== 'simples';
+}
+
+export function forcarModo(m: Modo): void {
+  modoForcado = m;
+  aplicarModo();
+}
+
+export function definirModo(m: Modo): void {
+  // Uma escolha explícita (também no smoke) vale mais do que o modo forçado.
+  modoForcado = null;
+  try {
+    localStorage.setItem(CHAVE_MODO, m);
+  } catch {
+    // Sem armazenamento local: vale só até fechar a app.
+  }
+  aplicarModo();
+}
+
 export function definirTema(t: Tema): void {
   try {
     localStorage.setItem(CHAVE_TEMA, t);
@@ -44,10 +83,22 @@ export function abrirConfiguracoes(irPara: (ecra: string) => void): void {
     return h('label', { class: 'opcao opcao-tema' }, radio, h('span', {}, h('strong', {}, nome), h('span', { class: 'suave' }, ` ${ajuda}`)));
   };
   const passo = passoGuardado();
+  const opcaoModo = (valor: Modo, nome: string, ajuda: string): HTMLElement => {
+    const radio = h('input', { type: 'radio', name: 'modo', value: valor, checked: (modoForcado ?? modoEscolhido()) === valor });
+    radio.addEventListener('change', () => definirModo(valor));
+    return h('label', { class: 'opcao opcao-tema' }, radio, h('span', {}, h('strong', {}, nome), h('span', { class: 'suave' }, ` ${ajuda}`)));
+  };
   const janela = h(
     'dialog',
     { id: 'configuracoes', class: 'dialogo' },
     h('h2', {}, 'Configurações'),
+    h(
+      'fieldset',
+      { class: 'grupo-config' },
+      h('legend', {}, 'Modo'),
+      opcaoModo('simples', 'Simples', 'o essencial para gravar, montar, correr e analisar testes (recomendado para começar)'),
+      opcaoModo('avancado', 'Avançado', 'mostra também os blocos de API, a execução ao vivo, condições "só se", sessões, passos de rede, modo print, variáveis calculadas e o código Playwright'),
+    ),
     h(
       'fieldset',
       { class: 'grupo-config' },

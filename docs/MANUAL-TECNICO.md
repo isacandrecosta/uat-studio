@@ -51,8 +51,8 @@ Para o uso do dia a dia, ver o [manual do utilizador](MANUAL-UTILIZADOR.md). Doc
 | `src/main/api/` | Pedidos HTTP, OAuth 2.0 (incluindo PKCE), certificados de cliente, XML/SOAP. |
 | `src/main/desempenho.ts` | Medir o processador e a memória do PC e sugerir quantos casos em paralelo. |
 | `src/main/demo/` | Modo demo: vídeos com legendas e guia ilustrado (só para desenvolvimento). |
-| `src/renderer/` | A interface: menu, ecrãs, tutorial, configurações, pesquisa rápida, estilos (tema claro e escuro). |
-| `src/shared/` | Modelo de dados, fórmulas, decimal exato, estados, mapa, cobertura, sugestões, defeitos, parametrizar. |
+| `src/renderer/` | A interface: menu, ecrãs, assistente "Novo teste" (`assistente.ts`), tutorial, configurações (modo, tema, desempenho), pesquisa rápida, estilos (tema claro e escuro, modo simples). |
+| `src/shared/` | Modelo de dados, fórmulas, decimal exato, estados, mapa, cobertura, sugestões, defeitos, parametrizar, aceitar resultados. |
 | `src/tests/` | Testes unitários (`npm.cmd test`). |
 
 ## 3. Onde ficam os dados
@@ -112,6 +112,20 @@ Projetos recentes, o **cofre de segredos** (`cofre\`, encriptado), os projetos d
 - **Respostas**: JSON por caminho (um campo em falta conta como 0, regra das APIs do OutSystems) e XML/SOAP por XPath.
 - **Email**: uma API ao estilo do Microsoft Graph, para esperar, verificar e extrair valores (por exemplo, um código de MFA).
 - **No browser**: intercetar o que a aplicação envia e simular respostas de APIs externas.
+
+### 4.4 Simplificações para quem não é técnico
+- **Assistente "Novo teste"** (`src/renderer/assistente.ts`): uma janela com 4 passos que junta peças que já existem:
+  - aplicação nova (`dados.guardar`);
+  - gravação (`gravador.iniciar`/`terminar`, com a contagem de passos ao vivo);
+  - épico e cenário com o bloco gravado;
+  - "o que varia" (`valoresFixos` + `blocos.parametrizar`, que cria as colunas e o caso TC0001);
+  - "Correr agora" (`runs.iniciar`).
+- **Aceitar os resultados como esperados**:
+  - em cada verificação cujo esperado vem de uma coluna, o executor guarda o valor lido em `ResultadoCaso.valoresLidos` (coluna → valor). Também quando a coluna está vazia: lê o ecrã e o passo fica "ignorado". Nunca guarda colunas com segredos;
+  - `src/shared/aceitar.ts` calcula as mudanças (números iguais em formatos diferentes não contam) e aplica-as;
+  - IPC `run:aceitar-esperados`, com uma simulação primeiro para a confirmação.
+- **Duplicar**: cenário (com os casos) no ecrã Cenários; caso na tabela do editor (ID seguinte livre).
+- **Modo simples/avançado**: `localStorage` "uat.modo" (por omissão "simples") → `data-modo` no `<html>`. O CSS esconde no modo simples os ecrãs API e Execução ao vivo, "Ver código", passos de rede, modo print, "Mais opções" do percurso, os blocos de email/manuais e as variáveis calculadas e contadores. Os elementos continuam na página. O smoke e a demo correm sempre em modo avançado (`forcarModo`, IPC `app:modo`); uma escolha explícita em Configurações vale mais.
 
 ## 5. Segurança (resumo)
 
@@ -233,6 +247,7 @@ Cuidados:
 
 | Data | O que mudou |
 |---|---|
+| 13/11/2026 | **Simplificar**: assistente "Novo teste" (4 passos, do zero a um teste a correr), aceitar os resultados como esperados (linha de base, também para colunas vazias), duplicar cenários e casos, modo simples/avançado. |
 | 13/11/2026 | **Desempenho**: medição do PC durante cada execução (resumo no detalhe, no `run.log` e nos relatórios), aviso antes de correr quando o paralelo não cabe na memória livre, painel em Configurações › Desempenho do PC. Manuais do utilizador e técnico. |
 | 12/11/2026 | Interface: linguagem de QA (cenários de teste, execuções), ecrã Início, faixa do ambiente, estados com símbolos, separadores no editor, "Mais opções", filtros, detalhe do caso ao lado, pesquisa rápida (Ctrl+K), ajudas "i", modo escuro, tutorial guiado. |
 | 12/11/2026 | Transformar valores fixos em colunas, descrições de cenários e blocos, "Criar defeito", segredos de teste no cofre, endurecimento da janela, auditoria de compliance. |

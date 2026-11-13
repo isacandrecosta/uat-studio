@@ -143,6 +143,25 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
                     jornada.etiquetas.map((e) => h('span', { class: 'etiqueta' }, e)),
                     h('span', {}, plural(jornada.blocos.length, 'bloco')),
                     h('span', {}, plural(numeroDeCasos(jornada.id), 'caso')),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        class: 'botao botao-pequeno-livre botao-duplicar-cenario',
+                        'data-duplicar': jornada.id,
+                        title: 'Criar uma cópia deste cenário, com os mesmos blocos e os mesmos casos de teste, para fazer uma variação.',
+                        onclick: async () => {
+                          const { id, ...resto } = jornada;
+                          void id;
+                          const nova = await dados.guardar('jornadas', { ...resto, nome: `${jornada.nome} (cópia)` });
+                          const casos = conjuntos.find((c) => c.id === jornada.id);
+                          if (casos) await dados.guardar('casos', { ...structuredClone(casos), id: nova.id });
+                          selecao.jornadaId = nova.id;
+                          irPara('editor');
+                        },
+                      },
+                      'Duplicar',
+                    ),
                   ),
                 ),
               ),

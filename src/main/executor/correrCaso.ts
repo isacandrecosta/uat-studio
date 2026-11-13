@@ -349,6 +349,19 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   };
 
   /** Resolve o valor de um passo, tendo em conta os parâmetros do bloco nesta jornada. */
+  /** A coluna dos casos de onde vem o valor de um passo (tendo em conta os parâmetros do cenário), ou null. */
+  const colunaDoValor = (valor: Valor | undefined, item: BlocoDaJornada): string | null => {
+    if (valor?.tipo !== 'variavel') return null;
+    const troca = item.parametros?.[valor.nome];
+    if (!troca) return valor.nome;
+    return troca.tipo === 'variavel' ? troca.nome : null;
+  };
+  /** Regista o valor lido para "aceitar os resultados como esperados" (nunca colunas com segredos). */
+  const registarLido = (coluna: string | null, valor: string): void => {
+    if (!coluna || segredos.has(coluna) || coluna === 'TESTE' || coluna === 'RUN') return;
+    resultado.valoresLidos = { ...(resultado.valoresLidos ?? {}), [coluna]: valor };
+  };
+
   const resolver = (valor: Valor | undefined, item: BlocoDaJornada, onde = 'passo'): { texto: string; deVariavel: boolean } => {
     if (!valor) return { texto: '', deVariavel: false };
     if (valor.tipo === 'fixo') return { texto: valor.valor, deVariavel: false };
@@ -950,9 +963,19 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           if (tipo !== 'visivel') {
             const valor = resolver(passo.valor, item);
             esperado = valor.texto;
-            // Coluna vazia no Excel = "não verificar este valor neste caso".
+            // Coluna vazia no Excel = "não verificar este valor neste caso". Mesmo assim, lê o ecrã (sem falhar),
+            // para depois se poder "aceitar os resultados como esperados" e preencher a coluna.
             if (valor.deVariavel && esperado.trim() === '') {
-              return { estado: 'ignorado', detalhe: 'sem valor esperado nos dados do caso' };
+              let lido = '';
+              try {
+                const leitura = await lerElemento(p, passo, { limiteMs: Math.max(500, fim - Date.now()), linha });
+                const numero = tipo === 'numero' ? lerNumero(leitura.texto) : null;
+                lido = numero ? formatar(numero) : compactar(leitura.texto);
+                registarLido(colunaDoValor(passo.valor, item), lido);
+              } catch {
+                // Elemento não encontrado: fica só "ignorado".
+              }
+              return { estado: 'ignorado', detalhe: lido ? `sem valor esperado nos dados do caso (lido: "${lido}")` : 'sem valor esperado nos dados do caso' };
             }
           }
           const tolerancia = lerNumero(passo.verificacao?.tolerancia ?? '0') ?? { inteiro: 0n, casas: 0 };
@@ -992,12 +1015,14 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
             }
             if (coincide) {
               ecraAssente = true;
+              if (tipo !== 'visivel') registarLido(colunaDoValor(passo.valor, item), obtido);
               return { estado: 'ok', detalhe: juntar(tipo === 'visivel' ? undefined : `"${obtido}"`, notaLinha, nota) };
             }
             if (Date.now() >= fim) break;
             await p.waitForTimeout(200);
           }
           ecraAssente = true;
+          if (tipo !== 'visivel' && obtido !== '(elemento não encontrado)') registarLido(colunaDoValor(passo.valor, item), obtido);
           const esperadoMostrado = tipo === 'visivel' ? 'visível' : numeroEsperado ? formatar(numeroEsperado) : compactar(esperado);
           return {
             estado: 'ko',

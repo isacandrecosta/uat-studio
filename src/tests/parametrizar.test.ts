@@ -26,6 +26,11 @@ test('nomes de coluna a partir do nome do campo', () => {
   assert.equal(nomeDeColuna('Lista "Duração (meses)"', 'escolher'), 'DuracaoMeses');
   assert.equal(nomeDeColuna('Estado', 'verificar'), 'EstadoEsperado');
   assert.equal(nomeDeColuna('123', 'escrever'), 'Valor123');
+  // Sem os prefixos técnicos dos identificadores.
+  assert.equal(nomeDeColuna('resEstado', 'verificar'), 'EstadoEsperado');
+  assert.equal(nomeDeColuna('Campo inpValor', 'escrever'), 'Valor');
+  assert.equal(nomeDeColuna('cc_resTotal', 'verificar'), 'TotalEsperado');
+  assert.equal(nomeDeColuna('Resultado', 'verificar'), 'ResultadoEsperado');
   assert.ok(colunaValida('NomeEmpresa') && !colunaValida('Nome Empresa') && !colunaValida('1Nome'));
 });
 

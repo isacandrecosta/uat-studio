@@ -72,6 +72,7 @@ contextBridge.exposeInMainWorld('uatStudio', {
     lerTexto: chamar('run:ler-texto'),
     defeito: chamar('run:defeito'),
     defeitos: chamar('run:defeitos'),
+    aceitarEsperados: chamar('run:aceitar-esperados'),
     guardarDefeito: chamar('run:defeito-guardar'),
     abrirTrace: chamar('run:abrir-trace'),
     pdf: chamar('run:pdf'),

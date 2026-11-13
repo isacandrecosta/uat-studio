@@ -267,6 +267,11 @@ export interface ResultadoCaso {
   worker?: number;
   /** Passos onde o localizador preferido falhou e uma alternativa funcionou (para reparar com um clique). */
   reparos?: SugestaoReparo[];
+  /**
+   * Valor lido no ecrã em cada verificação cujo esperado vem de uma coluna dos casos (coluna → valor).
+   * Serve para "Aceitar os resultados como esperados" (incluindo colunas que estavam vazias).
+   */
+  valoresLidos?: Record<string, string>;
 }
 
 /** nao-corrido: ficou por correr (depois de um erro, ou o caso foi parado/saltado). */

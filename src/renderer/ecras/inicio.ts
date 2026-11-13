@@ -4,9 +4,10 @@
 import { EXPLICACAO_RESULTADO, rotuloComSimbolo, SIMBOLO_RESULTADO, type Resultado } from '../../shared/estados.js';
 import type { EstadoRun } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
-import { h, plural } from '../dom.js';
+import { h, info, plural } from '../dom.js';
+import { abrirAssistente } from '../assistente.js';
 
-export async function ecraInicio({ estado, corpo, irPara, selecao }: Contexto): Promise<void> {
+export async function ecraInicio({ estado, corpo, acoes, irPara, selecao }: Contexto): Promise<void> {
   const api = window.uatStudio;
   const [jornadas, conjuntos, blocos, aplicacoes, historico] = await Promise.all([
     api.dados.listar('jornadas'),
@@ -132,7 +133,21 @@ export async function ecraInicio({ estado, corpo, irPara, selecao }: Contexto): 
         ),
   );
 
-  void selecao;
-  void estado;
-  corpo.append(h('div', { class: 'inicio' }, resumo, atencao, tarefas, recentes));
+  // O caminho mais curto para um teste a correr: o assistente "Novo teste".
+  const abrir = (): void =>
+    void abrirAssistente({
+      estado,
+      irPara,
+      abrirCenario: (id) => {
+        selecao.jornadaId = id;
+      },
+    });
+  acoes.append(h('button', { type: 'button', class: 'botao botao-primario', id: 'btn-novo-teste', onclick: abrir }, '+ Novo teste'));
+  const chamada = h(
+    'section',
+    { class: 'cartao chamada-novo-teste', id: 'inicio-novo-teste' },
+    h('div', {}, h('h2', {}, 'Criar um teste em 4 passos', info('O assistente pergunta o que vai testar, abre o Edge para gravar, pergunta o que varia de caso para caso (fica numa coluna, para o Excel) e deixa o teste pronto a correr.')), h('p', { class: 'suave' }, 'Grave no browser e escolha o que muda de caso para caso. O assistente faz o resto: cria o cenário e o primeiro caso de teste.')),
+    h('button', { type: 'button', class: 'botao botao-primario', id: 'btn-novo-teste-cartao', onclick: abrir }, 'Começar'),
+  );
+  corpo.append(h('div', { class: 'inicio' }, chamada, resumo, atencao, tarefas, recentes));
 }

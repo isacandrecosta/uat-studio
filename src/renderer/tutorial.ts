@@ -17,6 +17,7 @@ const PASSOS: PassoTutorial[] = [
     titulo: 'Bem-vindo ao UAT Studio',
     texto: 'Em poucos passos, este tutorial mostra como se constrói um teste de ponta a ponta: registar a aplicação, gravar, montar o cenário, escrever os casos, correr e analisar. Pode saltá-lo e retomá-lo quando quiser em Configurações.',
   },
+  { ecra: 'inicio', alvo: '#btn-novo-teste', titulo: 'O caminho mais rápido: Novo teste', texto: 'O assistente cria um teste em 4 passos: o que vai testar, gravar no Edge, o que varia de caso para caso e correr. Os passos seguintes do tutorial mostram cada peça em pormenor.' },
   { ecra: 'inicio', alvo: '#inicio-resumo', titulo: 'Início: o ponto da situação', texto: 'Quantos cenários e casos de teste há e como correu a última execução: ✓ Passou, ✗ Falhou (um valor diferente do esperado) ou ! Bloqueado (não chegou ao fim).' },
   { ecra: 'inicio', alvo: '#faixa-ambiente', titulo: 'O ambiente está sempre à vista', texto: 'A faixa diz onde se está a testar: verde DEV, azul QA, vermelho PRODUÇÃO. Muda-se de ambiente no canto inferior esquerdo.' },
   { ecra: 'jornadas', alvo: '#cartao-aplicacoes', titulo: '1. Registar a aplicação', texto: 'Cada aplicação a testar tem um endereço por ambiente. Os testes usam sempre o endereço do ambiente ativo, por isso o mesmo teste corre em DEV e em QA.' },

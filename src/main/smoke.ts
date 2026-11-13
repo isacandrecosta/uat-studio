@@ -258,7 +258,7 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(larguras.conteudo <= larguras.visivel, `O editor tem deslocamento horizontal (${larguras.conteudo} > ${larguras.visivel}).`);
 
         // Repor: apagar o caso novo e retirar o 2.º bloco (o exemplo fica como estava para os passos seguintes).
-        await naPagina(j, "document.querySelector('#tabela-casos tbody tr:last-child button').click()");
+        await naPagina(j, "document.querySelector('#tabela-casos tbody tr:last-child button[aria-label^=\"Apagar o caso\"]').click()");
         await esperar(j, "document.querySelectorAll('#tabela-casos tbody tr').length === 6");
         await naPagina(j, "document.querySelector('#percurso > li:nth-child(2) .acoes button:last-child').click()");
         await esperar(j, "document.querySelectorAll('#percurso > li').length === 1");
@@ -1626,6 +1626,133 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await esperar(j, "document.getElementById('desempenho-run')?.textContent.startsWith('Desempenho:')", 15_000);
         const linhaLog = fs.readFileSync(path.join(pastaProjeto, 'exemplo', 'execucoes', comMedicoes?.pasta ?? '', 'run.log'), 'utf8');
         confirmar(linhaLog.includes('Desempenho: memória livre mínima'), 'O run.log devia ter a linha do desempenho.');
+      },
+    ],
+    [
+      'simplificar: assistente "Novo teste", aceitar os resultados como esperados, duplicar e modo simples',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        // 1. Assistente: nome, aplicação e épico; gravar no Simulador; o que varia; correr.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"inicio\"]').click()");
+        await esperar(j, "document.getElementById('btn-novo-teste')");
+        await naPagina(j, "document.getElementById('btn-novo-teste').click()");
+        await esperar(j, "document.getElementById('assistente-nome') && document.querySelector('#assistente-aplicacao option[value=\"simulador\"]')");
+        await naPagina(
+          j,
+          "(() => { document.getElementById('assistente-nome').value = 'Teste do assistente'; const a = document.getElementById('assistente-aplicacao'); a.value = 'simulador'; a.dispatchEvent(new Event('change')); document.getElementById('assistente-epico').value = 'simulacoes'; document.getElementById('assistente-gravar').click(); })()",
+        );
+        await esperar(j, "document.getElementById('assistente-contagem')", 120_000);
+        const p = paginaDoGravador();
+        if (!p) throw new Error('O gravador não tem página.');
+        const popup = p.locator('#__uat-gravador .popup');
+        const numeroDePassos = (): number => estadoGravador().bloco?.passos.length ?? 0;
+        const gravar = async (): Promise<void> => {
+          const antes = numeroDePassos();
+          await popup.getByRole('button', { name: 'Gravar passo' }).click();
+          const fim = Date.now() + 20_000;
+          while (numeroDePassos() === antes) {
+            if (Date.now() > fim) throw new Error(`O passo não foi gravado: ${await p.locator('#__uat-gravador .aviso').textContent()}`);
+            await p.waitForTimeout(100);
+          }
+          await popup.waitFor({ state: 'detached' });
+        };
+        const tid = (id: string) => p.locator(`[data-testid="${id}"]`);
+        const lista = tid('ddVariante').locator('select');
+        await lista.locator('option').nth(1).waitFor({ state: 'attached', timeout: 60_000 });
+        await p.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => undefined);
+        await lista.click();
+        await popup.waitFor();
+        const opcoes = await popup.getByLabel('Opção a escolher').locator('option').allTextContents();
+        await popup.getByLabel('Opção a escolher').selectOption({ label: opcoes.find((o) => o.startsWith('CP12')) ?? opcoes[1] });
+        await gravar();
+        await tid('inpValor').click();
+        await popup.waitFor();
+        await popup.getByLabel('Texto a escrever').fill('1000');
+        await gravar();
+        await tid('btnSubmeter').click();
+        await popup.waitFor();
+        await gravar();
+        await p.waitForFunction(() => (document.querySelector('[data-testid="resEstado"]')?.textContent ?? '').trim() !== '', undefined, { timeout: 30_000 });
+        await tid('resEstado').click();
+        await popup.waitFor();
+        await popup.getByRole('button', { name: 'Verificar' }).click();
+        await gravar();
+        await tid('resPrestacao').click();
+        await popup.waitFor();
+        await popup.getByRole('button', { name: 'Verificar' }).click();
+        await popup.getByLabel('O que verificar').selectOption('numero');
+        await gravar();
+        await esperar(j, "document.getElementById('assistente-contagem').textContent.startsWith('5 passos')", 10_000);
+        await naPagina(j, "document.getElementById('assistente-terminar').click()");
+        await esperar(j, "document.getElementById('assistente-continuar') && document.querySelectorAll('.assistente-variavel').length > 0", 30_000);
+        const colunasSugeridas = await naPagina<string[]>(j, "[...document.querySelectorAll('.assistente-coluna')].map((c) => c.value)");
+        console.log(`[smoke]   assistente: colunas sugeridas ${colunasSugeridas.join(', ')}`);
+        confirmar(colunasSugeridas.length === 4, `Deviam ser sugeridas 4 colunas (variante, valor, estado, prestação): ${colunasSugeridas.join(', ')}`);
+        await naPagina(j, "document.getElementById('assistente-continuar').click()");
+        await esperar(j, "document.getElementById('assistente-correr')", 30_000);
+        const cenario = repo.listar(pasta, 'jornadas').find((x) => x.nome === 'Teste do assistente');
+        if (!cenario) throw new Error('O assistente devia ter criado o cenário.');
+        const casosCriados = repo.ler(pasta, 'casos', cenario.id);
+        confirmar(cenario.epicoId === 'simulacoes' && casosCriados.casos.length === 1 && casosCriados.colunas.length === 4 && casosCriados.casos[0].dados[colunasSugeridas[1]] === '1000', `O cenário do assistente não ficou como esperado: ${JSON.stringify(casosCriados)}`);
+        const antesDeCorrer = estadoRun()?.id;
+        await naPagina(j, "document.getElementById('assistente-correr').click()");
+        const fimInicio = Date.now() + 30_000;
+        while (estadoRun()?.id === antesDeCorrer && Date.now() < fimInicio) await new Promise((r) => setTimeout(r, 100));
+        const primeira = await esperarFimDoRun(120_000);
+        console.log(`[smoke]   assistente: ${primeira?.casos.map((c) => `${c.casoId}=${c.estado}`).join(', ')}`);
+        confirmar(primeira?.casos[0]?.estado === 'OK', `O teste criado pelo assistente devia passar: ${primeira?.casos[0]?.erro?.mensagem ?? JSON.stringify(primeira?.casos[0]?.diferencas)}`);
+        await esperar(j, "document.getElementById('titulo-ecra').textContent === 'Execuções'");
+
+        // 2. Aceitar os resultados como esperados: estado errado e prestação vazia → aceitar → passa.
+        const colunaEstado = colunasSugeridas[2];
+        const colunaPrestacao = colunasSugeridas[3];
+        const comErros = repo.ler(pasta, 'casos', cenario.id);
+        comErros.casos[0].dados[colunaEstado] = 'Errado';
+        comErros.casos[0].dados[colunaPrestacao] = '';
+        repo.guardar(pasta, 'casos', comErros);
+        await iniciarRun(pasta, { jornadaIds: [cenario.id] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const segunda = await esperarFimDoRun(120_000);
+        confirmar(segunda?.casos[0]?.estado === 'KO', `Com o estado errado, o caso devia falhar: ${segunda?.casos[0]?.estado}`);
+        const previsao = await naPagina<Array<{ coluna: string; antes: string; depois: string }>>(j, `window.uatStudio.runs.aceitarEsperados(${JSON.stringify(segunda?.pasta)}, null, true)`);
+        console.log(`[smoke]   aceitar: ${previsao.map((m) => `${m.coluna}: "${m.antes}" → "${m.depois}"`).join('; ')}`);
+        confirmar(previsao.length === 2 && previsao.some((m) => m.coluna === colunaEstado && m.depois === 'Aprovado') && previsao.some((m) => m.coluna === colunaPrestacao && m.antes === '' && m.depois !== ''), 'Aceitar devia corrigir o estado e preencher a prestação vazia.');
+        await esperar(j, "document.getElementById('btn-aceitar-esperados')", 15_000);
+        await naPagina(j, "document.getElementById('btn-aceitar-esperados').click()");
+        await esperar(j, "[...document.querySelectorAll('dialog[open] button')].some((b) => b.textContent === 'Aceitar 2')");
+        await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Aceitar 2').click()");
+        await esperar(j, "[...document.querySelectorAll('dialog[open] button')].some((b) => b.textContent === 'Fechar') && document.querySelector('dialog[open]').innerText.includes('Resultados aceites')", 15_000);
+        await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Fechar').click()");
+        const aceites = repo.ler(pasta, 'casos', cenario.id).casos[0].dados;
+        confirmar(aceites[colunaEstado] === 'Aprovado' && aceites[colunaPrestacao] !== '', `Os valores aceites não ficaram nos casos: ${JSON.stringify(aceites)}`);
+        await iniciarRun(pasta, { jornadaIds: [cenario.id] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const terceira = await esperarFimDoRun(120_000);
+        confirmar(terceira?.casos[0]?.estado === 'OK', `Depois de aceitar, o caso devia passar: ${JSON.stringify(terceira?.casos[0]?.diferencas)}`);
+
+        // 3. Duplicar o cenário (com os casos) e um caso.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, `document.querySelector('[data-duplicar=${JSON.stringify(cenario.id)}]')`);
+        await naPagina(j, `document.querySelector('[data-duplicar=${JSON.stringify(cenario.id)}]').click()`);
+        await esperar(j, "document.getElementById('titulo-ecra').textContent === 'Editor do cenário' && document.getElementById('caminho').textContent.includes('Teste do assistente (cópia)')", 15_000);
+        const copia = repo.listar(pasta, 'jornadas').find((x) => x.nome === 'Teste do assistente (cópia)');
+        if (!copia) throw new Error('A cópia do cenário não foi criada.');
+        confirmar(repo.ler(pasta, 'casos', copia.id).casos.length === 1, 'A cópia devia ter os casos do original.');
+        await naPagina(j, "document.querySelector('.separador[data-painel=\"casos\"]').click()");
+        await esperar(j, "document.querySelector('.botao-duplicar-caso')");
+        await naPagina(j, "document.querySelector('.botao-duplicar-caso').click()");
+        const fimDuplicar = Date.now() + 10_000;
+        while (repo.ler(pasta, 'casos', copia.id).casos.length < 2 && Date.now() < fimDuplicar) await new Promise((r) => setTimeout(r, 100));
+        const duplicados = repo.ler(pasta, 'casos', copia.id).casos;
+        confirmar(duplicados.length === 2 && duplicados[1].id === 'TC0002' && duplicados[1].dados[colunaEstado] === 'Aprovado', `O caso duplicado não ficou como esperado: ${JSON.stringify(duplicados.map((c) => c.id))}`);
+
+        // 4. Modo simples: esconde os ecrãs avançados; o avançado mostra tudo outra vez.
+        const visivel = (seletor: string): Promise<boolean> => naPagina<boolean>(j, `(() => { const e = document.querySelector(${JSON.stringify(seletor)}); return Boolean(e) && getComputedStyle(e).display !== 'none'; })()`);
+        await naPagina(j, "document.getElementById('btn-configuracoes').click()");
+        await esperar(j, "document.querySelector('#configuracoes input[value=\"simples\"]')");
+        await naPagina(j, "(() => { const r = document.querySelector('#configuracoes input[value=\"simples\"]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+        confirmar(!(await visivel('.menu-item[data-ecra="api"]')) && !(await visivel('.menu-item[data-ecra="mapa"]')) && (await visivel('.menu-item[data-ecra="gravar"]')) && (await visivel('#indicador-modo')), 'No modo simples, os ecrãs de API e da execução ao vivo deviam estar escondidos.');
+        await naPagina(j, "(() => { const r = document.querySelector('#configuracoes input[value=\"avancado\"]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+        confirmar((await visivel('.menu-item[data-ecra="api"]')) && !(await visivel('#indicador-modo')), 'No modo avançado, tudo devia voltar a aparecer.');
+        await naPagina(j, "[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'Fechar').click()");
       },
     ],
     [

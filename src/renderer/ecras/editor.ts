@@ -472,7 +472,21 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
         }),
         h(
           'td',
-          {},
+          { class: 'celula-acoes' },
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'botao botao-pequeno-livre botao-duplicar-caso',
+              'aria-label': `Duplicar o caso ${caso.id}`,
+              title: 'Criar uma cópia deste caso logo a seguir (com um ID novo), para mudar só o que for diferente.',
+              onclick: async () => {
+                conjunto.casos.splice(indice + 1, 0, { ...structuredClone(caso), id: proximoIdCaso(), nome: caso.nome ? `${caso.nome} (cópia)` : undefined });
+                await guardarCasos(true);
+              },
+            },
+            'Duplicar',
+          ),
           h(
             'button',
             {
@@ -489,10 +503,13 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
         ),
       );
 
-    const novoCaso = async (): Promise<void> => {
+    /** O próximo ID livre (TC0001, TC0002, ...). */
+    function proximoIdCaso(): string {
       const numeros = conjunto.casos.map((c) => Number(/(\d+)$/.exec(c.id)?.[1] ?? 0));
-      const id = `TC${String(Math.max(0, ...numeros) + 1).padStart(4, '0')}`;
-      conjunto.casos.push({ id, etiquetas: [], dados: {} });
+      return `TC${String(Math.max(0, ...numeros) + 1).padStart(4, '0')}`;
+    }
+    const novoCaso = async (): Promise<void> => {
+      conjunto.casos.push({ id: proximoIdCaso(), etiquetas: [], dados: {} });
       await guardarCasos(true);
     };
     const novaColuna = async (): Promise<void> => {

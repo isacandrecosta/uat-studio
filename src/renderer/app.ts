@@ -12,11 +12,16 @@ import { ecraRuns } from './ecras/runs.js';
 import { ecraMapa } from './ecras/mapa.js';
 import { ecraInicio } from './ecras/inicio.js';
 import { abrirPesquisa, type DestinoPesquisa } from './pesquisa.js';
-import { abrirConfiguracoes, aplicarTema } from './configuracoes.js';
+import { abrirAssistente } from './assistente.js';
+import { abrirConfiguracoes, aplicarModo, aplicarTema, forcarModo } from './configuracoes.js';
 import { iniciarTutorial, tutorialJaVisto } from './tutorial.js';
 
-// O tema (claro/escuro) aplica-se logo, antes de desenhar.
+// O tema (claro/escuro) e o modo (simples/avançado) aplicam-se logo, antes de desenhar.
 aplicarTema();
+aplicarModo();
+void window.uatStudio.app.modo().then((m) => {
+  if (m !== 'normal') forcarModo('avancado');
+});
 /** O tutorial aparece sozinho só uma vez por sessão e nunca nos testes automáticos nem na demo. */
 let tutorialMostrado = false;
 
@@ -233,6 +238,7 @@ async function destinosDaPesquisa(): Promise<DestinoPesquisa[]> {
   const ambiente = estado?.projeto.ambienteAtivo ?? '';
   const nomesTipo: Record<string, string> = { UI: 'Bloco de ecrã', API: 'Bloco de API', EMAIL: 'Bloco de email', MANUAL: 'Passo manual' };
   return [
+    { tipo: 'Assistente', nome: 'Novo teste', detalhe: 'Criar um teste em 4 passos: gravar, escolher o que varia, correr', abrir: () => void abrirAssistente({ estado: estado as EstadoProjeto, irPara, abrirCenario: (id) => { selecao.jornadaId = id; } }) },
     ...jornadas.map((j) => ({
       tipo: 'Cenário',
       nome: j.nome,
@@ -272,6 +278,7 @@ document.addEventListener('keydown', (e) => {
 });
 obter<HTMLButtonElement>('btn-pesquisa').addEventListener('click', () => void abrirPesquisa(destinosDaPesquisa));
 obter<HTMLButtonElement>('btn-configuracoes').addEventListener('click', () => abrirConfiguracoes(irPara));
+obter<HTMLButtonElement>('indicador-modo').addEventListener('click', () => abrirConfiguracoes(irPara));
 
 escolhaProjeto.addEventListener('change', async () => {
   const escolha = escolhaProjeto.value;

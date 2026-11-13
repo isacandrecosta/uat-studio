@@ -3,7 +3,7 @@
 Para quem cria e corre testes. Não é preciso saber programar.
 Para a parte técnica (como funciona por dentro, segurança, manutenção), ver o [manual técnico](MANUAL-TECNICO.md).
 
-> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 13/11/2026.
+> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 13/11/2026 (assistente "Novo teste", aceitar resultados, duplicar, modo simples).
 
 ---
 
@@ -65,6 +65,17 @@ O menu está pela ordem do trabalho:
 
 ## 5. Construir um teste, passo a passo
 
+### 5.0 O caminho mais rápido: "Novo teste"
+No **Início**, o botão **+ Novo teste** abre um assistente que faz tudo numa só janela, em 4 passos:
+1. **O que testar**: o nome do teste, a aplicação (ou uma nova, com o endereço) e o épico.
+2. **Gravar**: o Edge abre a aplicação. Faça o teste como faria à mão (no popup: "Escrever" nos campos, "Clicar" nos botões, "Verificar" nos resultados). A janela mostra quantos passos já gravou. No fim, **Terminar e guardar**.
+3. **O que varia**: marque o que muda de caso para caso (por exemplo o valor ou o produto). Cada valor marcado passa a ser uma coluna dos casos de teste (e do Excel).
+4. **Correr**: **Correr agora** confirma que o teste passa, ou **Abrir no editor** para acrescentar casos.
+
+Depois, para criar muitos casos: Editor do cenário › Casos de teste › **Exportar Excel**.
+
+As secções seguintes explicam cada peça em pormenor, para quem quiser fazer passo a passo ou afinar um teste.
+
 ### 5.1 Registar a aplicação
 Ecrã **Cenários › Aplicações › Nova aplicação**: nome, tipo (Front Office, Backoffice, API, Email) e o **endereço no ambiente ativo**. Mude de ambiente e preencha o endereço de cada um: o mesmo teste corre em DEV e em QA.
 
@@ -112,6 +123,10 @@ Casos especiais no popup e no editor de passos:
 - Colunas especiais: `ID`, `Descricao`, `Etiquetas` (para correr só alguns) e `Executar` (`N` = não importar a linha).
 - Uma célula de valor esperado **vazia** quer dizer "não verificar isto neste caso".
 
+### 5.5.1 Duplicar
+- **Duplicar um cenário** (botão "Duplicar" na lista de cenários): uma cópia com os mesmos blocos e os mesmos casos, para fazer uma variação.
+- **Duplicar um caso** (botão "Duplicar" em cada linha da tabela de casos): a cópia fica logo a seguir, com um ID novo; muda-se só o que for diferente.
+
 ### 5.6 Passwords: nunca nos casos
 Em **Dados de teste › Segredos de teste**, crie o segredo (fica **encriptado neste PC**). Na célula do Excel, escreva apenas `{SEGREDO:nome}`, por exemplo `{SEGREDO:ana.silva}`.
 - O valor nunca aparece nos ficheiros, nos logs nem nos relatórios.
@@ -150,6 +165,14 @@ Durante a execução:
 - **Regravar este elemento**: se um campo deixou de ser encontrado, o gravador repete os passos anteriores e pede que se aponte o campo certo.
 - **Retomar a partir do bloco**: recomeça um caso a meio, sem repetir o que já correu bem.
 
+### 6.2.1 Aceitar os resultados como esperados (linha de base)
+A forma mais rápida de ter os valores esperados certos, sobretudo em testes de regressão:
+1. Grave o teste e corra-o uma vez (as colunas de valores esperados podem até estar vazias: a ferramenta lê o ecrã na mesma).
+2. Confirme, nos prints, que o que apareceu no ecrã está certo.
+3. Na execução, carregue em **Aceitar os resultados como esperados** (ou, no detalhe de um caso, **Aceitar este resultado**). A ferramenta mostra primeiro o que vai mudar e pede confirmação.
+
+A partir daí, qualquer valor diferente aparece como **✗ Falhou**. Atenção: só aceite se o ecrã estiver certo; aceitar um erro faz dele o "esperado".
+
 ### 6.3 Criar o defeito
 No detalhe de um caso que falhou ou ficou bloqueado, **Criar defeito** prepara:
 - o título;
@@ -187,7 +210,8 @@ Correr testes **não bloqueia o PC**. Medido num portátil com 16 GB de memória
 - **Procurar (Ctrl+K)**: escreva parte do nome de um cenário, bloco, épico, aplicação ou ecrã e carregue em Enter.
 - **Filtros**: nos Cenários (nome, épico, etiqueta), nos blocos (texto, tipo, "só os não usados") e nas Execuções.
 - **"Mais opções"**: as opções pouco usadas ficam escondidas; fechado, mostra um resumo do que está definido.
-- **Configurações**: tema **claro, escuro ou igual ao Windows**, tutorial e desempenho.
+- **Configurações**: **modo simples ou avançado**, tema **claro, escuro ou igual ao Windows**, tutorial e desempenho.
+- **Modo simples** (por omissão): mostra só o essencial para gravar, montar, correr e analisar testes. O **modo avançado** mostra também os blocos de API, a execução ao vivo, as condições "só se", as sessões, os passos de rede, o modo print, as variáveis calculadas e o código Playwright. Na barra lateral, "Modo simples · ver tudo" leva às Configurações.
 - **Vídeos e guia ilustrado**: há vídeos curtos (um por tema, com legendas) e um guia com imagens; peça a pasta `out/demo` a quem mantém a ferramenta.
 
 ## 9. Regras de ouro

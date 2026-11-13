@@ -114,6 +114,8 @@ declare global {
         lerTexto(...partes: string[]): Promise<string>;
         /** "Criar defeito": título, texto sugerido e evidências de um caso KO/ERRO. */
         defeito(pastaRun: string, chave: string): Promise<{ titulo: string; texto: string; evidencias: string[]; ficheiro: string }>;
+        /** Os valores lidos passam a ser os esperados (com simular, só devolve o que mudaria). */
+        aceitarEsperados(pastaRun: string, chaves: string[] | null, simular: boolean): Promise<Array<{ chave: string; jornadaId: string; casoId: string; coluna: string; antes: string; depois: string }>>;
         /** Os defeitos criados numa execução (casos com defeito.txt). */
         defeitos(pastaRun: string): Promise<Array<{ chave: string; casoId: string; titulo: string; pastaCaso: string }>>;
         /** Grava o texto revisto em defeito.txt, na pasta do caso. */

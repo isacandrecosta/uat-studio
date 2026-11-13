@@ -14,6 +14,7 @@ import { abrirTrace } from './trace';
 import { htmlParaAssinatura } from './assinatura';
 import { verificarAntesDeCorrer } from './verificar';
 import { defeitoDoCaso, defeitosDaExecucao, guardarDefeito } from './defeitos';
+import { aplicarMudancas, mudancasDosResultados } from '../../shared/aceitar';
 
 const FILTRO_EXCEL = [{ name: 'Excel', extensions: ['xlsx'] }];
 
@@ -87,6 +88,16 @@ export function registarIpcExecucoes(): void {
     }
   });
   // "Criar defeito": texto sugerido e evidências de um caso KO/ERRO (nada é enviado: copia-se e grava-se).
+  // "Aceitar os resultados como esperados": com simular, só diz o que mudaria; sem simular, grava nos casos.
+  ipcMain.handle('run:aceitar-esperados', (_e, pastaRun: string, chaves: string[] | null, simular: boolean) => {
+    const pasta = pastaDoProjeto();
+    const run = listarHistorico(pasta).find((r) => r.pasta === String(pastaRun));
+    if (!run || run.ativo) throw new repo.ErroProjeto('Só é possível aceitar resultados de uma execução terminada.');
+    const conjuntos = repo.listar(pasta, 'casos');
+    const mudancas = mudancasDosResultados(run, conjuntos, Array.isArray(chaves) ? chaves.map(String) : undefined);
+    if (!simular) for (const c of aplicarMudancas(conjuntos, mudancas)) repo.guardar(pasta, 'casos', c);
+    return mudancas;
+  });
   ipcMain.handle('run:defeitos', (_e, pastaRun: string) => defeitosDaExecucao(pastaDoProjeto(), String(pastaRun)));
   ipcMain.handle('run:defeito', (_e, pastaRun: string, chave: string) => defeitoDoCaso(pastaDoProjeto(), String(pastaRun), String(chave)));
   ipcMain.handle('run:defeito-guardar', async (_e, pastaRun: string, chave: string, titulo: string, texto: string) => {
