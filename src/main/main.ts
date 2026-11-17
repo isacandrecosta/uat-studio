@@ -17,6 +17,8 @@ import { leituraSistema, MB_POR_WORKER, sugerirParalelo } from './desempenho';
 import { registarIpcExecucoes } from './executor/ipc';
 import { pastaDoProjeto, registarIpcProjeto } from './projeto/ipc';
 import { registarIpcPacotes } from './projeto/pacotes';
+import { registarIpcCaixa } from './email/ipc';
+import { registarAvisoCodigo } from './api/avisoCodigo';
 import { correrSmoke } from './smoke';
 import { correrDemo } from './demo/demo';
 import { ficheiroDeVerificacao, verificarArranque } from './arranque';
@@ -65,6 +67,7 @@ function criarJanela(): BrowserWindow {
 registarIpcProjeto();
 registarIpcExecucoes();
 registarIpcPacotes();
+registarIpcCaixa();
 
 ipcMain.handle('app:modo', () => (MODO_SMOKE ? 'smoke' : MODO_DEMO ? 'demo' : 'normal'));
 // Desempenho: o PC agora, a memória da própria app e a duração média de um caso nas últimas execuções.
@@ -108,6 +111,7 @@ void app.whenReady().then(() => {
   // (botões "Copiar log", "Criar defeito"). Vale para as janelas da app, não para o Edge dos testes.
   session.defaultSession.setPermissionRequestHandler((_wc, permissao, responder) => responder(permissao === 'clipboard-sanitized-write'));
   const janela = criarJanela();
+  registarAvisoCodigo(janela);
   aoMudarGravador((estado) => {
     if (!janela.isDestroyed()) janela.webContents.send('gravador:atualizado', estado);
   });

@@ -12,6 +12,9 @@ import * as repo from './projeto/repositorio';
 import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun, listarHistorico } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { abrirProjeto, criarProjeto } from './projeto/ipc';
+import { definirAoAbrirJanelaDeLogin } from './api/loginJanela';
+import { ultimoAvisoDeCodigo } from './api/avisoCodigo';
+import { SESSAO_CAIXA } from './email/caixaTestes';
 
 type Passo = (janela: BrowserWindow) => Promise<void>;
 
@@ -1484,6 +1487,109 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         console.log(`[smoke]   ${comEmail?.casoId}=${comEmail?.estado} {CodigoMfa}=${comEmail?.variaveis.CodigoMfa ?? ''} ${comEmail?.erro?.mensagem ?? ''}`);
         confirmar(comEmail?.estado === 'OK' && comEmail.variaveis.CodigoMfa === '654321', 'O bloco de email devia dar OK e guardar o código 654321.');
         confirmar((comEmail?.evidencias ?? []).includes('email/02_codigo-por-email.json'), `Falta a evidência do email: ${(comEmail?.evidencias ?? []).join(', ')}`);
+
+        // Caixa de email de testes (simulada no servidor de teste): definir pela interface, entrar pela janela da
+        // própria ferramenta (página de login do "fornecedor"), um bloco por papel e o login com código.
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"dados\"]').click()");
+        await esperar(j, "document.getElementById('btn-caixa-definir')");
+        await naPagina(j, "document.getElementById('btn-caixa-definir').click()");
+        await esperar(j, "document.querySelector('dialog[open] #form-emailBase')");
+        await dialogo({ emailBase: 'caixa.uat@exemplo.pt', tipo: 'simulada', modoLogin: 'janela' });
+        await esperar(j, "document.querySelector('dialog[open] #form-urlApi')");
+        await dialogo({ urlApi: `${base}/graph/v1.0`, urlAutorizacao: `${base}/oauth/authorize`, urlToken: `${base}/oauth/token`, urlDispositivo: `${base}/oauth/devicecode`, clientId: 'uat-publico' });
+        await esperar(j, "document.getElementById('btn-caixa-testar')");
+        const caixaGuardada = repo.lerProjeto(pasta).caixaTestes;
+        confirmar(caixaGuardada?.ligacao === 'simulada' && caixaGuardada.modoLogin === 'janela' && caixaGuardada.urlApi === `${base}/graph/v1.0`, `A caixa de testes não ficou bem guardada: ${JSON.stringify(caixaGuardada)}`);
+        const exemploCaixa = String(await naPagina(j, "document.getElementById('caixa-exemplo').textContent"));
+        confirmar(/^caixa\.uat\+gestor_.+_\d{8}@exemplo\.pt$/.test(exemploCaixa), `O exemplo de endereço devia ser caixa.uat+gestor_..._data@exemplo.pt: ${exemploCaixa}`);
+        // Na janela de login (página do servidor de teste), o "testador" escreve o utilizador e a password.
+        let janelasDeLogin = 0;
+        definirAoAbrirJanelaDeLogin((janela) => {
+          janelasDeLogin += 1;
+          janela.webContents.on('did-finish-load', () => {
+            void janela.webContents
+              .executeJavaScript("(() => { const u = document.getElementById('utilizador'); if (!u) return; u.value = 'qa.teste'; document.getElementById('password').value = 'password-de-teste'; document.querySelector('form').submit(); })()")
+              .catch(() => undefined);
+          });
+        });
+        await naPagina(j, "document.getElementById('btn-caixa-testar').click()");
+        await esperar(j, "!document.getElementById('btn-caixa-testar').disabled && !document.getElementById('caixa-resultado').textContent.startsWith('A ligar')", 60_000);
+        const ligado = String(await naPagina(j, "document.getElementById('caixa-resultado').textContent"));
+        confirmar(ligado.startsWith('Ligado'), `"Ligar e testar" devia ligar à caixa: ${ligado}`);
+        confirmar(janelasDeLogin === 1, `Devia abrir uma janela de login da ferramenta (abriu ${janelasDeLogin}).`);
+        confirmar(segredosPreenchidos(pasta, [SESSAO_CAIXA])[SESSAO_CAIXA], 'A sessão da caixa de testes devia ficar no cofre.');
+        console.log(`[smoke]   caixa de testes ligada pela janela da ferramenta: ${ligado}`);
+
+        // Bloco de email por papel, criado pela interface (com a caixa de testes e uma aplicação de email, pergunta qual usar).
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+        await esperar(j, "document.getElementById('btn-novo-email')");
+        await naPagina(j, "document.getElementById('btn-novo-email').click()");
+        await esperar(j, "document.querySelector('#dialogo-escolha button[data-valor=\"caixa\"]')");
+        await naPagina(j, "document.querySelector('#dialogo-escolha button[data-valor=\"caixa\"]').click()");
+        await esperar(j, "document.querySelector('dialog[open] #form-papel')");
+        await dialogo({
+          nome: 'Email ao gestor',
+          papel: 'gestor',
+          assuntoIgual: 'Pedido {PedidoId} aprovado',
+          espera: '20',
+          valores: 'Montante:={Valor}',
+          anexos: 'contrato',
+          link: 'LinkConfirmar=/pagina-de-teste',
+          abrir: 'sim',
+        });
+        await esperar(j, "document.querySelector('[data-email=\"email-ao-gestor\"]')");
+        const blocoGestor = repo.ler(pasta, 'blocos', 'email-ao-gestor');
+        confirmar(blocoGestor.email?.papel === 'gestor' && !blocoGestor.aplicacaoId && blocoGestor.email.link?.abrir === true, `O bloco de email por papel não ficou bem guardado: ${JSON.stringify(blocoGestor)}`);
+        repo.guardar(pasta, 'blocos', {
+          id: 'app-envia-aprovacao',
+          nome: 'App envia a aprovação',
+          tipo: 'API',
+          aplicacaoId: 'api-de-teste',
+          passos: [],
+          pedido: {
+            metodo: 'POST',
+            url: '/email/enviar',
+            parametros: [],
+            cabecalhos: [],
+            tipoCorpo: 'json',
+            corpo: `{ "para": "{EMAIL:gestor}", "assunto": "Pedido {PedidoId} aprovado", "corpo": "<p>Montante: 1.234,56 €</p><p><a href='${base}/pagina-de-teste'>Confirmar</a></p>", "anexos": ["contrato-{PedidoId}.pdf"], "atrasoMs": 1000 }`,
+            verificacoes: [{ id: 'v1', alvo: 'estado', operador: 'igual', esperado: '202' }],
+            guardar: [],
+          },
+        });
+        repo.guardar(pasta, 'jornadas', { id: 'aprovacao-por-email', nome: 'Aprovação por email', epicoId: 'simulacoes', etiquetas: [], blocos: [{ id: 'b1', blocoId: 'app-envia-aprovacao' }, { id: 'b2', blocoId: 'email-ao-gestor' }] });
+        repo.guardar(pasta, 'casos', {
+          id: 'aprovacao-por-email',
+          colunas: ['PedidoId', 'Valor'],
+          casos: [
+            { id: 'AP01', etiquetas: [], dados: { PedidoId: '557', Valor: '1234.56' } },
+            { id: 'AP02', etiquetas: [], dados: { PedidoId: '558', Valor: '1000' } },
+          ],
+        });
+        await iniciarRun(pasta, { jornadaIds: ['aprovacao-por-email'] }, { canal: 'msedge', visivel: false, paralelo: 1 });
+        const porPapel = (await esperarFimDoRun(120_000))?.casos ?? [];
+        for (const c of porPapel) console.log(`[smoke]   ${c.casoId}=${c.estado} ${c.diferencas.map((d) => `${d.passo}: ${d.obtido}`).join('; ')} ${c.erro?.mensagem ?? ''}`);
+        const ap01 = porPapel.find((c) => c.casoId === 'AP01');
+        const ap02 = porPapel.find((c) => c.casoId === 'AP02');
+        confirmar(ap01?.estado === 'OK' && ap01.variaveis.LinkConfirmar === `${base}/pagina-de-teste`, 'AP01 devia dar OK e guardar o link do email.');
+        confirmar(['email/02_email-ao-gestor.png', '02_email-ao-gestor_link.png'].every((e) => (ap01?.evidencias ?? []).includes(e)), `Faltam evidências do email: ${(ap01?.evidencias ?? []).join(', ')}`);
+        confirmar(ap02?.estado === 'KO' && ap02.diferencas.some((d) => d.passo === 'Valor "Montante:"'), 'AP02 devia dar KO no valor "Montante:".');
+
+        // Login com código noutro dispositivo: o aviso aparece na janela; o "telemóvel" aprova na página do servidor.
+        apagarSegredosDoPerfil(pasta, 'caixa-de-testes');
+        repo.gravarProjeto(pasta, { ...repo.lerProjeto(pasta), caixaTestes: { ...(caixaGuardada as NonNullable<typeof caixaGuardada>), modoLogin: 'codigo' } });
+        await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"dados\"]').click()");
+        await esperar(j, "document.getElementById('btn-caixa-testar')");
+        await naPagina(j, "document.getElementById('btn-caixa-testar').click()");
+        await esperar(j, "document.querySelector('#dialogo-login-codigo[open] #login-codigo')", 30_000);
+        const aviso = ultimoAvisoDeCodigo();
+        const codigoNaJanela = String(await naPagina(j, "document.getElementById('login-codigo').textContent"));
+        confirmar(aviso !== null && codigoNaJanela === aviso.codigo, `O código mostrado (${codigoNaJanela}) devia ser o pedido (${aviso?.codigo}).`);
+        await fetch(aviso?.url ?? '', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ codigo: aviso?.codigo ?? '', utilizador: 'qa.teste', password: 'password-de-teste' }).toString() });
+        await esperar(j, "!document.querySelector('#dialogo-login-codigo') && document.getElementById('caixa-resultado').textContent.startsWith('Ligado')", 30_000);
+        console.log(`[smoke]   login com código ${aviso?.codigo} aprovado noutro "dispositivo"; caixa ligada`);
+        definirAoAbrirJanelaDeLogin(null);
+        apagarSegredosDoPerfil(pasta, 'caixa-de-testes');
 
         // Ações do browser na página de teste do servidor local: upload, download, pergunta do browser, iframe e separadores.
         fs.mkdirSync(path.join(pasta, 'ficheiros'), { recursive: true });

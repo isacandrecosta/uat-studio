@@ -3,7 +3,7 @@
 Para quem cria e corre testes. Não é preciso saber programar.
 Para a parte técnica (como funciona por dentro, segurança, manutenção), ver o [manual técnico](MANUAL-TECNICO.md).
 
-> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 13/11/2026 (assistente "Novo teste", aceitar resultados, duplicar, modo simples).
+> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 17/11/2026 (caixa de email de testes e guia de fórmulas).
 
 ---
 
@@ -50,7 +50,7 @@ O menu está pela ordem do trabalho:
 | **3. Editor do cenário** | Três separadores: **Resumo** (nome, etiquetas, requisito, descrição), **Passos** (os blocos por ordem) e **Casos de teste** (a tabela de dados, Excel). |
 | **4. Gravar** | Gravar blocos no browser com cliques. |
 | **5. Blocos de API** | Pedidos às APIs (GET, POST...), perfis de autenticação e botão **Testar**. |
-| **6. Dados de teste** | Fórmulas, geradores (NIF, IBAN, emails), segredos de teste e contadores. |
+| **6. Dados de teste** | Fórmulas, geradores (NIF, IBAN, emails), caixa de email de testes, segredos de teste e contadores. |
 | **7. Execuções** | Correr testes, ver resultados, evidências, defeitos, relatórios e histórico. |
 | **8. Execução ao vivo** | Acompanhar uma execução em curso, com o browser de cada caso em miniatura. |
 
@@ -140,7 +140,44 @@ Use fórmulas em vez de valores escritos à mão:
 - `{HOJE+30:dd/MM/yyyy}` dá a data de daqui a 30 dias;
 - `{CONTADOR:clientes}` dá um número novo de cada vez.
 
-O ecrã **Dados de teste** mostra o resultado de cada fórmula enquanto se escreve.
+O ecrã **Dados de teste** mostra o resultado de cada fórmula enquanto se escreve. Há muito mais que dá para fazer com fórmulas: veja o **capítulo 11 (Fórmulas: guia com exemplos)**.
+
+### 5.8 Emails: a caixa de testes
+Muitas aplicações enviam emails (aprovação ao gestor, código de acesso, confirmação de registo). A ferramenta consegue **verificar esses emails sozinha**.
+
+**1. Defina a caixa (uma vez por projeto)**, em **Dados de teste › Caixa de email de testes › Definir caixa**:
+- **Email base**: uma caixa **só para testes**, aprovada pela IT, por exemplo `emailteste@outlook.com`. Nunca uma caixa pessoal ou com dados reais.
+- **Que caixa é**: Outlook/Hotmail (conta pessoal), Microsoft 365 (conta da empresa) ou caixa simulada (só para experimentar no PC, com o servidor de teste).
+- **Como entrar na caixa** (em todos, a password é escrita na página da **Microsoft**, nunca num campo da ferramenta):
+
+| Modo | Como é | Quando usar |
+|---|---|---|
+| **Numa janela da ferramenta** (recomendado) | Abre-se uma janela do UAT Studio com a página de login da Microsoft. Entra-se com MFA, se houver, e a janela fecha sozinha. | Quase sempre. |
+| **No Microsoft Edge** | O login abre no Edge, como numa página normal. | Se a janela da ferramenta não servir (por exemplo, uma regra da empresa). |
+| **Com um código noutro dispositivo** | A ferramenta mostra um código (por exemplo `ABCD-1234`) e um endereço. Abre-se esse endereço no telemóvel ou noutro PC, escreve-se o código e entra-se lá. | Quando o login no PC está bloqueado, ou quando a conta de testes tem o MFA noutro aparelho. |
+
+- **Client ID**: o identificador da "aplicação" que a Microsoft autoriza a ler a caixa (permissão `Mail.Read`). Numa conta da empresa, é a **IT** que o dá.
+- Carregue em **Ligar e testar**: na 1.ª vez é pedido o login; depois a sessão fica **encriptada neste PC** e as execuções seguintes já não pedem login. **Esquecer a sessão** apaga-a.
+
+**2. Use um endereço diferente por papel e por caso.** Nos dados do caso, onde a aplicação pede um email, escreva `{EMAIL:gestor}` (ou `{EMAIL:cliente}`, `{EMAIL:supervisor}`...). A ferramenta troca por um endereço próprio desse caso, por exemplo:
+
+`emailteste+gestor_tc0001_13112026@outlook.com`
+
+Todos estes endereços chegam à mesma caixa (é uma regra do Outlook: tudo o que vem depois do `+` é ignorado na entrega), mas como cada caso tem o seu, **os emails de casos diferentes (ou de outros dias) nunca se misturam**. O formato pode mudar-se na definição da caixa.
+
+**3. Acrescente um bloco "Verificar email"** ao cenário (**Cenários › Criar ▾ › Novo bloco de email**, escolha "Caixa de testes do projeto"):
+- **Para quem (papel)**: por exemplo `gestor`. O email tem de chegar ao endereço do gestor **deste caso**.
+- **O que se espera**: "tem de chegar um email" ou "**NÃO deve chegar** nenhum email" (por exemplo, uma recusa que não notifica ninguém).
+- **Assunto**: "contém" (para encontrar o email) e "tem de ser exatamente" (dá ✗ Falhou se for diferente). Pode ter `{variáveis}`: `Pedido {PedidoId} aprovado`.
+- **O corpo tem de conter**: um texto por linha.
+- **Valores no corpo**: `Montante:={Valor}` compara o número que aparece a seguir a "Montante:" com o esperado, em decimal exato. Com tolerância: `Prestação:={Prestacao};0,01`.
+- **Anexos**: o nome que o anexo tem de ter (por exemplo `contrato`).
+- **Guardar o link**: `LinkConfirmar=/confirmar` guarda o 1.º link que contém "/confirmar" em `{LinkConfirmar}`. Com **Abrir o link no browser do caso**, a ferramenta abre-o a seguir (útil para "confirme o seu registo").
+- **Guardar outros valores**: por exemplo o código de MFA, `CodigoMfa=(\d{6})`.
+
+**Evidências**: cada email recebido fica na pasta do caso (`email/`) como **imagem** (`.png`), como página (`.html`) e com os dados (`.json`). A imagem é desenhada sem carregar imagens da internet (para o email não "avisar" ninguém de que foi aberto).
+
+> Dica: um cenário típico é "o cliente submete → verificar email do gestor (papel gestor) → o gestor aprova no Backoffice → verificar email do cliente (papel cliente)".
 
 ## 6. Correr e analisar
 
@@ -233,3 +270,100 @@ Correr testes **não bloqueia o PC**. Medido num portátil com 16 GB de memória
 | "Segredo de teste por preencher neste PC" | Preencha-o em **Dados de teste › Segredos de teste**. |
 | O PC ficou lento durante uma execução | Use menos casos em paralelo (ver capítulo 7). |
 | Um endereço não responde | Confirme a VPN e o endereço da aplicação no ambiente ativo (Cenários › Aplicações). |
+| "O email não chegou em N s" | Confirme que a aplicação enviou para o endereço certo (o papel e o caso estão no log, linha "Endereço de teste") e aumente o "esperar até". |
+| "Falta definir a caixa de email de testes" | Defina-a em **Dados de teste › Caixa de email de testes**. |
+| O login da caixa de testes falha | Experimente outro modo (Edge ou código noutro dispositivo) e confirme com a IT o Client ID e a permissão `Mail.Read`. |
+
+## 11. Fórmulas: guia com exemplos
+
+Uma **fórmula** calcula um valor na altura em que o caso corre. Escreve-se como no Excel, com **`;`** a separar argumentos e **`{Coluna}`** para usar um valor dos dados do caso. Pode usar fórmulas:
+- no **popup do gravador** (origem do valor: "fórmula");
+- nos **parâmetros dos blocos** no editor do cenário;
+- nas **variáveis calculadas** (Dados de teste, modo avançado): um nome + uma fórmula, calculada uma vez por caso e usada como se fosse uma coluna;
+- nos textos com `{...}` (assuntos de email, corpos de API, condições "só se").
+
+O ecrã **Dados de teste** tem a caixa **Experimentar**: escreva a fórmula e vê logo o resultado com os dados de um caso de exemplo (sem gastar contadores).
+
+### 11.1 O básico
+
+| Escrever | Dá | Para quê |
+|---|---|---|
+| `{Valor}` | o valor da coluna Valor | usar os dados do caso |
+| `"Cliente " & {Nome}` | `Cliente Ana` | juntar textos (`&`) |
+| `{Valor} * 1,1` | o valor com mais 10% | contas (`+ - * /`), sempre com decimais exatos |
+| `{TESTE}` / `{RUN}` | `TC0001` / `run12` | o ID do caso / da execução |
+| `SE({Valor} > 1000; "Alto"; "Baixo")` | `Alto` | escolher conforme uma condição (`= <> < > <= >=`) |
+
+### 11.2 Datas
+
+| Escrever | Dá (a 13/11/2026) |
+|---|---|
+| `{DATA:dd/MM/yyyy}` | `13/11/2026` |
+| `{DATA:yyyyMMdd}` | `20261113` |
+| `{HOJE+30:dd/MM/yyyy}` | `13/12/2026` |
+| `{HOJE-1:dd/MM/yyyy}` | `12/11/2026` (ontem) |
+
+**Casos de uso**: data de início de um contrato daqui a 30 dias; uma data passada para testar "a data não pode ser anterior a hoje"; um nome com a data para saber de quando é cada registo.
+
+### 11.3 Dados únicos (para não repetir entre execuções)
+
+| Escrever | Dá |
+|---|---|
+| `NIF()` | um NIF válido diferente em cada execução |
+| `IBAN()` | um IBAN português válido |
+| `{CONTADOR:clientes}` | 1, 2, 3... (fica guardado entre execuções) |
+| `{ALEATORIO:6}` | 6 algarismos ao acaso |
+| `ALEATORIOENTRE(500; 5000)` | um número entre 500 e 5000 |
+| `"Empresa " & {TESTE} & "-" & {RUN}` | `Empresa TC0001-run12` |
+
+**Casos de uso**: registar um cliente novo em cada execução (a aplicação recusa NIF repetidos); criar pedidos com montantes variados para testes exploratórios; nomes que se encontram depois no Backoffice.
+
+### 11.4 Contas de dinheiro (valores esperados)
+
+| Escrever | Para quê |
+|---|---|
+| `ARRED({Valor} * {Comissao} / 100; 2)` | comissão com 2 casas, arredondada "meio para cima" (como se faz à mão) |
+| `ARRED.PAR({Valor} * 0,0123; 2)` | arredondamento **ao par**, igual ao `Round()` do OutSystems (86,405 → 86,40) |
+| `ARRED.PAR(PRESTACAO({Valor}; {Taxa}; {Prazo}); 2)` | prestação mensal de um crédito (capital; taxa anual em %; meses) |
+| `TRUNCAR({Valor} / 100) * {Pontos}` | pontos de fidelização por cada 100 € (sem decimais) |
+| `MIN({Valor} * 0,02; 50)` | 2% com um máximo de 50 € |
+| `MAX({Valor} * 0,01; 5)` | 1% com um mínimo de 5 € |
+| `TEXTO({Total}; 2)` | `86,40` (texto com 2 casas, para comparar com o ecrã) |
+| `PONTO({Total})` | `86.4` (para campos ou APIs que usam ponto) |
+
+**Caso de uso**: em vez de calcular à mão o valor esperado de cada linha do Excel, crie uma variável calculada `PrestacaoEsperada = ARRED.PAR(PRESTACAO({Valor}; {Taxa}; {Prazo}); 2)` e use `{PrestacaoEsperada}` como valor esperado. Muda o Excel, as contas acompanham.
+
+> Diferença de um cêntimo entre o esperado e o ecrã? Quase sempre é o arredondamento: troque `ARRED` por `ARRED.PAR` (ou o contrário).
+
+### 11.5 Emails e MFA
+
+| Escrever | Dá |
+|---|---|
+| `{EMAIL:gestor}` ou `EMAIL("gestor")` | o endereço de teste do gestor neste caso, na caixa de testes do projeto (ver 5.8) |
+| `EMAIL("cliente"; "exemplo.pt")` | um email único sem caixa de testes: `qa+cliente.tc0001.run12@exemplo.pt` |
+| `TOTP({ChaveMfa})` | o código de 6 algarismos de uma app autenticadora, a partir da chave secreta da conta de teste |
+
+**Caso de uso**: o cliente regista-se com `{EMAIL:cliente}`, a aplicação envia um código, o bloco de email com papel `cliente` guarda-o em `{CodigoMfa}` e o passo seguinte escreve `{CodigoMfa}`.
+
+### 11.6 Textos
+
+| Escrever | Dá |
+|---|---|
+| `MAIUSCULAS({Nome})` / `MINUSCULAS({Nome})` | `ANA SILVA` / `ana silva` |
+| `ESQUERDA({Iban}; 4)` / `DIREITA({Iban}; 4)` | os 4 primeiros / últimos caracteres |
+| `COMPR({Nome})` | o número de caracteres |
+
+**Casos de uso**: verificar que o ecrã mostra o IBAN mascarado (`"**** " & DIREITA({Iban}; 4)`); testar o limite de um campo com um texto do tamanho máximo.
+
+### 11.7 Condições "só se" (modo avançado)
+A condição de um bloco ou de um passo é uma fórmula que dá verdadeiro ou falso:
+- `{EstadoEsperado} = "Aprovado"`: o bloco só corre nos casos aprovados;
+- `{Valor} > 5000`: um passo extra (por exemplo, a aprovação do supervisor) só para montantes altos;
+- `{Canal} <> "Balcão"`.
+
+Assim, um único cenário serve para vários caminhos, cada caso segue o seu.
+
+### 11.8 Quando a fórmula tem um erro
+- A caixa mostra a mensagem logo ao escrever (por exemplo `Esperava ")" na fórmula.` ou `Falta fechar as aspas de um texto.`).
+- **Verificar** (antes de correr) aponta todas as fórmulas com erro.
+- Textos vão **entre aspas** (`"Alto"`); números com vírgula ou ponto (`0,5` ou `0.5`); argumentos separados por `;`.

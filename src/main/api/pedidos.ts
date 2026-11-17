@@ -29,6 +29,11 @@ export interface AmbienteApi {
    * de regresso (com ?code=...&state=...). Sem isto, os perfis com login não funcionam.
    */
   loginInterativo?(pedido: LoginInterativo): Promise<string>;
+  /**
+   * Login com código noutro dispositivo (device code): mostra ao testador o código e o endereço onde o
+   * escrever. Devolve uma função para fechar o aviso e uma forma de saber se o testador cancelou.
+   */
+  mostrarCodigo?(aviso: AvisoCodigo): { fechar(): void; cancelado(): boolean };
   /** mTLS: um "fetch" que apresenta o certificado de cliente do perfil (dá erro se o ficheiro não existir). */
   fetchComCertificado?(perfil: PerfilAutenticacao): typeof fetch;
 }
@@ -40,6 +45,17 @@ export interface LoginInterativo {
   /** Para preencher o formulário de login sozinho (opcional). */
   utilizador?: string;
   password?: string;
+  /** Onde se faz o login: numa janela da própria ferramenta ou no Edge (por omissão). */
+  modo?: 'janela' | 'edge';
+}
+
+export interface AvisoCodigo {
+  perfilNome: string;
+  /** O código a escrever (por exemplo "ABCD-1234"). */
+  codigo: string;
+  /** Onde escrever o código (por exemplo https://microsoft.com/devicelogin). */
+  url: string;
+  expiraSeg: number;
 }
 
 /** Endereço de regresso por omissão (não precisa de existir: o UAT Studio apanha-o antes de lá chegar). */
@@ -91,7 +107,9 @@ async function pedirToken(amb: AmbienteApi, perfil: PerfilAutenticacao, renovaca
   if (perfil.tipo === 'oauth2-pkce') {
     return renovacao
       ? enviarPedidoDeToken(amb, perfil, new URLSearchParams({ grant_type: 'refresh_token', refresh_token: renovacao, client_id: perfil.clientId }), {})
-      : loginPkce(amb, perfil);
+      : perfil.modoLogin === 'codigo'
+        ? loginDispositivo(amb, perfil)
+        : loginPkce(amb, perfil);
   }
   const segredoCliente = exigirSegredo(amb, perfil, 'clientSecret', 'Client secret');
   const corpo = new URLSearchParams();
@@ -141,7 +159,7 @@ async function loginPkce(amb: AmbienteApi, perfil: PerfilAutenticacao): Promise<
   url.searchParams.set('state', estado);
   if (perfil.ambito) url.searchParams.set('scope', perfil.ambito);
   const regresso = new URL(
-    await amb.loginInterativo({ url: url.toString(), redirectUri, perfilNome: perfil.nome, utilizador: perfil.utilizador, password: amb.segredo(`${perfil.id}.password`) }),
+    await amb.loginInterativo({ url: url.toString(), redirectUri, perfilNome: perfil.nome, utilizador: perfil.utilizador, password: amb.segredo(`${perfil.id}.password`), modo: perfil.modoLogin === 'janela' ? 'janela' : 'edge' }),
   );
   const erro = regresso.searchParams.get('error');
   if (erro) throw new ErroApi(`O login do perfil "${perfil.nome}" foi recusado (${[erro, regresso.searchParams.get('error_description')].filter(Boolean).join(': ')}).`);
@@ -150,6 +168,65 @@ async function loginPkce(amb: AmbienteApi, perfil: PerfilAutenticacao): Promise<
   if (!codigo) throw new ErroApi(`O login do perfil "${perfil.nome}" não devolveu o código de autorização.`);
   const corpo = new URLSearchParams({ grant_type: 'authorization_code', code: codigo, redirect_uri: redirectUri, client_id: perfil.clientId ?? '', code_verifier: verificador });
   return enviarPedidoDeToken(amb, perfil, corpo, {});
+}
+
+/**
+ * OAuth 2.0 Device Authorization Grant (RFC 8628): a ferramenta pede um código, o testador escreve-o noutro
+ * dispositivo (telemóvel ou outro browser) e entra lá; entretanto a ferramenta pergunta de N em N segundos
+ * se o login já foi feito. A ferramenta nunca vê a password.
+ */
+async function loginDispositivo(amb: AmbienteApi, perfil: PerfilAutenticacao): Promise<TokenGuardado> {
+  if (!perfil.urlDispositivo) throw new ErroApi(`O perfil "${perfil.nome}" não tem o endereço onde se pede o código (login com código).`);
+  if (!amb.mostrarCodigo) throw new ErroApi(`O perfil "${perfil.nome}" precisa de login com código, que não está disponível aqui.`);
+  const corpo = new URLSearchParams({ client_id: perfil.clientId ?? '' });
+  if (perfil.ambito) corpo.set('scope', perfil.ambito);
+  let resposta: Response;
+  try {
+    resposta = await fetchDoPerfil(amb, perfil)(perfil.urlDispositivo, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: corpo.toString(),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (erro) {
+    throw explicarRede(erro, 30_000, `Pedido do código de login (perfil "${perfil.nome}")`);
+  }
+  const dados = (await resposta.json().catch(() => ({}))) as { device_code?: string; user_code?: string; verification_uri?: string; verification_url?: string; expires_in?: number; interval?: number; error?: string; error_description?: string };
+  const url = dados.verification_uri ?? dados.verification_url;
+  if (!resposta.ok || !dados.device_code || !dados.user_code || !url) {
+    const motivo = [dados.error, dados.error_description].filter(Boolean).join(': ');
+    throw new ErroApi(`O pedido do código de login do perfil "${perfil.nome}" falhou (HTTP ${resposta.status}${motivo ? `, ${motivo}` : ''}).`);
+  }
+  const expiraSeg = Number(dados.expires_in) > 0 ? Number(dados.expires_in) : 900;
+  let intervalo = (Number(dados.interval) > 0 ? Number(dados.interval) : 5) * 1000;
+  const aviso = amb.mostrarCodigo({ perfilNome: perfil.nome, codigo: dados.user_code, url, expiraSeg });
+  const limite = Date.now() + expiraSeg * 1000;
+  try {
+    while (Date.now() < limite) {
+      // Espera em fatias curtas, para reagir logo a um "Cancelar".
+      for (const fim = Date.now() + intervalo; Date.now() < fim; ) {
+        if (aviso.cancelado()) throw new ErroApi(`O login com código do perfil "${perfil.nome}" foi cancelado.`);
+        await new Promise((r) => setTimeout(r, Math.min(250, fim - Date.now())));
+      }
+      if (aviso.cancelado()) throw new ErroApi(`O login com código do perfil "${perfil.nome}" foi cancelado.`);
+      try {
+        return await enviarPedidoDeToken(amb, perfil, new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: dados.device_code, client_id: perfil.clientId ?? '' }), {});
+      } catch (erro) {
+        const texto = erro instanceof Error ? erro.message : String(erro);
+        if (/authorization_pending/.test(texto)) continue;
+        if (/slow_down/.test(texto)) {
+          intervalo += 5000;
+          continue;
+        }
+        if (/expired_token/.test(texto)) break;
+        if (/access_denied|authorization_declined/.test(texto)) throw new ErroApi(`O login com código do perfil "${perfil.nome}" foi recusado.`);
+        throw erro;
+      }
+    }
+    throw new ErroApi(`O código de login do perfil "${perfil.nome}" expirou antes de o login ser feito (${Math.round(expiraSeg / 60)} min).`);
+  } finally {
+    aviso.fechar();
+  }
 }
 
 /** Envia o pedido ao endereço do token e lê a resposta (sem nunca mostrar segredos nos erros). */

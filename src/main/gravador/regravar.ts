@@ -2,12 +2,19 @@
 // (com os dados do caso que falhou), para o testador chegar ao ecrã certo e apontar para o elemento.
 import { Page } from 'playwright-core';
 import { avaliarCondicao, avaliarFormula, type ContextoFormula } from '../../shared/formulas';
-import type { Bloco, Valor } from '../../shared/modelo';
+import type { Bloco, CaixaTestes, Valor } from '../../shared/modelo';
 import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 
 /** Contexto das fórmulas durante a repetição (sem gastar contadores). */
+/** Caixa de email de testes do projeto que está a ser gravado ({EMAIL:papel} nas fórmulas). */
+let caixaDoProjeto: CaixaTestes | undefined;
+export function definirCaixaDoProjeto(caixa: CaixaTestes | undefined): void {
+  caixaDoProjeto = caixa;
+}
+
 export function contextoDosValores(valores: Record<string, string>): ContextoFormula {
   return {
+    caixaTestes: caixaDoProjeto,
     variavel: (nome) => valores[nome],
     teste: valores.TESTE ?? 'REGRAVAR',
     run: valores.RUN ?? 'regravar',

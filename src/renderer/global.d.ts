@@ -6,6 +6,7 @@ import type {
   EstadoRun,
   OpcoesRun,
   Bloco,
+  CaixaTestes,
   Colecoes,
   EstadoGravador,
   EstadoProjeto,
@@ -143,6 +144,21 @@ declare global {
         testar(bloco: Bloco, chaveCaso?: string): Promise<ResultadoApi>;
       };
       /** Cofre de segredos: dá para guardar e saber se está preenchido, mas nunca para ler. */
+      caixa: {
+        /** Guarda a caixa de email de testes do projeto (null apaga). Devolve o estado do projeto. */
+        gravar(caixa: CaixaTestes | null): Promise<EstadoProjeto>;
+        /** Entra (login, se preciso) e lê os emails mais recentes. */
+        testar(): Promise<{ emails: number; ultimo: string }>;
+        /** Há uma sessão guardada neste PC? */
+        sessao(): Promise<boolean>;
+        esquecer(): Promise<void>;
+      };
+      login: {
+        aoCodigo(callback: (aviso: { id: string; perfilNome: string; codigo: string; url: string; expiraSeg: number }) => void): () => void;
+        aoFecharCodigo(callback: (id: string) => void): () => void;
+        cancelarCodigo(id: string): Promise<void>;
+        abrirCodigo(id: string): Promise<void>;
+      };
       cofre: {
         /** Um valor vazio apaga o segredo. */
         definir(nome: string, valor: string): Promise<void>;

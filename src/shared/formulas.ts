@@ -4,6 +4,8 @@
 // Regras: os argumentos separam-se com ";", os textos ficam entre aspas, as variáveis entre chavetas.
 // Todos os cálculos são decimais exatos (ver decimal.ts).
 import { codigoTotp } from './totp.js';
+import { enderecoDeTeste } from './caixa.js';
+import type { CaixaTestes } from './modelo.js';
 import {
   absoluto,
   arredondar,
@@ -38,6 +40,8 @@ export interface ContextoFormula {
   contador(nome: string): number;
   /** Número ao acaso entre 0 (incluído) e 1 (excluído). */
   aleatorio(): number;
+  /** Caixa de email de testes do projeto (para {EMAIL:papel} e EMAIL("papel")). */
+  caixaTestes?: Pick<CaixaTestes, 'emailBase' | 'formato'>;
 }
 
 type Resultado = { t: 'n'; v: Decimal } | { t: 's'; v: string } | { t: 'b'; v: boolean };
@@ -193,12 +197,26 @@ function resolverMarcador(conteudo: string, ctx: ContextoFormula): Resultado {
     if (!argumento) throw new ErroFormula('O contador precisa de um nome: {CONTADOR:nome}.');
     return txt(String(ctx.contador(argumento)));
   }
+  if (maiusculas === 'EMAIL') {
+    if (!argumento) throw new ErroFormula('O email de teste precisa de um papel: {EMAIL:supervisor}.');
+    return txt(emailDeTeste(argumento, ctx));
+  }
   if (maiusculas === 'ALEATORIO') {
     const quantos = Number(argumento);
     if (!Number.isInteger(quantos) || quantos < 1 || quantos > 30) throw new ErroFormula('Usa {ALEATORIO:n} com n entre 1 e 30.');
     return txt(digitosAoAcaso(quantos, ctx));
   }
   throw new ErroFormula(`Falta a variável {${conteudo}} (não existe nos dados do caso).`);
+}
+
+/** O endereço de teste de um papel (usa a caixa de testes do projeto). */
+function emailDeTeste(papel: string, ctx: ContextoFormula): string {
+  if (!ctx.caixaTestes?.emailBase) throw new ErroFormula('Falta definir a caixa de email de testes do projeto (Dados de teste › Caixa de email de testes).');
+  try {
+    return enderecoDeTeste(ctx.caixaTestes, papel, { caso: ctx.teste, run: ctx.run, agora: ctx.agora });
+  } catch (erro) {
+    throw new ErroFormula(erro instanceof Error ? erro.message : String(erro));
+  }
 }
 
 // ---------- Funções ----------
@@ -274,9 +292,14 @@ const FUNCOES: Record<string, Funcao> = {
       throw new ErroFormula(erro instanceof Error ? erro.message : String(erro));
     }
   },
-  /** Email único por caso e execução: EMAIL("cliente"; "exemplo.pt") → qa+cliente.TC0001.run12@exemplo.pt */
+  /**
+   * EMAIL("supervisor") → o endereço de teste desse papel na caixa de testes do projeto
+   * (emailteste+supervisor_tc0001_13112026@outlook.com). Com 2 argumentos (sem caixa de testes):
+   * EMAIL("cliente"; "exemplo.pt") → qa+cliente.TC0001.run12@exemplo.pt
+   */
   EMAIL: (a, ctx) => {
-    exigir('EMAIL', a, 2);
+    if (a.length === 1) return txt(emailDeTeste(comoTexto(a[0]), ctx));
+    exigir('EMAIL', a, 1, 2);
     const limpo = (t: string): string => t.toLowerCase().replace(/[^a-z0-9._-]/g, '');
     return txt(`qa+${limpo(comoTexto(a[0]))}.${limpo(ctx.teste)}.${limpo(ctx.run)}@${comoTexto(a[1]).trim()}`);
   },
@@ -295,7 +318,8 @@ export const AJUDA_FORMULAS: Array<{ exemplo: string; descricao: string }> = [
   { exemplo: 'TEXTO({Total}; 2)   PONTO({Total})', descricao: 'TEXTO fixa as casas decimais ("86,40"); PONTO usa ponto decimal ("86.4").' },
   { exemplo: 'NIF()   IBAN()   ALEATORIOENTRE(1; 100)', descricao: 'Geradores: NIF e IBAN de teste válidos, número entre mínimo e máximo.' },
   { exemplo: 'TOTP({ChaveMfa})', descricao: 'MFA: o código de 6 algarismos da app autenticadora, a partir da chave secreta (base32) da conta de teste.' },
-  { exemplo: 'EMAIL("cliente"; "exemplo.pt")', descricao: 'Email único: qa+cliente.<caso>.<run>@exemplo.pt' },
+  { exemplo: '{EMAIL:supervisor}   EMAIL("gestor")', descricao: 'Endereço de teste desse papel na caixa de testes do projeto (por exemplo emailteste+supervisor_tc0001_13112026@outlook.com).' },
+  { exemplo: 'EMAIL("cliente"; "exemplo.pt")', descricao: 'Email único sem caixa de testes: qa+cliente.<caso>.<run>@exemplo.pt' },
   { exemplo: 'MAIUSCULAS  MINUSCULAS  ESQUERDA  DIREITA  COMPR  ABS  MIN  MAX  POTENCIA', descricao: 'Outras funções.' },
 ];
 
@@ -443,7 +467,7 @@ export function variaveisDaFormula(formula: string): string[] {
   for (const t of tokens) {
     if (t.tipo !== 'marcador') continue;
     const cabeca = t.valor.split(':')[0].trim().toUpperCase();
-    if (['TESTE', 'RUN', 'DATA', 'CONTADOR', 'ALEATORIO'].includes(cabeca) || /^HOJE\s*([+-]\s*\d+)?$/.test(cabeca)) continue;
+    if (['TESTE', 'RUN', 'DATA', 'CONTADOR', 'ALEATORIO', 'EMAIL'].includes(cabeca) || /^HOJE\s*([+-]\s*\d+)?$/.test(cabeca)) continue;
     if (!nomes.includes(t.valor)) nomes.push(t.valor);
   }
   return nomes;
@@ -455,7 +479,7 @@ export function variaveisDaFormula(formula: string): string[] {
 const MARCADOR_NO_TEXTO = /\{([^{}"'\s][^{}"'\n]*)\}/g;
 const E_MARCADOR = (conteudo: string): boolean => {
   const cabeca = conteudo.split(':')[0].trim().toUpperCase();
-  return ['TESTE', 'RUN', 'DATA', 'CONTADOR', 'ALEATORIO'].includes(cabeca) || /^HOJE\s*([+-]\s*\d+)?$/.test(cabeca);
+  return ['TESTE', 'RUN', 'DATA', 'CONTADOR', 'ALEATORIO', 'EMAIL'].includes(cabeca) || /^HOJE\s*([+-]\s*\d+)?$/.test(cabeca);
 };
 
 /**
@@ -494,8 +518,9 @@ export function validarFormula(formula: string): string | null {
 }
 
 /** Contexto para pré-visualizar uma fórmula sem gastar contadores. */
-export function contextoDeExemplo(variaveis: Record<string, string>, contadores: Record<string, number> = {}): ContextoFormula {
+export function contextoDeExemplo(variaveis: Record<string, string>, contadores: Record<string, number> = {}, caixaTestes?: Pick<CaixaTestes, 'emailBase' | 'formato'>): ContextoFormula {
   return {
+    caixaTestes,
     variavel: (nome) => variaveis[nome],
     teste: variaveis.TESTE ?? 'TC0001',
     run: variaveis.RUN ?? 'run1',

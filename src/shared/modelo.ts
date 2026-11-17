@@ -24,7 +24,34 @@ export interface Projeto {
   exemplo?: boolean;
   /** A Wiki de componentes OutSystems (também é um projeto de exemplo, que se pode apagar). */
   wiki?: boolean;
+  /** Caixa de email de testes (os segredos e a sessão ficam no cofre, nunca aqui). */
+  caixaTestes?: CaixaTestes;
 }
+
+/** Como a ferramenta lê a caixa de testes e como se entra nela. */
+export interface CaixaTestes {
+  /** Email base, por exemplo emailteste@outlook.com (os endereços de teste são variações dele). */
+  emailBase: string;
+  /** Formato dos endereços de teste, com {nome}, {dominio}, {papel}, {caso}, {run}, {data}. */
+  formato?: string;
+  /** microsoft: Outlook / Microsoft 365 (Microsoft Graph); simulada: caixa de teste compatível (servidor local). */
+  ligacao: 'microsoft' | 'simulada';
+  /** Microsoft: conta pessoal (outlook.com, hotmail) ou de empresa (Microsoft 365). */
+  conta?: 'pessoal' | 'empresa';
+  /** Empresa: o "tenant" (domínio ou id do Microsoft Entra); vazio = qualquer organização. */
+  tenant?: string;
+  /** Como se entra: janela da própria ferramenta, no Edge, ou com um código noutro dispositivo. */
+  modoLogin: ModoLogin;
+  /** Client ID da aplicação registada no Microsoft Entra (dado pela IT; para contas pessoais, registo próprio). */
+  clientId?: string;
+  /** Caixa simulada: endereço base da API (ao estilo do Graph) e do login (OAuth 2.0). */
+  urlApi?: string;
+  urlAutorizacao?: string;
+  urlToken?: string;
+  urlDispositivo?: string;
+}
+
+export type ModoLogin = 'janela' | 'edge' | 'codigo';
 
 export type TipoAplicacao = 'FO' | 'BO' | 'API' | 'EMAIL';
 
@@ -455,6 +482,10 @@ export interface PerfilAutenticacao {
    * A password do certificado fica no cofre (`<perfil>.certificadoPassword`).
    */
   certificado?: { ficheiro: string; ca?: string };
+  /** OAuth 2.0 com login: onde se faz o login (por omissão, no Edge). */
+  modoLogin?: ModoLogin;
+  /** OAuth 2.0 com código noutro dispositivo (device code): endereço onde se pede o código. */
+  urlDispositivo?: string;
 }
 
 /** Campos secretos de cada tipo de perfil (os nomes usados no cofre). */
@@ -532,6 +563,18 @@ export interface DefinicaoEmail {
   corpoContem?: string[];
   /** Guardar valores do email em variáveis com uma expressão regular (fica o 1.º grupo, ou tudo). */
   extrair?: Array<{ variavel: string; de: 'corpo' | 'assunto'; padrao: string }>;
+  /** Para quem: o papel (supervisor, gestor...) na caixa de testes do projeto; o endereço é calculado sozinho. */
+  papel?: string;
+  /** O assunto tem de ser exatamente este (além do filtro "assunto contém"). */
+  assuntoIgual?: string;
+  /** Valores numéricos no corpo: o número a seguir ao rótulo (por exemplo "Montante:") comparado em decimal exato. */
+  valores?: Array<{ rotulo: string; esperado: string; tolerancia?: string }>;
+  /** Anexos que têm de existir (o nome contém este texto). */
+  anexos?: string[];
+  /** Guardar o 1.º link do email (que contenha este texto) numa variável. */
+  link?: { variavel: string; contem?: string; abrir?: boolean };
+  /** Para casos em que NÃO deve chegar nenhum email (por exemplo, uma recusa sem notificação). */
+  naoDeveChegar?: boolean;
 }
 
 /** Um passo manual à espera da resposta do testador. */

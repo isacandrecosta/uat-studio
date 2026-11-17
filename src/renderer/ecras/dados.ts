@@ -1,14 +1,16 @@
 // Ecrã Dados de teste: variáveis calculadas por fórmula (com pré-visualização), contadores e ajuda.
 import { AJUDA_FORMULAS, avaliarFormula, contextoDeExemplo, validarFormula } from '../../shared/formulas.js';
-import type { VariavelCalculada } from '../../shared/modelo.js';
+import { enderecoDeTeste, FORMATO_POR_OMISSAO } from '../../shared/caixa.js';
+import type { CaixaTestes, ModoLogin, VariavelCalculada } from '../../shared/modelo.js';
 import type { Contexto } from '../app.js';
 import { confirmar, h, info, mensagemDeErro, pedirFormulario, pedirTexto } from '../dom.js';
 
-export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
+export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto): Promise<void> {
   const api = window.uatStudio;
   const [variaveis, jornadas, conjuntos] = await Promise.all([api.variaveis.ler(), api.dados.listar('jornadas'), api.dados.listar('casos')]);
   let contadores = await api.contadores.ler();
   let segredosTeste = await api.cofre.segredosDeTeste();
+  let sessao = estado.projeto.caixaTestes ? await api.caixa.sessao() : false;
 
   // Caso de exemplo para a pré-visualização: o 1.º caso da jornada escolhida.
   const opcoesExemplo = jornadas.flatMap((j) => (conjuntos.find((c) => c.id === j.id)?.casos ?? []).map((caso) => ({ chave: `${j.id}/${caso.id}`, texto: `${j.nome} › ${caso.id}`, caso })));
@@ -22,7 +24,7 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
   function previsualizar(formula: string): { ok: boolean; texto: string } {
     if (!formula.trim()) return { ok: true, texto: '' };
     const dados: Record<string, string> = { ...(exemplo?.caso.dados ?? {}), TESTE: exemplo?.caso.id ?? 'TC0001', RUN: 'run1' };
-    const base = contextoDeExemplo(dados, contadores);
+    const base = contextoDeExemplo(dados, contadores, estado.projeto.caixaTestes);
     const emCurso: string[] = [];
     const procurar = (nome: string): string | undefined => {
       if (nome in dados) return dados[nome];
@@ -67,7 +69,7 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
   }
 
   function desenhar(): void {
-    zona.replaceChildren(cartaoVariaveis(), cartaoExperimentar(), cartaoSegredos(), cartaoContadores(), cartaoAjuda());
+    zona.replaceChildren(cartaoVariaveis(), cartaoExperimentar(), cartaoCaixa(), cartaoSegredos(), cartaoContadores(), cartaoAjuda());
   }
 
   function cartaoVariaveis(): HTMLElement {
@@ -162,6 +164,178 @@ export async function ecraDados({ corpo, selecao }: Contexto): Promise<void> {
   }
 
   /** Passwords de teste no cofre do Windows: nos casos escreve-se {SEGREDO:nome}. Os valores nunca voltam à interface. */
+  function cartaoCaixa(): HTMLElement {
+    const caixa = estado.projeto.caixaTestes;
+    const resultado = h('p', { class: 'suave', id: 'caixa-resultado', role: 'status' });
+    const TIPOS = [
+      { valor: 'pessoal', texto: 'Outlook / Hotmail (conta Microsoft pessoal)' },
+      { valor: 'empresa', texto: 'Microsoft 365 (conta da empresa)' },
+      { valor: 'simulada', texto: 'Caixa simulada (servidor de teste local)' },
+    ];
+    const MODOS = [
+      { valor: 'janela', texto: 'Numa janela da ferramenta (recomendado)' },
+      { valor: 'edge', texto: 'No Microsoft Edge' },
+      { valor: 'codigo', texto: 'Com um código noutro dispositivo (telemóvel ou outro PC)' },
+    ];
+    const SEM_SESSAO = 'sem sessão (o login é pedido na 1.ª utilização)';
+    const COM_SESSAO = 'sessão guardada neste PC (encriptada)';
+    const definir = async (): Promise<void> => {
+      const atual = caixa;
+      const passo1 = await pedirFormulario(
+        'Caixa de email de testes',
+        [
+          {
+            id: 'emailBase',
+            rotulo: 'Email base',
+            valor: atual?.emailBase ?? '',
+            obrigatorio: true,
+            ajuda: 'Uma caixa só para testes, aprovada pela IT (por exemplo emailteste@outlook.com). Os endereços de cada caso são variações: emailteste+gestor_tc0001_13112026@outlook.com.',
+          },
+          { id: 'tipo', rotulo: 'Que caixa é', tipo: 'escolha', opcoes: TIPOS, valor: atual?.ligacao === 'simulada' ? 'simulada' : (atual?.conta ?? 'pessoal') },
+          {
+            id: 'modoLogin',
+            rotulo: 'Como entrar na caixa',
+            tipo: 'escolha',
+            opcoes: MODOS,
+            valor: atual?.modoLogin ?? 'janela',
+            ajuda: 'Em todos os modos, a password é escrita na página da Microsoft (ou do fornecedor), nunca num campo da ferramenta. A sessão fica encriptada neste PC.',
+          },
+          { id: 'formato', rotulo: 'Formato dos endereços (opcional)', valor: atual?.formato ?? FORMATO_POR_OMISSAO, ajuda: 'Pode usar {nome}, {dominio}, {papel}, {caso}, {run} e {data}.' },
+        ],
+        'Seguinte',
+      );
+      if (!passo1) return;
+      const simulada = passo1.tipo === 'simulada';
+      const passo2 = await pedirFormulario(
+        simulada ? 'Caixa simulada: endereços' : 'Ligação à Microsoft',
+        simulada
+          ? [
+              { id: 'urlApi', rotulo: 'Endereço da API (ao estilo do Microsoft Graph)', valor: atual?.urlApi ?? 'http://localhost:4010/graph/v1.0', obrigatorio: true },
+              { id: 'urlAutorizacao', rotulo: 'Página de login', valor: atual?.urlAutorizacao ?? 'http://localhost:4010/oauth/authorize' },
+              { id: 'urlToken', rotulo: 'Endereço do token', valor: atual?.urlToken ?? 'http://localhost:4010/oauth/token', obrigatorio: true },
+              { id: 'urlDispositivo', rotulo: 'Endereço do código (login com código)', valor: atual?.urlDispositivo ?? 'http://localhost:4010/oauth/devicecode' },
+              { id: 'clientId', rotulo: 'Client ID', valor: atual?.clientId ?? 'uat-publico' },
+            ]
+          : [
+              {
+                id: 'clientId',
+                rotulo: 'Client ID',
+                valor: atual?.clientId ?? '',
+                obrigatorio: true,
+                ajuda: 'O identificador da aplicação registada no Microsoft Entra com a permissão Mail.Read (delegada). Numa conta da empresa, é a IT que o dá.',
+              },
+              ...(passo1.tipo === 'empresa'
+                ? [{ id: 'tenant', rotulo: 'Tenant (opcional)', valor: atual?.tenant ?? '', ajuda: 'O domínio ou o ID do diretório da empresa (por exemplo empresa.onmicrosoft.com). Vazio = qualquer organização.' }]
+                : []),
+            ],
+      );
+      if (!passo2) return;
+      const nova: CaixaTestes = {
+        emailBase: passo1.emailBase,
+        formato: passo1.formato,
+        modoLogin: passo1.modoLogin as ModoLogin,
+        ligacao: simulada ? 'simulada' : 'microsoft',
+        ...(simulada ? {} : { conta: passo1.tipo as 'pessoal' | 'empresa' }),
+        ...passo2,
+      };
+      try {
+        await api.caixa.gravar(nova);
+        await atualizar();
+      } catch (erro) {
+        await confirmar('Não foi possível guardar', mensagemDeErro(erro), 'Fechar');
+      }
+    };
+    const estadoSessao = h('span', { class: 'item-meta', id: 'caixa-sessao' }, sessao ? COM_SESSAO : SEM_SESSAO);
+    const testar = async (botao: HTMLButtonElement): Promise<void> => {
+      botao.disabled = true;
+      resultado.className = 'suave';
+      resultado.textContent = 'A ligar... (se for preciso, faça o login na janela que abrir)';
+      try {
+        const r = await api.caixa.testar();
+        resultado.className = 'texto-ok';
+        resultado.textContent = `Ligado. ${r.emails === 0 ? 'A caixa está vazia.' : `Último email: "${r.ultimo}".`}`;
+        sessao = true;
+        estadoSessao.textContent = COM_SESSAO;
+      } catch (erro) {
+        resultado.className = 'texto-erro';
+        resultado.textContent = mensagemDeErro(erro);
+      } finally {
+        botao.disabled = false;
+      }
+    };
+    let exemploEmail = '';
+    try {
+      exemploEmail = caixa ? enderecoDeTeste(caixa, 'gestor', { caso: exemplo?.caso.id ?? 'TC0001', run: 'run1', agora: new Date() }) : '';
+    } catch (erro) {
+      exemploEmail = mensagemDeErro(erro);
+    }
+    const tipoTexto = caixa ? (caixa.ligacao === 'simulada' ? TIPOS[2].texto : (TIPOS.find((t) => t.valor === caixa.conta)?.texto ?? TIPOS[0].texto)) : '';
+    return h(
+      'section',
+      { class: 'cartao', id: 'cartao-caixa-testes' },
+      h(
+        'header',
+        { class: 'cartao-topo' },
+        h(
+          'div',
+          {},
+          h('h2', {}, 'Caixa de email de testes', info('Um email base e endereços automáticos por papel e caso. Os blocos de email com um papel leem esta caixa sozinhos.')),
+          h('p', { class: 'suave' }, 'Defina uma caixa só para testes. Nos casos use {EMAIL:gestor} como email do gestor: cada caso fica com o seu endereço e os blocos de email verificam o que lá chega.'),
+        ),
+        h('button', { id: 'btn-caixa-definir', type: 'button', class: caixa ? 'botao' : 'botao botao-primario', onclick: () => void definir() }, caixa ? 'Alterar' : 'Definir caixa'),
+      ),
+      caixa
+        ? h(
+            'div',
+            {},
+            h(
+              'ul',
+              { class: 'lista-itens' },
+              h('li', { class: 'item' }, h('strong', {}, caixa.emailBase), h('span', { class: 'item-meta' }, tipoTexto)),
+              h('li', { class: 'item' }, h('span', {}, `Login: ${MODOS.find((m) => m.valor === caixa.modoLogin)?.texto ?? ''}`), estadoSessao),
+              h('li', { class: 'item' }, h('span', {}, 'Exemplo: {EMAIL:gestor} ='), h('code', { id: 'caixa-exemplo' }, exemploEmail)),
+            ),
+            h(
+              'div',
+              { class: 'caixa-acoes' },
+              h('button', { id: 'btn-caixa-testar', type: 'button', class: 'botao botao-primario', onclick: (e: Event) => void testar(e.currentTarget as HTMLButtonElement) }, 'Ligar e testar'),
+              h(
+                'button',
+                {
+                  id: 'btn-caixa-esquecer',
+                  type: 'button',
+                  class: 'botao',
+                  onclick: async () => {
+                    await api.caixa.esquecer();
+                    sessao = false;
+                    estadoSessao.textContent = SEM_SESSAO;
+                    resultado.className = 'suave';
+                    resultado.textContent = 'Sessão esquecida neste PC.';
+                  },
+                },
+                'Esquecer a sessão',
+              ),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  class: 'botao',
+                  onclick: async () => {
+                    if (!(await confirmar('Retirar a caixa de testes?', 'Os blocos de email com papel deixam de funcionar até definir outra caixa.', 'Retirar'))) return;
+                    await api.caixa.esquecer();
+                    await api.caixa.gravar(null);
+                    await atualizar();
+                  },
+                },
+                'Retirar',
+              ),
+            ),
+            resultado,
+          )
+        : h('p', { class: 'suave' }, 'Ainda não há caixa de testes. Peça à IT uma caixa dedicada (sem dados reais) e, para Microsoft, o Client ID de uma aplicação com a permissão Mail.Read.'),
+    );
+  }
+
   function cartaoSegredos(): HTMLElement {
     const definir = async (nomeAtual?: string): Promise<void> => {
       const valores = await pedirFormulario(nomeAtual ? `Segredo "${nomeAtual}"` : 'Novo segredo de teste', [

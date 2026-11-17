@@ -1,6 +1,8 @@
 // Verificação antes de correr: procura o que vai impedir (ou atrapalhar) uma execução,
 // para o utilizador saber antes de esperar por ela. Não abre o browser.
 import * as fs from 'node:fs';
+import { usaCaixaDeTestes } from '../email/email';
+import { problemasDaCaixa } from '../email/caixaTestes';
 import * as path from 'node:path';
 import { validarFormula } from '../../shared/formulas';
 import {
@@ -52,7 +54,6 @@ function problemasDoBloco(bloco: Bloco, perfis: Map<string, PerfilAutenticacao>)
       for (const g of pedido.guardar) if (!g.variavel.trim() || !g.caminho.trim()) problemas.push('tem uma linha de "guardar da resposta" incompleta');
     }
   } else if (bloco.tipo === 'EMAIL') {
-    if (!bloco.email?.caixa.trim()) problemas.push('não diz que caixa de correio ler');
     if (bloco.email?.perfilId && !perfis.has(bloco.email.perfilId)) problemas.push(`usa o perfil de autenticação "${bloco.email.perfilId}", que já não existe`);
     for (const e of bloco.email?.extrair ?? []) {
       try {
@@ -165,7 +166,9 @@ export async function verificarAntesDeCorrer(pasta: string, ambito: AmbitoRun, o
     const perfil = idPerfil ? perfis.get(idPerfil) : undefined;
     if (perfil) perfisUsados.set(perfil.id, perfil);
     const enderecoCompleto = bloco.tipo === 'API' && /^https?:\/\//i.test(bloco.pedido?.url.trim() ?? '');
-    const precisaDeEndereco = bloco.tipo === 'API' ? !enderecoCompleto : bloco.tipo === 'EMAIL' ? true : bloco.passos.some((p) => p.acao === 'navegar');
+    const daCaixa = bloco.tipo === 'EMAIL' && usaCaixaDeTestes(bloco);
+    if (daCaixa) for (const falta of problemasDaCaixa(projeto.caixaTestes)) juntar('erro', 'Caixa de email de testes', `${falta.charAt(0).toUpperCase()}${falta.slice(1)} (Dados de teste).`);
+    const precisaDeEndereco = bloco.tipo === 'API' ? !enderecoCompleto : bloco.tipo === 'EMAIL' ? !daCaixa : bloco.passos.some((p) => p.acao === 'navegar');
     const aplicacao = bloco.aplicacaoId ? aplicacoes.get(bloco.aplicacaoId) : undefined;
     if (!aplicacao) {
       if (precisaDeEndereco) juntar('erro', onde, 'Não está ligado a nenhuma aplicação (ou a aplicação foi apagada).');

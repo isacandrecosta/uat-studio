@@ -265,6 +265,7 @@ export async function iniciarRun(pasta: string, ambito: AmbitoRun, opcoes: Opcoe
             api,
             sessoesGuardadas,
             pastaProjeto: pasta,
+            caixaTestes: projeto.caixaTestes,
             lerSegredoDeTeste: (nome) => lerSegredoDeTeste(pasta, nome),
             proximoContador: (nomeContador) => repo.proximoContador(pasta, nomeContador),
             passoManual: () =>

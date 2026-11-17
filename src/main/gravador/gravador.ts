@@ -19,7 +19,7 @@ import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, linhasCom, paraLocator } from '../motor/localizar';
 import * as repo from '../projeto/repositorio';
 import { scriptGravador } from './injetado';
-import { repetirPassosAte, resolverValor } from './regravar';
+import { definirCaixaDoProjeto, repetirPassosAte, resolverValor } from './regravar';
 
 interface Sessao {
   pasta: string;
@@ -247,6 +247,7 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
   if (sessao) throw new repo.ErroProjeto('Já há uma gravação em curso. Termina-a primeiro.');
 
   const projeto = repo.lerProjeto(pasta);
+  definirCaixaDoProjeto(projeto.caixaTestes);
   const ambiente = projeto.ambientes.find((a) => a.id === projeto.ambienteAtivo);
   if (!ambiente) throw new repo.ErroProjeto('O projeto não tem um ambiente ativo.');
   if (ambiente.tipo === 'PRD' && !pedido.confirmouProducao) {

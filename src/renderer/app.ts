@@ -15,10 +15,12 @@ import { abrirPesquisa, type DestinoPesquisa } from './pesquisa.js';
 import { abrirAssistente } from './assistente.js';
 import { abrirConfiguracoes, aplicarModo, aplicarTema, forcarModo } from './configuracoes.js';
 import { iniciarTutorial, tutorialJaVisto } from './tutorial.js';
+import { ouvirLoginComCodigo } from './loginCodigo.js';
 
 // O tema (claro/escuro) e o modo (simples/avançado) aplicam-se logo, antes de desenhar.
 aplicarTema();
 aplicarModo();
+ouvirLoginComCodigo();
 void window.uatStudio.app.modo().then((m) => {
   if (m !== 'normal') forcarModo('avancado');
 });

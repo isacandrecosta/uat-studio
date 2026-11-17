@@ -23,6 +23,7 @@ Complementa a [ficha para a equipa de segurança](FICHA-SEGURANCA.md) e a [manua
 | Executor e gravador | O Edge instalado, controlado pelo Playwright | As aplicações configuradas (e o que essas páginas carregarem) |
 | `src/main/api/ambiente.ts` | Blocos de API (`net.fetch` do Electron: proxy e certificados do Windows) | Os endereços dos blocos e dos perfis de autenticação |
 | `src/main/api/certificado.ts` | Pedidos com certificado de cliente (mTLS), HTTPS do Node | Os endereços desses perfis |
+| `src/main/email/`, `src/main/api/loginJanela.ts` | Caixa de email de testes: login (janela da ferramenta, Edge ou código noutro dispositivo) e leitura do correio pelo Microsoft Graph (permissão delegada `Mail.Read`, só leitura) | `login.microsoftonline.com` e `graph.microsoft.com` (ou a caixa simulada indicada) |
 | `src/main/executor/verificar.ts` | "Verificar antes de correr": confirma que os endereços respondem | As aplicações configuradas |
 | `src/main/executor/trace.ts` | Visualizador de traces | Servidor local em `127.0.0.1` (porta aleatória), só lê dentro de `execucoes/` |
 | `src/diagnostico/` | Executável de diagnóstico | O site escrito na janela (não é guardado) |
@@ -37,6 +38,8 @@ Complementa a [ficha para a equipa de segurança](FICHA-SEGURANCA.md) e a [manua
 - **Mascaramento**: valores secretos aparecem como `***` no `caso.log`, nos eventos, nas evidências de API, no relatório e no texto dos defeitos.
 - **Sem trace nos blocos com segredos**: o trace do Playwright grava tudo o que acontece no ecrã e na rede; esses blocos correm sem ele. O browser do login OAuth com PKCE também não tem trace.
 - **Sessões de login reutilizadas**: o `storageState` fica só em memória, durante a execução.
+- **Caixa de email de testes**: a ferramenta **não tem nenhum campo para a password da caixa**. O login é feito na página da Microsoft (numa janela da ferramenta com sessão só em memória, no Edge, ou noutro dispositivo com um código). Fica só a sessão (refresh token), encriptada no cofre como `caixa-de-testes.refreshToken`; "Esquecer a sessão" apaga-a. Só se pede leitura (`Mail.Read`), nunca envio.
+- **Imagem dos emails** (evidência): desenhada sem JavaScript e sem rede, para não carregar imagens remotas nem avisar o remetente de que o email foi aberto.
 - **Pacotes de blocos** (`.uatpack`) e **exportação de casos**: nunca levam segredos.
 
 ## Segurança da aplicação (Electron)
@@ -48,6 +51,7 @@ Complementa a [ficha para a equipa de segurança](FICHA-SEGURANCA.md) e a [manua
 - A interface mostra textos com `textContent` (nunca `innerHTML`), o que evita injeção de código a partir de dados dos projetos.
 - Abrir ficheiros só dentro de `execucoes/`, com verificação contra caminhos do tipo `..\` (*path traversal*).
 - O ambiente de produção (tipo PRD) exige confirmação explícita antes de correr.
+- **Janela de login da caixa de testes** (`loginJanela.ts`): mostra a página do fornecedor com `sandbox`, sem Node, sem preload, sem DevTools, numa partição só em memória (apagada no fim), com permissões e janelas novas recusadas; o regresso com o código é apanhado antes de chegar à rede. O botão "Abrir a página" do login com código só abre endereços `https`.
 
 ## Corrigido nesta revisão
 
@@ -70,6 +74,7 @@ Todos estão cobertos por testes automáticos (unitários e o teste de ponta a p
 - **Assinatura do executável** com o certificado de assinatura de código da empresa (o `.exe` não está assinado).
 - **Avaliação de riscos de TIC**: por exemplo, o regulamento DORA (UE 2022/2554), as orientações da EBA sobre riscos de TIC e de segurança (EBA/GL/2019/04) e as regras internas. A ferramenta corre localmente, sem fornecedor externo nem serviço na nuvem, o que simplifica essa avaliação, mas a decisão é da empresa.
 - **RGPD**: a ferramenta foi pensada para dados fictícios em QA. Se for usada com dados reais, os prints, os traces e os logs das execuções podem conter dados pessoais: definir onde ficam as pastas dos projetos, quem lhes acede e quanto tempo se guardam (hoje a limpeza é manual).
+- **Caixa de email de testes**: usar uma caixa **dedicada a testes**, sem dados reais, aprovada pela IT; a aplicação registada no Microsoft Entra (Client ID) com a permissão delegada `Mail.Read` é decisão e configuração da IT. Os emails de teste recebidos ficam como evidência nas pastas das execuções.
 - **Produção**: recomendamos não correr testes em produção. Se for preciso, o tipo de ambiente PRD exige confirmação.
 - **Contas de teste**: usar contas próprias de teste, com o mínimo de permissões; nunca credenciais pessoais.
 - **Registo de quem correu**: cada execução guarda o utilizador do Windows. Uma auditoria mais detalhada fica para quando for pedida.

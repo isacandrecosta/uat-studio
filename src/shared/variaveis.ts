@@ -55,8 +55,11 @@ export function variaveisDoBloco(bloco: Bloco): VariaveisDoBloco {
   // Bloco de email: as {variáveis} da caixa, dos filtros e dos textos a verificar; as extraídas são produzidas.
   const email = bloco.email;
   if (email) {
-    for (const texto of [email.caixa, email.para ?? '', email.assunto ?? '', ...(email.corpoContem ?? [])]) for (const nome of variaveisDoTexto(texto)) juntar(usa, nome);
+    const textos = [email.caixa ?? '', email.para ?? '', email.assunto ?? '', email.assuntoIgual ?? '', ...(email.corpoContem ?? []), ...(email.anexos ?? []), email.link?.contem ?? ''];
+    for (const v of email.valores ?? []) textos.push(v.rotulo, v.esperado, v.tolerancia ?? '');
+    for (const texto of textos) for (const nome of variaveisDoTexto(texto)) juntar(usa, nome);
     for (const e of email.extrair ?? []) if (e.variavel.trim()) juntar(produz, e.variavel.trim());
+    if (email.link?.variavel.trim()) juntar(produz, email.link.variavel.trim());
   }
   // Passo manual: as {variáveis} da instrução.
   for (const nome of variaveisDoTexto(bloco.manual?.instrucao ?? '')) juntar(usa, nome);

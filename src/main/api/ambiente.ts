@@ -6,6 +6,7 @@ import { Bloco, PerfilAutenticacao, ResultadoApi, SEGREDO_CERTIFICADO } from '..
 import { criarFetchComCertificado } from './certificado';
 import { definirSegredo, lerSegredo } from '../cofre';
 import { loginNoBrowser } from './login';
+
 import * as repo from '../projeto/repositorio';
 import { AmbienteApi, ErroApi, executarBlocoApi } from './pedidos';
 
@@ -22,7 +23,18 @@ export function criarAmbienteApi(pasta: string): AmbienteApi {
     segredo: (nome) => lerSegredo(pasta, nome),
     // Sessão do login PKCE (refresh token): encriptada no cofre, nunca na pasta do projeto.
     guardarSegredo: (nome, valor) => definirSegredo(pasta, nome, valor ?? ''),
-    loginInterativo: (pedido) => loginNoBrowser(pedido),
+    // Login numa janela da própria ferramenta (página do fornecedor) ou no Edge. O Electron só é carregado aqui.
+    loginInterativo: (pedido) => {
+      if (pedido.modo !== 'janela') return loginNoBrowser(pedido);
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { loginNaJanela } = require('./loginJanela') as typeof import('./loginJanela');
+      return loginNaJanela(pedido);
+    },
+    mostrarCodigo: (aviso) => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { mostrarCodigo } = require('./avisoCodigo') as typeof import('./avisoCodigo');
+      return mostrarCodigo(aviso);
+    },
     fetchComCertificado: (perfil) => fetchComCertificadoDoPerfil(pasta, perfil, certificados),
     tokens: new Map(),
   };
@@ -44,7 +56,7 @@ export async function testarBloco(pasta: string, bloco: Bloco, chaveCaso: string
   const caso = jornadaId && repo.existe(pasta, 'casos', jornadaId) ? repo.ler(pasta, 'casos', jornadaId).casos.find((c) => c.id === casoId) : undefined;
   const dados: Record<string, string> = { ...(caso?.dados ?? {}), TESTE: caso?.id ?? 'TESTE', RUN: 'teste' };
   const calculadas = repo.lerVariaveis(pasta);
-  const base = contextoDeExemplo(dados, repo.lerContadores(pasta));
+  const base = contextoDeExemplo(dados, repo.lerContadores(pasta), repo.lerProjeto(pasta).caixaTestes);
   const emCurso: string[] = [];
   const procurar = (nome: string): string | undefined => {
     if (nome in dados) return dados[nome];

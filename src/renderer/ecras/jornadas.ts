@@ -2,7 +2,7 @@
 import type { Contexto } from '../app.js';
 import { codigoDoBloco } from '../../shared/codigo.js';
 import { ondeEUsado } from '../../shared/blocos.js';
-import { confirmar, h, info, menuAcoes, mostrarCodigo, mostrarUsos, normalizarPesquisa, pedirFormulario, pedirTexto, plural } from '../dom.js';
+import { confirmar, escolherOpcao, h, info, menuAcoes, mostrarCodigo, mostrarUsos, normalizarPesquisa, pedirFormulario, pedirTexto, plural } from '../dom.js';
 
 const NOMES_TIPO_BLOCO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação', MANUAL: 'Manual' };
 
@@ -170,40 +170,97 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
     );
   }
 
-  /** Criar ou alterar um bloco de email (Microsoft Graph ou compatível): esperar, verificar e extrair valores. */
+  /**
+   * Criar ou alterar um bloco de email: esperar que chegue, verificar (assunto, corpo, valores, anexos) e
+   * guardar valores (código, link). Lê a caixa de testes do projeto (por papel) ou outra caixa (aplicação).
+   */
   const editarEmail = async (existente?: (typeof blocos)[number]): Promise<void> => {
     const caixas = aplicacoes.filter((a) => a.tipo === 'EMAIL');
-    if (caixas.length === 0) {
+    const temCaixaTestes = Boolean(estado.projeto.caixaTestes);
+    let daCaixa: boolean;
+    if (existente) daCaixa = Boolean(existente.email?.papel?.trim() || !existente.email?.caixa?.trim());
+    else if (temCaixaTestes && caixas.length > 0) {
+      const escolha = await escolherOpcao('Que caixa ler?', 'O bloco pode ler a caixa de testes do projeto (pelo papel) ou outra caixa ligada a uma aplicação.', [
+        { valor: 'caixa', texto: 'Caixa de testes do projeto', primario: true },
+        { valor: 'outra', texto: 'Outra caixa (aplicação)' },
+      ]);
+      if (!escolha) return;
+      daCaixa = escolha === 'caixa';
+    } else daCaixa = temCaixaTestes || caixas.length === 0;
+    if (daCaixa && !temCaixaTestes) {
       await confirmar(
-        'Falta uma aplicação de email',
-        'Cria primeiro uma aplicação do tipo "Caixa de email" (cartão Aplicações, mais abaixo) com o endereço da API de email neste ambiente, por exemplo https://graph.microsoft.com/v1.0.',
+        'Falta a caixa de email de testes',
+        'Defina primeiro a caixa de email de testes do projeto no ecrã Dados de teste (cartão "Caixa de email de testes"). Em alternativa, crie uma aplicação do tipo "Caixa de email" no cartão Aplicações.',
         'Fechar',
       );
       return;
     }
     const def = existente?.email;
     const linhas = (lista: string[] | undefined): string => (lista ?? []).join('\n');
+    const campoDe = daCaixa
+      ? [
+          {
+            id: 'papel',
+            rotulo: 'Para quem (papel)',
+            valor: def?.papel ?? '',
+            obrigatorio: true,
+            ajuda: 'Por exemplo gestor, cliente, supervisor. O email tem de chegar ao endereço de teste desse papel neste caso (o mesmo que {EMAIL:gestor} dá nos dados).',
+          },
+        ]
+      : [
+          { id: 'aplicacao', rotulo: 'Caixa de email (aplicação)', tipo: 'escolha' as const, valor: existente?.aplicacaoId ?? caixas[0]?.id, opcoes: caixas.map((a) => ({ valor: a.id, texto: a.nome })) },
+          { id: 'perfil', rotulo: 'Perfil de autenticação', tipo: 'escolha' as const, valor: def?.perfilId ?? '', opcoes: [{ valor: '', texto: '(sem autenticação)' }, ...perfis.map((p) => ({ valor: p.id, texto: p.nome }))] },
+          { id: 'caixa', rotulo: 'Endereço da caixa', valor: def?.caixa, obrigatorio: true, ajuda: 'Por exemplo qa.uat@empresa.pt. Pode ter {variáveis}.' },
+          { id: 'para', rotulo: 'Só emails para (contém), opcional', valor: def?.para, ajuda: 'Por exemplo {EmailCliente}' },
+        ];
     const valores = await pedirFormulario(existente ? `Bloco de email "${existente.nome}"` : 'Novo bloco de email', [
-      { id: 'nome', rotulo: 'Nome', valor: existente?.nome, obrigatorio: true, ajuda: 'Por exemplo: Código de MFA por email' },
-      { id: 'aplicacao', rotulo: 'Caixa de email (aplicação)', tipo: 'escolha', valor: existente?.aplicacaoId ?? caixas[0].id, opcoes: caixas.map((a) => ({ valor: a.id, texto: a.nome })) },
-      { id: 'perfil', rotulo: 'Perfil de autenticação', tipo: 'escolha', valor: def?.perfilId ?? '', opcoes: [{ valor: '', texto: '(sem autenticação)' }, ...perfis.map((p) => ({ valor: p.id, texto: p.nome }))] },
-      { id: 'caixa', rotulo: 'Endereço da caixa de testes', valor: def?.caixa, obrigatorio: true, ajuda: 'Por exemplo qa.uat@empresa.pt. Pode ter {variáveis}.' },
-      { id: 'para', rotulo: 'Só emails para (contém), opcional', valor: def?.para, ajuda: 'Por exemplo {EmailCliente}, ou qa+{TESTE}' },
+      { id: 'nome', rotulo: 'Nome', valor: existente?.nome, obrigatorio: true, ajuda: 'Por exemplo: Email de aprovação ao gestor' },
+      ...campoDe,
+      {
+        id: 'chegar',
+        rotulo: 'O que se espera',
+        tipo: 'escolha',
+        valor: def?.naoDeveChegar ? 'nao' : 'sim',
+        opcoes: [
+          { valor: 'sim', texto: 'Tem de chegar um email' },
+          { valor: 'nao', texto: 'NÃO deve chegar nenhum email (espera o tempo todo)' },
+        ],
+      },
       { id: 'assunto', rotulo: 'Só emails com o assunto (contém), opcional', valor: def?.assunto },
+      { id: 'assuntoIgual', rotulo: 'O assunto tem de ser exatamente, opcional', valor: def?.assuntoIgual, ajuda: 'Dá KO se for diferente. Pode ter {variáveis}: Pedido {PedidoId} aprovado' },
       { id: 'espera', rotulo: 'Esperar até (segundos)', valor: String(def?.esperaSeg ?? 60) },
       { id: 'contem', rotulo: 'O corpo tem de conter (um texto por linha), opcional', tipo: 'area', valor: linhas(def?.corpoContem), ajuda: 'Por exemplo: Pedido {PedidoId}. Cada texto em falta dá KO.' },
       {
+        id: 'valores',
+        rotulo: 'Valores no corpo (um por linha: Rótulo=valor esperado; tolerância opcional), opcional',
+        tipo: 'area',
+        valor: linhas(def?.valores?.map((v) => `${v.rotulo}=${v.esperado}${v.tolerancia ? `;${v.tolerancia}` : ''}`)),
+        ajuda: 'O número a seguir ao rótulo, comparado em decimal exato. Exemplos: Montante:={Valor}   Prestação:={PrestacaoEsperada};0,01',
+      },
+      { id: 'anexos', rotulo: 'Anexos que têm de existir (nome contém, um por linha), opcional', tipo: 'area', valor: linhas(def?.anexos), ajuda: 'Por exemplo: contrato.pdf' },
+      { id: 'link', rotulo: 'Guardar o link do email (Variavel=texto que o link contém), opcional', valor: def?.link ? `${def.link.variavel}=${def.link.contem ?? ''}` : '', ajuda: 'Exemplo: LinkConfirmacao=/confirmar. Sem texto, fica o 1.º link.' },
+      {
+        id: 'abrir',
+        rotulo: 'Abrir o link no browser do caso?',
+        tipo: 'escolha',
+        valor: def?.link?.abrir ? 'sim' : 'nao',
+        opcoes: [
+          { valor: 'nao', texto: 'Não, só guardar' },
+          { valor: 'sim', texto: 'Sim, abrir a seguir (por exemplo, para confirmar um registo)' },
+        ],
+      },
+      {
         id: 'extrair',
-        rotulo: 'Guardar em variáveis (um por linha: Variavel=expressão), opcional',
+        rotulo: 'Guardar outros valores (um por linha: Variavel=expressão), opcional',
         tipo: 'area',
         valor: linhas(def?.extrair?.map((e) => `${e.variavel}${e.de === 'assunto' ? '@assunto' : ''}=${e.padrao}`)),
-        ajuda: 'Expressão regular; fica o 1.º grupo entre parênteses. Exemplos: CodigoMfa=(\\d{6})   Link=(https://\\S+)   Pedido@assunto=pedido (\\d+)',
+        ajuda: 'Expressão regular; fica o 1.º grupo entre parênteses. Exemplos: CodigoMfa=(\\d{6})   Pedido@assunto=pedido (\\d+)',
       },
     ]);
-    if (!valores?.nome.trim() || !valores.caixa.trim()) return;
-    const extrair = valores.extrair
-      .split(/\r?\n/)
-      .map((l) => l.trim())
+    if (!valores?.nome.trim()) return;
+    if (!daCaixa && !valores.caixa?.trim()) return;
+    const porLinha = (texto: string): string[] => texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const extrair = porLinha(valores.extrair)
       .filter((l) => l.includes('='))
       .map((l) => {
         const igual = l.indexOf('=');
@@ -211,18 +268,41 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
         const doAssunto = nome.endsWith('@assunto');
         return { variavel: doAssunto ? nome.slice(0, -'@assunto'.length) : nome, de: doAssunto ? ('assunto' as const) : ('corpo' as const), padrao: l.slice(igual + 1).trim() };
       });
+    const valoresNumericos = porLinha(valores.valores)
+      .filter((l) => l.includes('='))
+      .map((l) => {
+        const igual = l.indexOf('=');
+        const [esperado, tolerancia] = l.slice(igual + 1).split(';').map((p) => p.trim());
+        return { rotulo: l.slice(0, igual).trim(), esperado, ...(tolerancia ? { tolerancia } : {}) };
+      });
+    const textoLink = valores.link.trim();
+    const link = textoLink
+      ? {
+          variavel: (textoLink.includes('=') ? textoLink.slice(0, textoLink.indexOf('=')) : textoLink).trim(),
+          ...(textoLink.includes('=') && textoLink.slice(textoLink.indexOf('=') + 1).trim() ? { contem: textoLink.slice(textoLink.indexOf('=') + 1).trim() } : {}),
+          ...(valores.abrir === 'sim' ? { abrir: true } : {}),
+        }
+      : undefined;
+    const novo = { ...(existente ?? { passos: [] }) } as (typeof blocos)[number];
+    if (daCaixa) delete novo.aplicacaoId;
     await dados.guardar('blocos', {
-      ...(existente ?? { passos: [] }),
+      ...novo,
       nome: valores.nome.trim(),
       tipo: 'EMAIL',
-      aplicacaoId: valores.aplicacao,
+      ...(daCaixa ? {} : { aplicacaoId: valores.aplicacao }),
       email: {
-        caixa: valores.caixa.trim(),
-        ...(valores.perfil ? { perfilId: valores.perfil } : {}),
-        ...(valores.para.trim() ? { para: valores.para.trim() } : {}),
+        caixa: daCaixa ? '' : valores.caixa.trim(),
+        ...(daCaixa ? { papel: valores.papel.trim() } : {}),
+        ...(!daCaixa && valores.perfil ? { perfilId: valores.perfil } : {}),
+        ...(!daCaixa && valores.para?.trim() ? { para: valores.para.trim() } : {}),
         ...(valores.assunto.trim() ? { assunto: valores.assunto.trim() } : {}),
+        ...(valores.assuntoIgual.trim() ? { assuntoIgual: valores.assuntoIgual.trim() } : {}),
         esperaSeg: Math.max(1, Number(valores.espera) || 60),
-        corpoContem: valores.contem.split(/\r?\n/).map((l) => l.trim()).filter(Boolean),
+        corpoContem: porLinha(valores.contem),
+        ...(valoresNumericos.length ? { valores: valoresNumericos } : {}),
+        ...(porLinha(valores.anexos).length ? { anexos: porLinha(valores.anexos) } : {}),
+        ...(link?.variavel ? { link } : {}),
+        ...(valores.chegar === 'nao' ? { naoDeveChegar: true } : {}),
         extrair,
       },
     });

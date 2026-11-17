@@ -1,10 +1,16 @@
 // Blocos de email: esperar que chegue um email à caixa de testes (Microsoft Graph ou compatível),
 // verificar o conteúdo e extrair valores (por exemplo, o código de MFA ou um link) para variáveis.
 // Usa o motor dos blocos de API (autenticação, rede do Windows, segredos mascarados). Sem Electron.
-import type { Bloco, PerfilAutenticacao } from '../../shared/modelo';
+import type { Bloco, CaixaTestes, PerfilAutenticacao } from '../../shared/modelo';
+import { compararComTolerancia, deInteiro, formatar, lerNumero } from '../../shared/decimal';
 import { AmbienteApi, ErroApi, executarBlocoApi } from '../api/pedidos';
+import { apiDaCaixa, perfilDaCaixa, problemasDaCaixa } from './caixaTestes';
 
 export interface EmailRecebido {
+  id?: string;
+  temAnexos?: boolean;
+  /** Nomes dos anexos (só lidos quando o bloco verifica anexos). */
+  anexos?: string[];
   de: string;
   para: string[];
   assunto: string;
@@ -15,7 +21,12 @@ export interface EmailRecebido {
 }
 
 export interface ResultadoEmail {
-  email: EmailRecebido;
+  /** Vazio quando o bloco espera que NÃO chegue nenhum email (e não chegou). */
+  email?: EmailRecebido;
+  /** O endereço para onde o email devia ir (papel na caixa de testes), se houver. */
+  endereco?: string;
+  /** Link guardado e se é para o abrir no browser do caso. */
+  link?: { variavel: string; url: string; abrir: boolean };
   /** Quantas vezes se consultou a caixa até o email aparecer. */
   tentativas: number;
   verificacoes: Array<{ descricao: string; ok: boolean; esperado: string; obtido: string }>;
@@ -34,6 +45,29 @@ export interface PedidoEmail {
   devePararAgora?(): boolean;
   /** Intervalo entre consultas à caixa (por omissão, 3 segundos). */
   intervaloMs?: number;
+  /** A caixa de email de testes do projeto (usada quando o bloco tem um papel ou não diz que caixa ler). */
+  caixaTestes?: CaixaTestes;
+}
+
+/** O bloco lê a caixa de testes do projeto? (tem um papel, ou não indica nenhuma caixa). */
+export function usaCaixaDeTestes(bloco: Bloco): boolean {
+  return Boolean(bloco.email?.papel?.trim() || !bloco.email?.caixa?.trim());
+}
+
+/** Os links (href) de um email, pela ordem em que aparecem; sem HTML, os endereços http(s) do texto. */
+export function linksDoEmail(email: Pick<EmailRecebido, 'html' | 'texto'>): string[] {
+  const links: string[] = [];
+  for (const m of email.html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) links.push(m[1].replace(/&amp;/g, '&'));
+  for (const m of email.texto.matchAll(/https?:\/\/[^\s"'<>]+/g)) links.push(m[0]);
+  return [...new Set(links.filter((l) => /^https?:\/\//i.test(l)))];
+}
+
+/** O número que aparece a seguir a um rótulo (por exemplo "Montante:" → "1.234,56 €"). */
+export function valorDepoisDe(texto: string, rotulo: string): string | null {
+  const i = texto.toLowerCase().indexOf(rotulo.toLowerCase());
+  if (i < 0) return null;
+  const m = /[-−]?\d[\d.,\s]*\d|[-−]?\d/.exec(texto.slice(i + rotulo.length, i + rotulo.length + 80));
+  return m ? m[0].trim() : null;
 }
 
 /** HTML → texto simples (etiquetas fora, entidades básicas traduzidas, espaços compactados). */
@@ -54,6 +88,8 @@ export function htmlParaTexto(html: string): string {
 }
 
 interface MensagemGraph {
+  id?: string;
+  hasAttachments?: boolean;
   subject?: string;
   receivedDateTime?: string;
   from?: { emailAddress?: { address?: string } };
@@ -64,6 +100,8 @@ interface MensagemGraph {
 function paraEmail(m: MensagemGraph): EmailRecebido {
   const html = m.body?.content ?? '';
   return {
+    ...(m.id ? { id: m.id } : {}),
+    ...(m.hasAttachments !== undefined ? { temAnexos: m.hasAttachments } : {}),
     de: m.from?.emailAddress?.address ?? '',
     para: (m.toRecipients ?? []).map((r) => r.emailAddress?.address ?? '').filter(Boolean),
     assunto: m.subject ?? '',
@@ -76,9 +114,28 @@ function paraEmail(m: MensagemGraph): EmailRecebido {
 /** Espera pelo email, verifica-o e extrai os valores pedidos. */
 export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<ResultadoEmail> {
   const def = pedido.bloco.email;
-  if (!def?.caixa.trim()) throw new ErroApi(`O bloco de email "${pedido.bloco.nome}" não diz que caixa de correio ler.`);
-  const caixa = pedido.preencher(def.caixa).trim();
+  if (!def) throw new ErroApi(`O bloco de email "${pedido.bloco.nome}" não tem definição.`);
+  const daCaixaDeTestes = usaCaixaDeTestes(pedido.bloco);
+  let urlBase = pedido.urlBase;
+  let perfil = pedido.perfil;
+  let caminho: string;
+  let caixa: string;
+  if (daCaixaDeTestes) {
+    const falta = problemasDaCaixa(pedido.caixaTestes);
+    if (falta.length || !pedido.caixaTestes) throw new ErroApi(`A caixa de email de testes do projeto não está pronta: ${falta.join('; ')}.`);
+    const api = apiDaCaixa(pedido.caixaTestes);
+    urlBase = api.urlBase;
+    caminho = api.caminho;
+    perfil = perfilDaCaixa(pedido.caixaTestes);
+    caixa = pedido.caixaTestes.emailBase.trim();
+  } else {
+    caixa = pedido.preencher(def.caixa).trim();
+    caminho = `/users/${encodeURIComponent(caixa)}/messages`;
+  }
+  // Com papel, o endereço de teste é exato (emailteste+gestor_tc0001_13112026@...): nunca apanha outro caso.
+  const endereco = def.papel?.trim() ? pedido.preencher(`{EMAIL:${def.papel.trim()}}`).trim().toLowerCase() : '';
   const para = pedido.preencher(def.para ?? '').trim().toLowerCase();
+  const assuntoIgual = pedido.preencher(def.assuntoIgual ?? '').trim();
   const assunto = pedido.preencher(def.assunto ?? '').trim().toLowerCase();
   const esperaMs = Math.max(1, def.esperaSeg ?? 60) * 1000;
   // Tolerância de 2 minutos para relógios desacertados entre o PC e o servidor de email.
@@ -91,7 +148,7 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
     passos: [],
     pedido: {
       metodo: 'GET',
-      url: `/users/${encodeURIComponent(caixa)}/messages`,
+      url: caminho,
       parametros: [
         { nome: '$top', valor: '25' },
         { nome: '$orderby', valor: 'receivedDateTime desc' },
@@ -99,7 +156,7 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
       cabecalhos: [],
       tipoCorpo: 'nenhum',
       corpo: '',
-      ...(def.perfilId ? { perfilId: def.perfilId } : {}),
+      ...(daCaixaDeTestes ? {} : def.perfilId ? { perfilId: def.perfilId } : {}),
       verificacoes: [],
       guardar: [],
     },
@@ -109,7 +166,7 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
   let encontrado: EmailRecebido | undefined;
   for (;;) {
     tentativas += 1;
-    const resposta = await executarBlocoApi({ bloco: consulta, urlBase: pedido.urlBase, perfil: pedido.perfil, preencher: (t) => t }, amb);
+    const resposta = await executarBlocoApi({ bloco: consulta, urlBase, perfil, preencher: (t) => t }, amb);
     if (resposta.resposta.estado !== 200) throw new ErroApi(`A caixa de correio ${caixa} respondeu HTTP ${resposta.resposta.estado}.`);
     let mensagens: MensagemGraph[] = [];
     try {
@@ -120,22 +177,74 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
     encontrado = mensagens
       .map(paraEmail)
       .filter((m) => !m.recebido || Date.parse(m.recebido) >= desde)
-      .find((m) => (!para || m.para.some((p) => p.toLowerCase().includes(para))) && (!assunto || m.assunto.toLowerCase().includes(assunto)));
+      .find(
+        (m) =>
+          (!endereco || m.para.some((p) => p.toLowerCase() === endereco)) &&
+          (!para || m.para.some((p) => p.toLowerCase().includes(para))) &&
+          (!assunto || m.assunto.toLowerCase().includes(assunto)),
+      );
     if (encontrado || Date.now() >= fim || pedido.devePararAgora?.()) break;
     await new Promise((r) => setTimeout(r, pedido.intervaloMs ?? 3_000));
   }
+  const filtros = [endereco && `para ${endereco}`, para && `para "${para}"`, assunto && `com o assunto "${assunto}"`].filter(Boolean).join(' e ');
+  if (def.naoDeveChegar) {
+    // Aqui esperou o tempo todo: chegar é que é a diferença.
+    const verificacoes = [
+      {
+        descricao: 'Não deve chegar nenhum email',
+        ok: !encontrado,
+        esperado: 'nenhum email',
+        obtido: encontrado ? `chegou "${encontrado.assunto}" de ${encontrado.de}` : 'nenhum email',
+      },
+    ];
+    return { ...(encontrado ? { email: encontrado } : {}), ...(endereco ? { endereco } : {}), tentativas, verificacoes, guardadas: {} };
+  }
   if (!encontrado) {
-    const filtros = [para && `para "${para}"`, assunto && `com o assunto "${assunto}"`].filter(Boolean).join(' e ');
     throw new ErroApi(`O email não chegou em ${Math.round(esperaMs / 1000)} s à caixa ${caixa}${filtros ? ` (${filtros})` : ''}.`);
   }
 
-  const verificacoes = (def.corpoContem ?? [])
+  const verificacoes: ResultadoEmail['verificacoes'] = [];
+  if (assuntoIgual) {
+    const ok = encontrado.assunto.trim() === assuntoIgual;
+    verificacoes.push({ descricao: `O assunto é "${assuntoIgual}"`, ok, esperado: assuntoIgual, obtido: encontrado.assunto });
+  }
+  verificacoes.push(...(def.corpoContem ?? [])
     .map((t) => pedido.preencher(t).trim())
     .filter(Boolean)
     .map((t) => {
       const ok = encontrado.texto.includes(t) || encontrado.html.includes(t);
       return { descricao: `O corpo contém "${t}"`, ok, esperado: `contém "${t}"`, obtido: ok ? `contém "${t}"` : encontrado.texto.slice(0, 200) };
-    });
+    }));
+
+  // Valores: o número a seguir ao rótulo, comparado em decimal exato (com tolerância, se houver).
+  for (const v of def.valores ?? []) {
+    const rotulo = pedido.preencher(v.rotulo).trim();
+    const esperadoTexto = pedido.preencher(v.esperado).trim();
+    if (!rotulo || !esperadoTexto) continue;
+    const descricao = `Valor "${rotulo}"`;
+    const lido = valorDepoisDe(encontrado.texto, rotulo);
+    const esperado = lerNumero(esperadoTexto);
+    const obtido = lido === null ? null : lerNumero(lido);
+    if (!esperado) throw new ErroApi(`O valor esperado "${esperadoTexto}" para "${rotulo}" não é um número.`);
+    if (!obtido) {
+      verificacoes.push({ descricao, ok: false, esperado: esperadoTexto, obtido: '(não encontrei o número a seguir ao rótulo)' });
+      continue;
+    }
+    const tolerancia = lerNumero(pedido.preencher(v.tolerancia ?? '').trim() || '0') ?? deInteiro(0);
+    const c = compararComTolerancia(esperado, obtido, tolerancia);
+    verificacoes.push({ descricao, ok: c.igual, esperado: formatar(esperado), obtido: c.igual ? formatar(obtido) : `${formatar(obtido)} (diferença ${c.diferenca})` });
+  }
+
+  // Anexos: lidos só se o bloco os verificar.
+  const anexosPedidos = (def.anexos ?? []).map((a) => pedido.preencher(a).trim()).filter(Boolean);
+  if (anexosPedidos.length) {
+    const nomes = encontrado.id ? await lerAnexos(`${caminho}/${encodeURIComponent(encontrado.id)}/attachments`) : [];
+    encontrado.anexos = nomes;
+    for (const a of anexosPedidos) {
+      const ok = nomes.some((n) => n.toLowerCase().includes(a.toLowerCase()));
+      verificacoes.push({ descricao: `Tem o anexo "${a}"`, ok, esperado: a, obtido: ok ? a : nomes.length ? nomes.join(', ') : '(sem anexos)' });
+    }
+  }
 
   const guardadas: Record<string, string> = {};
   for (const e of def.extrair ?? []) {
@@ -151,5 +260,24 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
     if (!m) throw new ErroApi(`Não encontrei "${e.padrao}" no ${e.de === 'assunto' ? 'assunto' : 'corpo'} do email, para guardar {${e.variavel}}.`);
     guardadas[e.variavel.trim()] = (m[1] ?? m[0]).trim();
   }
-  return { email: encontrado, tentativas, verificacoes, guardadas };
+  let link: ResultadoEmail['link'];
+  if (def.link?.variavel.trim()) {
+    const contem = pedido.preencher(def.link.contem ?? '').trim();
+    const url = linksDoEmail(encontrado).find((l) => !contem || l.includes(contem));
+    if (!url) throw new ErroApi(`Não encontrei nenhum link no email${contem ? ` que contenha "${contem}"` : ''}, para guardar {${def.link.variavel.trim()}}.`);
+    guardadas[def.link.variavel.trim()] = url;
+    link = { variavel: def.link.variavel.trim(), url, abrir: Boolean(def.link.abrir) };
+  }
+  return { email: encontrado, ...(endereco ? { endereco } : {}), ...(link ? { link } : {}), tentativas, verificacoes, guardadas };
+
+  async function lerAnexos(url: string): Promise<string[]> {
+    const pedidoAnexos: Bloco = { ...consulta, id: `${consulta.id}-anexos`, pedido: { ...consulta.pedido!, url, parametros: [] } };
+    const r = await executarBlocoApi({ bloco: pedidoAnexos, urlBase, perfil, preencher: (t) => t }, amb);
+    if (r.resposta.estado !== 200) throw new ErroApi(`Não foi possível ler os anexos do email (HTTP ${r.resposta.estado}).`);
+    try {
+      return ((JSON.parse(r.resposta.corpo) as { value?: Array<{ name?: string }> }).value ?? []).map((a) => a.name ?? '').filter(Boolean);
+    } catch {
+      throw new ErroApi('A lista de anexos do email não veio em JSON.');
+    }
+  }
 }

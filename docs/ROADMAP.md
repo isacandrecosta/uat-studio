@@ -56,6 +56,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Interface, pacote 2: "Mais opções" (percurso e nova execução), filtros (cenários, blocos, casos por resultado), detalhe do caso num painel lateral, caminho "Projeto › Épico › Cenário", pesquisa rápida (Ctrl+K), defeitos criados por execução, ajudas "i", menus "Criar ▾"/"Partilhar ▾", modo escuro e tutorial guiado (saltar e retomar em Configurações).
 - [x] Desempenho: medição do PC em cada execução, aviso antes de correr quando o paralelo não cabe na memória, painel em Configurações. Manuais do utilizador e técnico (atualizados a cada funcionalidade).
 - [x] Simplificar para quem não é técnico: assistente "Novo teste", aceitar os resultados como esperados, duplicar cenários e casos, modo simples/avançado.
+- [x] Caixa de email de testes: email base com endereços por papel, caso e data ({EMAIL:papel}), login numa janela da ferramenta, no Edge ou com código noutro dispositivo, bloco "Verificar email" por papel (assunto exato, valores com tolerância, anexos, link, "não deve chegar"), imagem do email como evidência. Guia de fórmulas no manual do utilizador.
+- [ ] Caixa de email de testes com uma conta Microsoft real: falta a aplicação registada no Microsoft Entra (Client ID com Mail.Read), a pedir à IT.
 - [ ] Simplificar, por decidir: "Gravar aqui" dentro do cenário, verificações sugeridas depois de um clique, modelo de Excel com explicações.
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

@@ -3,7 +3,7 @@
 Para quem mantém a ferramenta, para a equipa de segurança e para quem a aprova. Escrito de forma simples; os pormenores estão no código, com comentários em português.
 Para o uso do dia a dia, ver o [manual do utilizador](MANUAL-UTILIZADOR.md). Documentos de apoio: [auditoria de compliance](AUDITORIA-COMPLIANCE.md), [ficha de segurança](FICHA-SEGURANCA.md), [guia de instalação](GUIA-INSTALACAO.md), [licenças](LICENCAS.md), [especificação](ESPECIFICACAO.md), [roadmap](ROADMAP.md).
 
-> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova (ver "Novidades" no fim). Última atualização: 13/11/2026.
+> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova (ver "Novidades" no fim). Última atualização: 17/11/2026.
 
 ---
 
@@ -110,7 +110,21 @@ Projetos recentes, o **cofre de segredos** (`cofre\`, encriptado), os projetos d
 - **Pedidos HTTP**: pelo `net.fetch` do Electron, que usa o **proxy e os certificados do Windows**. Com certificado de cliente (mTLS), pelo HTTPS do Node (sem proxy).
 - **OAuth 2.0**: client credentials, password, refresh token e Authorization Code + PKCE. Os tokens são reutilizados durante a execução.
 - **Respostas**: JSON por caminho (um campo em falta conta como 0, regra das APIs do OutSystems) e XML/SOAP por XPath.
-- **Email**: uma API ao estilo do Microsoft Graph, para esperar, verificar e extrair valores (por exemplo, um código de MFA).
+- **Email**: uma API ao estilo do Microsoft Graph, para esperar, verificar e extrair valores (por exemplo, um código de MFA). Pode ler outra caixa (aplicação do tipo EMAIL + perfil) ou a **caixa de testes do projeto** (abaixo).
+
+#### Caixa de email de testes
+- **Definição**: `Projeto.caixaTestes` (`CaixaTestes` em `src/shared/modelo.ts`): email base, formato, ligação (`microsoft` ou `simulada`), conta (pessoal/empresa), tenant, modo de login e Client ID. **Sem segredos**: a sessão (refresh token) fica no cofre como `caixa-de-testes.refreshToken`. Gravada pelo IPC `caixa:gravar` (`src/main/email/ipc.ts`, `limparCaixa` só aceita os campos conhecidos; mudar a conta apaga a sessão).
+- **Endereços**: `enderecoDeTeste` (`src/shared/caixa.ts`) aplica o formato `{nome}+{papel}_{caso}_{data}@{dominio}` (data `ddMMyyyy`, tudo em minúsculas, só caracteres válidos). Nas fórmulas: marcador `{EMAIL:papel}` e `EMAIL("papel")` (`ContextoFormula.caixaTestes`, passado pelo executor, pelo "Testar" de API, pela pré-visualização e pelo regravar). `EMAIL(papel; domínio)` mantém o formato antigo.
+- **Perfil interno**: `perfilDaCaixa` (`src/main/email/caixaTestes.ts`) transforma a caixa num perfil `oauth2-pkce` que nunca é gravado. Microsoft: `https://login.microsoftonline.com/{consumers|tenant|organizations}/oauth2/v2.0/authorize|token|devicecode`, âmbito `offline_access Mail.Read`, redirect `https://login.microsoftonline.com/common/oauth2/nativeclient`, leitura em `https://graph.microsoft.com/v1.0/me/messages` (permissão **delegada**: só a caixa de quem entrou). Simulada: os endereços indicados e `/users/{base}/messages`.
+- **Modos de login** (`PerfilAutenticacao.modoLogin`, também disponível nos perfis PKCE normais):
+  - `janela` → `loginNaJanela` (`src/main/api/loginJanela.ts`): `BrowserWindow` com partição **só em memória** (apagada no fim), `sandbox`, sem Node, sem preload, sem DevTools, permissões recusadas, janelas novas recusadas; o regresso ao redirect_uri é cancelado em `webRequest.onBeforeRequest` e o código fica com a ferramenta. A página mostrada é a do fornecedor: a ferramenta não tem formulário de password.
+  - `edge` → `loginNoBrowser` (já existia; Edge visível sem trace).
+  - `codigo` → `loginDispositivo` em `pedidos.ts` (RFC 8628, device code): pede o código, mostra-o pela `AmbienteApi.mostrarCodigo` (`src/main/api/avisoCodigo.ts` envia `login:codigo` à janela; `src/renderer/loginCodigo.ts` desenha o aviso com "Abrir a página neste PC", que só abre endereços https) e pergunta ao endereço do token de N em N segundos (`authorization_pending`, `slow_down`, `expired_token`, `access_denied`; "Cancelar" pára).
+- **Bloco "Verificar email"** (`DefinicaoEmail`): com `papel` (ou sem caixa indicada) usa a caixa de testes. `lerEmail` (`src/main/email/email.ts`) filtra pelo endereço **exato** do papel neste caso, verifica `assuntoIgual`, `corpoContem`, `valores` (o número a seguir ao rótulo, `valorDepoisDe`, em decimal exato com tolerância), `anexos` (`GET .../messages/{id}/attachments`, só quando pedidos) e `link` (`linksDoEmail`: href http/https; `abrir` abre-o na sessão do browser do caso). `naoDeveChegar` espera o tempo todo e dá KO se chegar.
+- **Evidências**: `email/NN_<bloco>.json`, `.html` e `.png`. A imagem (`desenharEmail` em `correrCaso.ts`) é feita num contexto do Edge **sem JavaScript e sem rede** (só `data:`), para não pedir imagens remotas nem "píxeis" de leitura.
+- **Verificação antes de correr**: blocos com caixa de testes exigem a caixa completa (`problemasDaCaixa`) e dispensam a aplicação.
+- **Servidor de teste** (fora do projeto): `POST /oauth/devicecode`, página `/oauth/dispositivo`, `grant_type=urn:ietf:params:oauth:grant-type:device_code` (cliente `uat-publico`), anexos em `/email/enviar` (`anexos: [...]`) e `GET /graph/v1.0/users/{caixa}/messages/{id}/attachments`.
+- **Para a IT** (conta real): caixa dedicada a testes, sem dados reais; aplicação registada no Microsoft Entra como cliente público ("Mobile and desktop", redirect `.../common/oauth2/nativeclient`, "Allow public client flows" para o login com código) e permissão delegada `Mail.Read` (+ `offline_access`). Não é preciso `Mail.Send` nem permissões de aplicação.
 - **No browser**: intercetar o que a aplicação envia e simular respostas de APIs externas.
 
 ### 4.4 Simplificações para quem não é técnico
@@ -125,7 +139,7 @@ Projetos recentes, o **cofre de segredos** (`cofre\`, encriptado), os projetos d
   - `src/shared/aceitar.ts` calcula as mudanças (números iguais em formatos diferentes não contam) e aplica-as;
   - IPC `run:aceitar-esperados`, com uma simulação primeiro para a confirmação.
 - **Duplicar**: cenário (com os casos) no ecrã Cenários; caso na tabela do editor (ID seguinte livre).
-- **Modo simples/avançado**: `localStorage` "uat.modo" (por omissão "simples") → `data-modo` no `<html>`. O CSS esconde no modo simples os ecrãs API e Execução ao vivo, "Ver código", passos de rede, modo print, "Mais opções" do percurso, os blocos de email/manuais e as variáveis calculadas e contadores. Os elementos continuam na página. O smoke e a demo correm sempre em modo avançado (`forcarModo`, IPC `app:modo`); uma escolha explícita em Configurações vale mais.
+- **Modo simples/avançado**: `localStorage` "uat.modo" (por omissão "simples") → `data-modo` no `<html>`. O CSS esconde no modo simples os ecrãs API e Execução ao vivo, "Ver código", passos de rede, modo print, "Mais opções" do percurso, as variáveis calculadas e contadores. Os elementos continuam na página. O smoke e a demo correm sempre em modo avançado (`forcarModo`, IPC `app:modo`); uma escolha explícita em Configurações vale mais.
 
 ## 5. Segurança (resumo)
 
@@ -239,7 +253,8 @@ Cuidados:
 
 - Um número só com ponto e 3 casas ("1.234") é lido como milhares (formato pt-PT).
 - A primeira execução depois de um ambiente OutSystems estar parado pode falhar por lentidão: repetir.
-- O email por IMAP (Gmail) não está implementado; só a API ao estilo do Microsoft Graph.
+- O email por IMAP (Gmail) não está implementado; só o Microsoft Graph (Outlook/Microsoft 365) ou uma caixa compatível.
+- A caixa de testes com conta Microsoft real precisa de uma aplicação registada no Microsoft Entra (Client ID, permissão delegada Mail.Read): sem isso só funciona a caixa simulada. Ainda não foi testada contra uma conta Microsoft real (falta a aplicação registada).
 - "Abrir o browser de um worker" não existe (em background não há janela); há miniaturas ao vivo.
 - O executável não está assinado: a IT pode assiná-lo com o certificado da empresa.
 
@@ -247,6 +262,7 @@ Cuidados:
 
 | Data | O que mudou |
 |---|---|
+| 17/11/2026 | **Caixa de email de testes**: email base com endereços por papel, caso e data (`{EMAIL:papel}`); login numa janela da ferramenta, no Edge ou com um código noutro dispositivo (device code); bloco "Verificar email" por papel com assunto exato, valores numéricos com tolerância, anexos, link (guardar/abrir) e "não deve chegar"; imagem do email como evidência. Guia de fórmulas no manual do utilizador (capítulo 11). |
 | 13/11/2026 | **Simplificar**: assistente "Novo teste" (4 passos, do zero a um teste a correr), aceitar os resultados como esperados (linha de base, também para colunas vazias), duplicar cenários e casos, modo simples/avançado. |
 | 13/11/2026 | **Desempenho**: medição do PC durante cada execução (resumo no detalhe, no `run.log` e nos relatórios), aviso antes de correr quando o paralelo não cabe na memória livre, painel em Configurações › Desempenho do PC. Manuais do utilizador e técnico. |
 | 12/11/2026 | Interface: linguagem de QA (cenários de teste, execuções), ecrã Início, faixa do ambiente, estados com símbolos, separadores no editor, "Mais opções", filtros, detalhe do caso ao lado, pesquisa rápida (Ctrl+K), ajudas "i", modo escuro, tutorial guiado. |

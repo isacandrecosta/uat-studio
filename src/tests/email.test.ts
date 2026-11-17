@@ -66,7 +66,7 @@ test('bloco de email: espera pelo email, verifica o corpo e extrai o código de 
     amb(),
   );
   assert.ok(r.tentativas > 1, 'o email chegou com atraso: foi preciso esperar');
-  assert.equal(r.email.de, 'app@banco.pt');
+  assert.equal(r.email?.de, 'app@banco.pt');
   assert.deepEqual(r.guardadas, { CodigoMfa: '482913', Tipo: 'acesso' });
   assert.deepEqual(r.verificacoes.map((v) => v.ok), [true, false], '"Pedido 999" não está no corpo: KO');
 });

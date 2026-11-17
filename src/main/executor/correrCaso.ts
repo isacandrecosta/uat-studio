@@ -7,6 +7,7 @@ import {
   Ambiente,
   Aplicacao,
   Bloco,
+  CaixaTestes,
   BlocoDaJornada,
   Caso,
   Diferenca,
@@ -76,6 +77,8 @@ export interface PedidoCaso {
   variaveisIniciais?: Record<string, string>;
   /** Pasta do projeto (os ficheiros a carregar podem ter caminhos relativos a ela). */
   pastaProjeto?: string;
+  /** Caixa de email de testes do projeto ({EMAIL:papel} e blocos de email com papel). */
+  caixaTestes?: CaixaTestes;
   /** Passo manual: mostra a instrução ao testador e espera pela resposta (OK/KO). */
   passoManual?(pedido: PedidoManual): Promise<RespostaManual>;
   /**
@@ -98,6 +101,30 @@ export interface SessaoGuardada {
 /** Erro nos dados ou na definição do teste (não na aplicação). */
 class ErroDados extends Error {}
 class Parado extends Error {}
+
+/**
+ * Evidência do email: desenha o HTML num separador à parte, sem JavaScript e sem rede (as imagens remotas
+ * não são pedidas, para o email não "avisar" ninguém de que foi aberto), e grava a imagem.
+ */
+async function desenharEmail(browser: Browser, email: { de: string; para: string[]; assunto: string; recebido: string; html: string; texto: string }, ficheiro: string): Promise<boolean> {
+  const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 900, height: 700 } }).catch(() => null);
+  if (!ctx) return false;
+  try {
+    await ctx.route('**/*', (rota) => (rota.request().url().startsWith('data:') ? rota.continue() : rota.abort()));
+    const escapar = (t: string): string => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+    const corpo = email.html.trim() ? email.html : `<pre style="white-space:pre-wrap">${escapar(email.texto)}</pre>`;
+    const cabecalho = `<div style="font:13px Segoe UI,sans-serif;background:#f3f4f6;border-bottom:1px solid #ccc;padding:10px 14px;margin:-8px -8px 12px">
+      <b>${escapar(email.assunto)}</b><br>De: ${escapar(email.de)} · Para: ${escapar(email.para.join(', '))} · ${escapar(email.recebido)}</div>`;
+    const pag = await ctx.newPage();
+    await pag.setContent(`<!doctype html><meta charset="utf-8">${cabecalho}${corpo}`, { waitUntil: 'domcontentloaded', timeout: 10_000 });
+    await pag.screenshot({ path: ficheiro, fullPage: true });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await ctx.close().catch(() => undefined);
+  }
+}
 class Saltado extends Error {}
 
 const hora = (): string => new Date().toLocaleTimeString('pt-PT', { hour12: false });
@@ -304,7 +331,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
         run: pedido.runId,
         agora: new Date(),
         contador: pedido.proximoContador,
-        aleatorio: Math.random,
+        aleatorio: Math.random, caixaTestes: pedido.caixaTestes,
       });
     } catch (erro) {
       if (erro instanceof ErroFormula) throw new ErroDados(`Erro na fórmula (${onde}): ${erro.message}`);
@@ -329,7 +356,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
       try {
         return preencherTexto(
           texto,
-          { variavel: procurarNoBloco(item), teste: caso.id, run: pedido.runId, agora: new Date(), contador: pedido.proximoContador, aleatorio: Math.random },
+          { variavel: procurarNoBloco(item), teste: caso.id, run: pedido.runId, agora: new Date(), contador: pedido.proximoContador, aleatorio: Math.random, caixaTestes: pedido.caixaTestes },
           proteger,
         );
       } catch (erro) {
@@ -341,7 +368,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   /** Avalia uma condição ("só se...") com os dados do caso. */
   const cumpre = (condicao: string, variavel: (nome: string) => string | undefined, onde: string): boolean => {
     try {
-      return avaliarCondicao(condicao, { variavel, teste: caso.id, run: pedido.runId, agora: new Date(), contador: pedido.proximoContador, aleatorio: Math.random });
+      return avaliarCondicao(condicao, { variavel, teste: caso.id, run: pedido.runId, agora: new Date(), contador: pedido.proximoContador, aleatorio: Math.random, caixaTestes: pedido.caixaTestes });
     } catch (erro) {
       if (erro instanceof ErroFormula) throw new ErroDados(`Erro na ${onde}: ${erro.message}`);
       throw erro;
@@ -571,26 +598,46 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
             preencher: (texto) => preencherNoBloco(item)(texto),
             desde: inicio,
             devePararAgora: () => pedido.devePararAgora() || pedido.deveSaltar(),
+            caixaTestes: pedido.caixaTestes,
           },
           pedido.api,
         );
         if (pedido.devePararAgora()) throw new Parado();
         if (pedido.deveSaltar()) throw new Saltado();
-        // Evidência: o email recebido (JSON com o texto e o HTML).
         const base = `${String(indice + 1).padStart(2, '0')}_${criarSlug(bloco.nome)}`;
-        fs.mkdirSync(path.join(pedido.pasta, 'email'), { recursive: true });
-        fs.writeFileSync(path.join(pedido.pasta, 'email', `${base}.json`), `${JSON.stringify(lido.email, null, 2)}\n`, 'utf8');
-        fs.writeFileSync(path.join(pedido.pasta, 'email', `${base}.html`), lido.email.html, 'utf8');
-        resultado.evidencias?.push(`email/${base}.json`, `email/${base}.html`);
-        registar(bloco.nome, `Email recebido: "${lido.email.assunto}"`, 'ok', Date.now() - t0, `de ${lido.email.de}${lido.tentativas > 1 ? ` (à ${lido.tentativas}.ª consulta)` : ''}`);
+        if (lido.endereco) registar(bloco.nome, 'Endereço de teste', 'ok', 0, lido.endereco);
+        if (lido.email) {
+          // Evidências: o email recebido (JSON com o texto e o HTML) e uma imagem do email desenhado.
+          fs.mkdirSync(path.join(pedido.pasta, 'email'), { recursive: true });
+          fs.writeFileSync(path.join(pedido.pasta, 'email', `${base}.json`), `${JSON.stringify(lido.email, null, 2)}\n`, 'utf8');
+          fs.writeFileSync(path.join(pedido.pasta, 'email', `${base}.html`), lido.email.html, 'utf8');
+          resultado.evidencias?.push(`email/${base}.json`, `email/${base}.html`);
+          if (await desenharEmail(pedido.browser, lido.email, path.join(pedido.pasta, 'email', `${base}.png`))) resultado.evidencias?.push(`email/${base}.png`);
+          registar(
+            bloco.nome,
+            `Email recebido: "${lido.email.assunto}"`,
+            def?.naoDeveChegar ? 'ko' : 'ok',
+            Date.now() - t0,
+            `de ${lido.email.de}${lido.tentativas > 1 ? ` (à ${lido.tentativas}.ª consulta)` : ''}`,
+          );
+        } else {
+          registar(bloco.nome, 'Nenhum email chegou', 'ok', Date.now() - t0, `esperou ${def?.esperaSeg ?? 60} s`);
+        }
         for (const v of lido.verificacoes) {
           if (!v.ok) resultado.diferencas.push({ bloco: bloco.nome, passo: v.descricao, esperado: v.esperado, obtido: v.obtido });
-          registar(bloco.nome, v.descricao, v.ok ? 'ok' : 'ko', 0, v.ok ? undefined : 'não contém');
+          registar(bloco.nome, v.descricao, v.ok ? 'ok' : 'ko', 0, v.ok ? undefined : v.obtido.slice(0, 120));
         }
         for (const [nome, valor] of Object.entries(lido.guardadas)) {
           variaveis[nome] = valor;
           resultado.variaveis[nome] = valor;
           registar(bloco.nome, `Guardar {${nome}}`, 'ok', 0, `"${valor}"`);
+        }
+        if (lido.link?.abrir) {
+          // Abre o link do email no browser do caso (na sessão deste bloco), por exemplo para confirmar um registo.
+          await usarSessao(item.sessao?.trim() || SESSAO_PRINCIPAL);
+          await (pagina as Page).goto(lido.link.url, { waitUntil: 'domcontentloaded', timeout: Math.max(limiteMs, 60_000) });
+          registar(bloco.nome, 'Abrir o link do email', 'ok', 0, lido.link.url);
+          await tirarPrint(`${base}_link.png`);
         }
         return;
       }

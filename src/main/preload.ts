@@ -97,6 +97,18 @@ contextBridge.exposeInMainWorld('uatStudio', {
     segredosDeTeste: chamar('cofre:segredos-teste'),
     definirSegredoDeTeste: chamar('cofre:segredo-teste'),
   },
+  caixa: {
+    gravar: chamar('caixa:gravar'),
+    testar: chamar('caixa:testar'),
+    sessao: chamar('caixa:sessao'),
+    esquecer: chamar('caixa:esquecer'),
+  },
+  login: {
+    aoCodigo: ouvir('login:codigo'),
+    aoFecharCodigo: ouvir('login:codigo-fechar'),
+    cancelarCodigo: chamar('login:codigo-cancelar'),
+    abrirCodigo: chamar('login:codigo-abrir'),
+  },
   casos: {
     importar: chamar('casos:importar'),
     exportar: chamar('casos:exportar'),
