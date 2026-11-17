@@ -106,7 +106,7 @@ class Parado extends Error {}
  * Evidência do email: desenha o HTML num separador à parte, sem JavaScript e sem rede (as imagens remotas
  * não são pedidas, para o email não "avisar" ninguém de que foi aberto), e grava a imagem.
  */
-async function desenharEmail(browser: Browser, email: { de: string; para: string[]; assunto: string; recebido: string; html: string; texto: string }, ficheiro: string): Promise<boolean> {
+async function desenharEmail(browser: Browser, email: { de: string; para: string[]; assunto: string; recebido: string; html: string; texto: string; anexos?: string[] }, ficheiro: string): Promise<boolean> {
   const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 900, height: 700 } }).catch(() => null);
   if (!ctx) return false;
   try {
@@ -114,7 +114,7 @@ async function desenharEmail(browser: Browser, email: { de: string; para: string
     const escapar = (t: string): string => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
     const corpo = email.html.trim() ? email.html : `<pre style="white-space:pre-wrap">${escapar(email.texto)}</pre>`;
     const cabecalho = `<div style="font:13px Segoe UI,sans-serif;background:#f3f4f6;border-bottom:1px solid #ccc;padding:10px 14px;margin:-8px -8px 12px">
-      <b>${escapar(email.assunto)}</b><br>De: ${escapar(email.de)} · Para: ${escapar(email.para.join(', '))} · ${escapar(email.recebido)}</div>`;
+      <b>${escapar(email.assunto)}</b><br>De: ${escapar(email.de)} · Para: ${escapar(email.para.join(', '))} · ${escapar(email.recebido)}${email.anexos?.length ? `<br>Anexos: ${escapar(email.anexos.join(', '))}` : ''}</div>`;
     const pag = await ctx.newPage();
     await pag.setContent(`<!doctype html><meta charset="utf-8">${cabecalho}${corpo}`, { waitUntil: 'domcontentloaded', timeout: 10_000 });
     await pag.screenshot({ path: ficheiro, fullPage: true });
