@@ -75,6 +75,7 @@ export function criarExemploPortais(pasta: string): void {
 
   guardar(pasta, 'epicos', { id: 'portal-entre-portais', nome: '2. Entre portais: o FO pede, o BO aprova', descricao: 'Duas sessões (cliente e gestor), login com MFA reutilizado, dependência entre portais, linha de tabela, condições e confirmação por API.' });
   guardar(pasta, 'epicos', { id: 'portal-servicos-externos', nome: '3. Serviços externos: intercetar e simular', descricao: 'Aprovação preparada por API, o pedido de pagamento intercetado e respostas do prestador simuladas (aprovado, recusado, indisponível).' });
+  guardar(pasta, 'epicos', { id: 'portal-emails', nome: '5. Emails que a app envia', descricao: 'A app envia emails reais (SMTP no ODC) e o teste lê-os na caixa de email de testes do projeto: endereço por papel, assunto exato, valores, link e "não deve chegar".' });
   guardar(pasta, 'epicos', { id: 'portal-apis', nome: '4. APIs e passo manual', descricao: 'Blocos só de API (verificações e regras de negócio) e um passo manual para o que só uma pessoa pode confirmar.' });
 
   // ---------- Blocos de UI ----------
@@ -117,6 +118,70 @@ export function criarExemploPortais(pasta: string): void {
         verificarTexto('p11', 'fo_resEstado', 'Verificar que fica pendente', fixo('Pendente aprovação')),
         { id: 'p12', acao: 'guardar', descricao: 'Guardar o número do pedido', alvo: alvo('fo_resPedidoId', 'Número do pedido'), variavel: 'PedidoId' },
       ],
+    },
+    {
+      id: 'pc-fo-pedir-email',
+      nome: 'FO: pedir crédito com o email de testes',
+      tipo: 'UI',
+      aplicacaoId: 'portal-fo',
+      descricao: 'Como "FO: pedir crédito", mas troca o email do cliente pelo endereço de teste do papel "cliente" ({EMAIL:cliente}), para os emails que a app envia chegarem à caixa de testes do projeto.',
+      passos: [
+        clicar('p1', 'fo_btnNovoPedido', 'Novo pedido'),
+        escrever('p1b', 'fo_inpEmail', 'Email do cliente (endereço de teste)', { tipo: 'formula', expressao: '{EMAIL:cliente}' }),
+        clicar('p2', 'fo_btnSeguinte', 'Seguinte'),
+        { id: 'p3', acao: 'escolher', descricao: 'Escolher o produto', alvo: alvo('fo_ddProduto', 'Lista Produto', 'dropdown'), valor: variavel('Produto') },
+        escrever('p4', 'fo_inpMontante', 'Montante', variavel('Montante')),
+        escrever('p5', 'fo_inpPrazo', 'Prazo (meses)', variavel('Prazo')),
+        clicar('p6', 'fo_btnSimular', 'Simular'),
+        verificarNumero('p7', 'fo_resPrestacao', 'Verificar a prestação', 'PrestacaoEsperada'),
+        clicar('p10', 'fo_btnPedirAprovacao', 'Pedir aprovação'),
+        verificarTexto('p11', 'fo_resEstado', 'Verificar que fica pendente', fixo('Pendente aprovação')),
+        { id: 'p12', acao: 'guardar', descricao: 'Guardar o número do pedido', alvo: alvo('fo_resPedidoId', 'Número do pedido'), variavel: 'PedidoId' },
+      ],
+    },
+    {
+      id: 'pc-email-aprovado',
+      nome: 'Email: pedido aprovado (ao cliente)',
+      tipo: 'EMAIL',
+      passos: [],
+      descricao: 'Espera o email "Pedido N aprovado" que a app envia ao cliente, verifica o montante e a prestação e guarda o link "Continuar o pedido".',
+      email: {
+        caixa: '',
+        papel: 'cliente',
+        assunto: 'aprovado',
+        assuntoIgual: 'Pedido {PedidoId} aprovado',
+        esperaSeg: 120,
+        corpoContem: ['foi aprovado', '{Produto}'],
+        valores: [
+          { rotulo: 'Montante:', esperado: '{Montante}' },
+          { rotulo: 'Prestação mensal:', esperado: '{PrestacaoEsperada}', tolerancia: '0,01' },
+        ],
+        link: { variavel: 'LinkContinuar', contem: 'PortalCreditoPOC' },
+      },
+    },
+    {
+      id: 'pc-email-recusado',
+      nome: 'Email: pedido recusado (ao cliente)',
+      tipo: 'EMAIL',
+      passos: [],
+      descricao: 'Espera o email "Pedido N recusado" com o motivo da recusa.',
+      email: { caixa: '', papel: 'cliente', assunto: 'recusado', assuntoIgual: 'Pedido {PedidoId} recusado', esperaSeg: 120, corpoContem: ['foi recusado', 'Motivo: {Motivo}'] },
+    },
+    {
+      id: 'pc-email-documentos',
+      nome: 'Email: documentos em falta (ao cliente)',
+      tipo: 'EMAIL',
+      passos: [],
+      descricao: 'Espera o email "Pedido N: documentos em falta" com o que o gestor pediu.',
+      email: { caixa: '', papel: 'cliente', assunto: 'documentos', assuntoIgual: 'Pedido {PedidoId}: documentos em falta', esperaSeg: 120, corpoContem: ['{Motivo}'] },
+    },
+    {
+      id: 'pc-email-sem-aprovacao',
+      nome: 'Email: nenhum email de aprovação',
+      tipo: 'EMAIL',
+      passos: [],
+      descricao: 'Confirma que NÃO chega o email de aprovação (por exemplo, quando o analista não pode aprovar).',
+      email: { caixa: '', papel: 'cliente', assunto: 'Pedido {PedidoId}', esperaSeg: 20, naoDeveChegar: true },
     },
     {
       id: 'pc-bo-entrar',
@@ -428,6 +493,64 @@ export function criarExemploPortais(pasta: string): void {
       caso('SE01', 'Prestador responde "aprovado" (simulado)', ['simulado'], { ...base, Cenario: 'aprovado', MensagemPagamento: 'Pagamento aprovado. Referência SE019999' }),
       caso('SE02', 'Prestador responde "recusado" (simulado)', ['simulado'], { ...base, Cenario: 'recusado', MensagemPagamento: 'Pagamento recusado' }),
       caso('SE03', 'Prestador indisponível (simulado)', ['simulado'], { ...base, Cenario: 'indisponivel', MensagemPagamento: 'Serviço de pagamentos indisponível. Tente mais tarde.' }),
+    ],
+  });
+
+  // 5. Emails que a app envia (precisa da caixa de email de testes do projeto, em Dados de teste)
+  guardar(pasta, 'jornadas', {
+    id: 'pc-emails-da-app',
+    nome: 'Emails da app: aprovado, recusado e documentos em falta',
+    epicoId: 'portal-emails',
+    requisitoId: 'REQ-CRED-030',
+    etiquetas: ['exemplo', 'email'],
+    descricao: 'O cliente pede o crédito com o seu endereço de teste ({EMAIL:cliente}), o gestor decide no Backoffice e o teste espera o email que a app envia. Precisa da caixa de email de testes definida em Dados de teste e de a app ter o envio de email configurado (SMTP no ODC).',
+    blocos: [
+      passoJornada('b1', 'pc-fo-entrar', { sessao: 'cliente' }),
+      passoJornada('b2', 'pc-fo-pedir-email', { sessao: 'cliente' }),
+      passoJornada('b3', 'pc-bo-entrar', { sessao: 'gestor' }),
+      passoJornada('b4', 'pc-bo-decidir', { sessao: 'gestor' }),
+      passoJornada('b5', 'pc-email-aprovado', { condicao: '{EstadoDepoisBO} = "Aprovado"' }),
+      passoJornada('b6', 'pc-email-recusado', { condicao: '{EstadoDepoisBO} = "Recusado"' }),
+      passoJornada('b7', 'pc-email-documentos', { condicao: '{EstadoDepoisBO} = "Documentos pedidos"' }),
+      passoJornada('b8', 'pc-email-sem-aprovacao', { condicao: '{EstadoDepoisBO} = "Pendente aprovação"' }),
+    ],
+  });
+  guardar(pasta, 'casos', {
+    id: 'pc-emails-da-app',
+    colunas: ['Utilizador', 'Password', 'CodigoMfa', 'Produto', 'Montante', 'Prazo', 'PrestacaoEsperada', 'ComissaoEsperada', 'TotalEsperado', 'Gestor', 'PasswordGestor', 'Decisao', 'Motivo', 'MensagemBO', 'EstadoDepoisBO'],
+    casos: [
+      caso('EM01', 'Aprovado: chega o email com o montante, a prestação e o link', ['email', 'aprovado'], {
+        ...pedido('CP', 8000, 24),
+        ...aprovador,
+        Decisao: 'Aprovar',
+        Motivo: 'Cliente cumpre os critérios',
+        MensagemBO: 'Pedido aprovado',
+        EstadoDepoisBO: 'Aprovado',
+      }),
+      caso('EM02', 'Recusado: chega o email com o motivo', ['email', 'recusado'], {
+        ...pedido('CA', 12000, 48),
+        ...aprovador,
+        Decisao: 'Recusar',
+        Motivo: 'Taxa de esforço elevada',
+        MensagemBO: 'Pedido recusado',
+        EstadoDepoisBO: 'Recusado',
+      }),
+      caso('EM03', 'Documentos pedidos: chega o email com o que falta', ['email', 'documentos'], {
+        ...pedido('CP', 3000, 12),
+        ...aprovador,
+        Decisao: 'PedirDocumentos',
+        Motivo: 'Comprovativo de morada',
+        MensagemBO: 'Documentos pedidos ao cliente',
+        EstadoDepoisBO: 'Documentos pedidos',
+      }),
+      caso('EM04', 'Analista acima do limite: não chega email de aprovação', ['email', 'limite'], {
+        ...pedido('CP', 30000, 36),
+        ...analista,
+        Decisao: 'Aprovar',
+        Motivo: 'Tentativa do analista',
+        MensagemBO: 'Montante acima do limite do analista: precisa de um aprovador',
+        EstadoDepoisBO: 'Pendente aprovação',
+      }),
     ],
   });
 

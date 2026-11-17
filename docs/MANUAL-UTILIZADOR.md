@@ -190,6 +190,8 @@ Todos estes endereços chegam à mesma caixa (é uma regra do Outlook e do Gmail
 
 > Dica: um cenário típico é "o cliente submete → verificar email do gestor (papel gestor) → o gestor aprova no Backoffice → verificar email do cliente (papel cliente)".
 
+**Exemplo pronto**: no projeto de exemplo, o épico **"5. Emails que a app envia"** tem o cenário "Emails da app: aprovado, recusado e documentos em falta". O cliente pede o crédito com o seu **endereço de teste** (o campo Email é preenchido com a fórmula `{EMAIL:cliente}`), o gestor decide no Backoffice e o teste espera o email que a **própria app** envia (assunto, montante, prestação, motivo, link) ou confirma que **não** chega nenhum (o analista acima do limite). Para correr este cenário é preciso definir a caixa de email de testes do projeto (acima). A app de testes envia os emails pelo Gmail de testes (SMTP configurado no ODC); na app real da empresa, isto depende do servidor de email que a app usa em QA.
+
 ## 6. Correr e analisar
 
 ### 6.1 Correr
