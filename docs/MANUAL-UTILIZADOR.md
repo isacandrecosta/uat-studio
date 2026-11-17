@@ -174,6 +174,7 @@ Todos estes endereços chegam à mesma caixa (é uma regra do Outlook: tudo o qu
 - **Anexos**: o nome que o anexo tem de ter (por exemplo `contrato`).
 - **Guardar o link**: `LinkConfirmar=/confirmar` guarda o 1.º link que contém "/confirmar" em `{LinkConfirmar}`. Com **Abrir o link no browser do caso**, a ferramenta abre-o a seguir (útil para "confirme o seu registo").
 - **Guardar outros valores**: por exemplo o código de MFA, `CodigoMfa=(\d{6})`.
+- **Aceitar emails chegados até N minutos antes do caso**: por omissão 2. Aumente quando o email é enviado antes de o caso começar (por exemplo, à mão, ou por um processo da noite anterior).
 
 **Evidências**: cada email recebido fica na pasta do caso (`email/`) como **imagem** (`.png`), como página (`.html`) e com os dados (`.json`). A imagem é desenhada sem carregar imagens da internet (para o email não "avisar" ninguém de que foi aberto).
 

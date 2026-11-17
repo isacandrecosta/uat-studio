@@ -229,6 +229,12 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
       { id: 'assunto', rotulo: 'Só emails com o assunto (contém), opcional', valor: def?.assunto },
       { id: 'assuntoIgual', rotulo: 'O assunto tem de ser exatamente, opcional', valor: def?.assuntoIgual, ajuda: 'Dá KO se for diferente. Pode ter {variáveis}: Pedido {PedidoId} aprovado' },
       { id: 'espera', rotulo: 'Esperar até (segundos)', valor: String(def?.esperaSeg ?? 60) },
+      {
+        id: 'antes',
+        rotulo: 'Aceitar emails chegados até N minutos antes do caso',
+        valor: String(def?.antesMin ?? 2),
+        ajuda: 'Por omissão 2 (margem para relógios). Aumente quando o email é enviado antes de o caso começar (por exemplo, à mão ou por um processo noturno). Com papel, o endereço de cada caso continua a separar os emails.',
+      },
       { id: 'contem', rotulo: 'O corpo tem de conter (um texto por linha), opcional', tipo: 'area', valor: linhas(def?.corpoContem), ajuda: 'Por exemplo: Pedido {PedidoId}. Cada texto em falta dá KO.' },
       {
         id: 'valores',
@@ -298,6 +304,7 @@ export async function ecraJornadas({ estado, corpo, acoes, atualizar, selecao, i
         ...(valores.assunto.trim() ? { assunto: valores.assunto.trim() } : {}),
         ...(valores.assuntoIgual.trim() ? { assuntoIgual: valores.assuntoIgual.trim() } : {}),
         esperaSeg: Math.max(1, Number(valores.espera) || 60),
+        ...(Number(valores.antes) >= 0 && valores.antes.trim() !== '' && Number(valores.antes) !== 2 ? { antesMin: Number(valores.antes) } : {}),
         corpoContem: porLinha(valores.contem),
         ...(valoresNumericos.length ? { valores: valoresNumericos } : {}),
         ...(porLinha(valores.anexos).length ? { anexos: porLinha(valores.anexos) } : {}),

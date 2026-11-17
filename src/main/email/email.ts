@@ -138,8 +138,9 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
   const assuntoIgual = pedido.preencher(def.assuntoIgual ?? '').trim();
   const assunto = pedido.preencher(def.assunto ?? '').trim().toLowerCase();
   const esperaMs = Math.max(1, def.esperaSeg ?? 60) * 1000;
-  // Tolerância de 2 minutos para relógios desacertados entre o PC e o servidor de email.
-  const desde = pedido.desde - 120_000;
+  // Contam os emails chegados depois do início do caso, com uma margem (por omissão 2 minutos, para relógios
+  // desacertados; mais, quando o email é enviado antes do caso começar, por exemplo à mão ou por outro sistema).
+  const desde = pedido.desde - Math.max(0, def.antesMin ?? 2) * 60_000;
   // O pedido à caixa é um bloco de API "invisível": a mesma autenticação, rede e mascaramento de segredos.
   const consulta: Bloco = {
     id: `${pedido.bloco.id}-caixa`,

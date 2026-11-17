@@ -559,6 +559,8 @@ export interface DefinicaoEmail {
   assunto?: string;
   /** Quanto tempo esperar que o email chegue (segundos; por omissão 60). */
   esperaSeg?: number;
+  /** Também contam os emails chegados até N minutos antes do início do caso (por omissão 2). */
+  antesMin?: number;
   /** Textos que o corpo tem de conter (um KO por cada um que falte). */
   corpoContem?: string[];
   /** Guardar valores do email em variáveis com uma expressão regular (fica o 1.º grupo, ou tudo). */

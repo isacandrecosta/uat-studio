@@ -17,7 +17,8 @@
     "exe:verificar": "node scripts/verificar-exe.mjs",
     "licencas": "node scripts/licencas.mjs",
     "exemplo:testar": "npm run build && electron scripts/testar-exemplo.js",
-    "wiki:testar": "npm run build && electron scripts/testar-exemplo.js --wiki"
+    "wiki:testar": "npm run build && electron scripts/testar-exemplo.js --wiki",
+    "caixa:testar": "npm run build && electron scripts/testar-caixa.js"
   },
   "author": "isacandrecosta",
   "license": "UNLICENSED",
