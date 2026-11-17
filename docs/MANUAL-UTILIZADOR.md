@@ -147,8 +147,8 @@ Muitas aplicações enviam emails (aprovação ao gestor, código de acesso, con
 
 **1. Defina a caixa (uma vez por projeto)**, em **Dados de teste › Caixa de email de testes › Definir caixa**:
 - **Email base**: uma caixa **só para testes**, aprovada pela IT, por exemplo `emailteste@outlook.com`. Nunca uma caixa pessoal ou com dados reais.
-- **Que caixa é**: Outlook/Hotmail (conta pessoal), Microsoft 365 (conta da empresa) ou caixa simulada (só para experimentar no PC, com o servidor de teste).
-- **Como entrar na caixa** (em todos, a password é escrita na página da **Microsoft**, nunca num campo da ferramenta):
+- **Que caixa é**: Outlook/Hotmail (conta pessoal), Microsoft 365 (conta da empresa), **Gmail**, outro servidor IMAP ou caixa simulada (só para experimentar no PC, com o servidor de teste).
+- **Como entrar na caixa** (só Outlook/Microsoft 365; em todos, a password é escrita na página da **Microsoft**, nunca num campo da ferramenta):
 
 | Modo | Como é | Quando usar |
 |---|---|---|
@@ -159,11 +159,21 @@ Muitas aplicações enviam emails (aprovação ao gestor, código de acesso, con
 - **Client ID**: o identificador da "aplicação" que a Microsoft autoriza a ler a caixa (permissão `Mail.Read`). Numa conta da empresa, é a **IT** que o dá.
 - Carregue em **Ligar e testar**: na 1.ª vez é pedido o login; depois a sessão fica **encriptada neste PC** e as execuções seguintes já não pedem login. **Esquecer a sessão** apaga-a.
 
+**Gmail** (o Gmail não usa o login da Microsoft; usa uma **palavra-passe de aplicação**):
+1. Na conta Google de testes, ligue a **verificação em 2 passos** (myaccount.google.com › Segurança).
+2. Em **myaccount.google.com/apppasswords**, crie uma palavra-passe de aplicação (por exemplo, com o nome "UAT Studio"). O Google mostra 16 letras **uma só vez**: guarde-as num sítio seguro. Não é a password da conta.
+3. No UAT Studio, em **Definir caixa**, escolha **Gmail** e cole as 16 letras (os espaços não contam). Ficam **encriptadas neste PC**: nunca vão para os ficheiros do projeto, os logs ou os relatórios. Noutro PC é preciso voltar a colá-las (botão **Palavra-passe**).
+4. Carregue em **Ligar e testar**: aparece o assunto do último email.
+
+A ferramenta olha para a **caixa de entrada e para o spam** (os emails de teste vão muitas vezes parar ao spam; o log diz quando o email estava lá). Para trocar a palavra-passe, use **Palavra-passe**; **Esquecer a palavra-passe** apaga-a deste PC. Também no Gmail os endereços com `+` chegam à mesma caixa (`emailteste+gestor_tc0001_17112026@gmail.com`).
+
+> Atenção: o Gmail lê-se por IMAP (porta 993), diretamente, **sem o proxy do Windows**. Na rede da empresa pode estar bloqueado; se "Ligar e testar" disser que não foi possível ligar, fale com a IT.
+
 **2. Use um endereço diferente por papel e por caso.** Nos dados do caso, onde a aplicação pede um email, escreva `{EMAIL:gestor}` (ou `{EMAIL:cliente}`, `{EMAIL:supervisor}`...). A ferramenta troca por um endereço próprio desse caso, por exemplo:
 
 `emailteste+gestor_tc0001_13112026@outlook.com`
 
-Todos estes endereços chegam à mesma caixa (é uma regra do Outlook: tudo o que vem depois do `+` é ignorado na entrega), mas como cada caso tem o seu, **os emails de casos diferentes (ou de outros dias) nunca se misturam**. O formato pode mudar-se na definição da caixa.
+Todos estes endereços chegam à mesma caixa (é uma regra do Outlook e do Gmail: tudo o que vem depois do `+` é ignorado na entrega), mas como cada caso tem o seu, **os emails de casos diferentes (ou de outros dias) nunca se misturam**. O formato pode mudar-se na definição da caixa.
 
 **3. Acrescente um bloco "Verificar email"** ao cenário (**Cenários › Criar ▾ › Novo bloco de email**, escolha "Caixa de testes do projeto"):
 - **Para quem (papel)**: por exemplo `gestor`. O email tem de chegar ao endereço do gestor **deste caso**.

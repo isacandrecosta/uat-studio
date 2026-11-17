@@ -7,14 +7,14 @@ import * as path from 'node:path';
 import { ChildProcess, spawn } from 'node:child_process';
 import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
 import { testarBloco } from './api/ambiente';
-import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from './cofre';
+import { apagarSegredosDoPerfil, definirSegredo, lerSegredo, segredosPreenchidos } from './cofre';
 import * as repo from './projeto/repositorio';
 import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun, listarHistorico } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { abrirProjeto, criarProjeto } from './projeto/ipc';
 import { definirAoAbrirJanelaDeLogin } from './api/loginJanela';
 import { ultimoAvisoDeCodigo } from './api/avisoCodigo';
-import { SESSAO_CAIXA } from './email/caixaTestes';
+import { SENHA_CAIXA, SESSAO_CAIXA } from './email/caixaTestes';
 
 type Passo = (janela: BrowserWindow) => Promise<void>;
 
@@ -1590,6 +1590,21 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         console.log(`[smoke]   login com código ${aviso?.codigo} aprovado noutro "dispositivo"; caixa ligada`);
         definirAoAbrirJanelaDeLogin(null);
         apagarSegredosDoPerfil(pasta, 'caixa-de-testes');
+
+        // Gmail por IMAP: escolher pela interface e guardar a palavra-passe de aplicação no cofre (sem ligar ao Gmail).
+        await naPagina(j, "document.getElementById('btn-caixa-definir').click()");
+        await esperar(j, "document.querySelector('dialog[open] #form-emailBase')");
+        await dialogo({ emailBase: 'caixa.uat@gmail.com', tipo: 'gmail' });
+        await esperar(j, "document.querySelector('dialog[open] #form-password')");
+        await dialogo({ password: 'abcd efgh ijkl mnop' });
+        await esperar(j, "document.getElementById('btn-caixa-password') && document.getElementById('caixa-sessao').textContent.startsWith('guardada')");
+        const caixaGmail = repo.lerProjeto(pasta).caixaTestes;
+        confirmar(caixaGmail?.ligacao === 'gmail' && caixaGmail.emailBase === 'caixa.uat@gmail.com', `A caixa do Gmail não ficou bem guardada: ${JSON.stringify(caixaGmail)}`);
+        confirmar(lerSegredo(pasta, SENHA_CAIXA) === 'abcdefghijklmnop', 'A palavra-passe de aplicação devia ficar no cofre (sem espaços).');
+        confirmar(!fs.readFileSync(path.join(pasta, 'projeto.json'), 'utf8').includes('abcd'), 'A palavra-passe não pode ir para o projeto.json.');
+        console.log('[smoke]   caixa do Gmail (IMAP) definida pela interface, palavra-passe no cofre');
+        apagarSegredosDoPerfil(pasta, 'caixa-de-testes');
+        repo.gravarProjeto(pasta, { ...repo.lerProjeto(pasta), caixaTestes: caixaGuardada });
 
         // Ações do browser na página de teste do servidor local: upload, download, pergunta do browser, iframe e separadores.
         fs.mkdirSync(path.join(pasta, 'ficheiros'), { recursive: true });

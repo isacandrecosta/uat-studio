@@ -618,7 +618,7 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
             `Email recebido: "${lido.email.assunto}"`,
             def?.naoDeveChegar ? 'ko' : 'ok',
             Date.now() - t0,
-            `de ${lido.email.de}${lido.tentativas > 1 ? ` (à ${lido.tentativas}.ª consulta)` : ''}`,
+            `de ${lido.email.de}${lido.email.pasta ? ` (estava na pasta ${lido.email.pasta})` : ''}${lido.tentativas > 1 ? ` (à ${lido.tentativas}.ª consulta)` : ''}`,
           );
         } else {
           registar(bloco.nome, 'Nenhum email chegou', 'ok', Date.now() - t0, `esperou ${def?.esperaSeg ?? 60} s`);

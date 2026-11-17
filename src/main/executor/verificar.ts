@@ -2,7 +2,7 @@
 // para o utilizador saber antes de esperar por ela. Não abre o browser.
 import * as fs from 'node:fs';
 import { usaCaixaDeTestes } from '../email/email';
-import { problemasDaCaixa } from '../email/caixaTestes';
+import { caixaPorImap, problemasDaCaixa, SENHA_CAIXA } from '../email/caixaTestes';
 import * as path from 'node:path';
 import { validarFormula } from '../../shared/formulas';
 import {
@@ -168,6 +168,9 @@ export async function verificarAntesDeCorrer(pasta: string, ambito: AmbitoRun, o
     const enderecoCompleto = bloco.tipo === 'API' && /^https?:\/\//i.test(bloco.pedido?.url.trim() ?? '');
     const daCaixa = bloco.tipo === 'EMAIL' && usaCaixaDeTestes(bloco);
     if (daCaixa) for (const falta of problemasDaCaixa(projeto.caixaTestes)) juntar('erro', 'Caixa de email de testes', `${falta.charAt(0).toUpperCase()}${falta.slice(1)} (Dados de teste).`);
+    if (daCaixa && projeto.caixaTestes && caixaPorImap(projeto.caixaTestes) && !opcoes.segredosPreenchidos([SENHA_CAIXA])[SENHA_CAIXA]) {
+      juntar('erro', 'Caixa de email de testes', 'A palavra-passe da caixa não está preenchida neste PC (Dados de teste › Caixa de email de testes › Palavra-passe).');
+    }
     const precisaDeEndereco = bloco.tipo === 'API' ? !enderecoCompleto : bloco.tipo === 'EMAIL' ? !daCaixa : bloco.passos.some((p) => p.acao === 'navegar');
     const aplicacao = bloco.aplicacaoId ? aplicacoes.get(bloco.aplicacaoId) : undefined;
     if (!aplicacao) {

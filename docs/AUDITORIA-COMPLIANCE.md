@@ -24,6 +24,7 @@ Complementa a [ficha para a equipa de segurança](FICHA-SEGURANCA.md) e a [manua
 | `src/main/api/ambiente.ts` | Blocos de API (`net.fetch` do Electron: proxy e certificados do Windows) | Os endereços dos blocos e dos perfis de autenticação |
 | `src/main/api/certificado.ts` | Pedidos com certificado de cliente (mTLS), HTTPS do Node | Os endereços desses perfis |
 | `src/main/email/`, `src/main/api/loginJanela.ts` | Caixa de email de testes: login (janela da ferramenta, Edge ou código noutro dispositivo) e leitura do correio pelo Microsoft Graph (permissão delegada `Mail.Read`, só leitura) | `login.microsoftonline.com` e `graph.microsoft.com` (ou a caixa simulada indicada) |
+| `src/main/email/imap.ts` | Caixa de email de testes por IMAP (Gmail ou outro servidor): só leitura (pastas abertas em modo de leitura), TLS direto pelo Node, sem o proxy do Windows | `imap.gmail.com:993` (ou o servidor IMAP indicado) |
 | `src/main/executor/verificar.ts` | "Verificar antes de correr": confirma que os endereços respondem | As aplicações configuradas |
 | `src/main/executor/trace.ts` | Visualizador de traces | Servidor local em `127.0.0.1` (porta aleatória), só lê dentro de `execucoes/` |
 | `src/diagnostico/` | Executável de diagnóstico | O site escrito na janela (não é guardado) |
@@ -39,6 +40,7 @@ Complementa a [ficha para a equipa de segurança](FICHA-SEGURANCA.md) e a [manua
 - **Sem trace nos blocos com segredos**: o trace do Playwright grava tudo o que acontece no ecrã e na rede; esses blocos correm sem ele. O browser do login OAuth com PKCE também não tem trace.
 - **Sessões de login reutilizadas**: o `storageState` fica só em memória, durante a execução.
 - **Caixa de email de testes**: a ferramenta **não tem nenhum campo para a password da caixa**. O login é feito na página da Microsoft (numa janela da ferramenta com sessão só em memória, no Edge, ou noutro dispositivo com um código). Fica só a sessão (refresh token), encriptada no cofre como `caixa-de-testes.refreshToken`; "Esquecer a sessão" apaga-a. Só se pede leitura (`Mail.Read`), nunca envio.
+- **Caixa de testes por IMAP (Gmail)**: aqui há um campo para uma palavra-passe, mas é a **palavra-passe de aplicação** do Gmail (revogável a qualquer momento em myaccount.google.com/apppasswords, sem dar acesso à conta Google), não a password da conta. Fica encriptada no cofre como `caixa-de-testes.password`, nunca volta à interface nem vai para ficheiros, logs ou relatórios; mudar de conta apaga-a. As pastas são abertas só para leitura.
 - **Imagem dos emails** (evidência): desenhada sem JavaScript e sem rede, para não carregar imagens remotas nem avisar o remetente de que o email foi aberto.
 - **Pacotes de blocos** (`.uatpack`) e **exportação de casos**: nunca levam segredos.
 

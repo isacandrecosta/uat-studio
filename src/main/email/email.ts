@@ -4,7 +4,8 @@
 import type { Bloco, CaixaTestes, PerfilAutenticacao } from '../../shared/modelo';
 import { compararComTolerancia, deInteiro, formatar, lerNumero } from '../../shared/decimal';
 import { AmbienteApi, ErroApi, executarBlocoApi } from '../api/pedidos';
-import { apiDaCaixa, perfilDaCaixa, problemasDaCaixa } from './caixaTestes';
+import { apiDaCaixa, caixaPorImap, imapDaCaixa, perfilDaCaixa, problemasDaCaixa, SENHA_CAIXA } from './caixaTestes';
+import { abrirImap } from './imap';
 
 export interface EmailRecebido {
   id?: string;
@@ -18,6 +19,20 @@ export interface EmailRecebido {
   /** Corpo sem etiquetas HTML (para verificar e extrair). */
   texto: string;
   html: string;
+  /** Pasta onde estava, quando não é a caixa de entrada (por exemplo o spam, no IMAP). */
+  pasta?: string;
+}
+
+/**
+ * De onde vêm os emails: a API ao estilo do Microsoft Graph ou uma caixa IMAP. `listar` devolve os mais
+ * recentes primeiro; no IMAP vêm sem corpo e `completar` descarrega o email escolhido (com os anexos).
+ */
+export interface FonteEmail {
+  descricao: string;
+  listar(): Promise<EmailRecebido[]>;
+  completar?(email: EmailRecebido): Promise<EmailRecebido>;
+  anexos?(email: EmailRecebido): Promise<string[]>;
+  fechar?(): Promise<void>;
 }
 
 export interface ResultadoEmail {
@@ -47,6 +62,8 @@ export interface PedidoEmail {
   intervaloMs?: number;
   /** A caixa de email de testes do projeto (usada quando o bloco tem um papel ou não diz que caixa ler). */
   caixaTestes?: CaixaTestes;
+  /** Testes: uma fonte de emails já pronta (em vez de a abrir pela caixa). */
+  fonte?: FonteEmail;
 }
 
 /** O bloco lê a caixa de testes do projeto? (tem um papel, ou não indica nenhuma caixa). */
@@ -116,13 +133,37 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
   const def = pedido.bloco.email;
   if (!def) throw new ErroApi(`O bloco de email "${pedido.bloco.nome}" não tem definição.`);
   const daCaixaDeTestes = usaCaixaDeTestes(pedido.bloco);
+  if (daCaixaDeTestes && !pedido.fonte) {
+    const falta = problemasDaCaixa(pedido.caixaTestes);
+    if (falta.length || !pedido.caixaTestes) throw new ErroApi(`A caixa de email de testes do projeto não está pronta: ${falta.join('; ')}.`);
+  }
+  const caixa = daCaixaDeTestes ? (pedido.caixaTestes?.emailBase.trim() ?? '') : pedido.preencher(def.caixa).trim();
+  const fonte = pedido.fonte ?? (await abrirFonte(pedido, daCaixaDeTestes, amb));
+  try {
+    return await lerDaFonte(pedido, def, fonte, caixa);
+  } finally {
+    await fonte.fechar?.();
+  }
+}
+
+/** A fonte dos emails do bloco: a caixa de testes (Graph ou IMAP) ou a caixa da aplicação do bloco. */
+async function abrirFonte(pedido: PedidoEmail, daCaixaDeTestes: boolean, amb: AmbienteApi): Promise<FonteEmail> {
+  const def = pedido.bloco.email!;
+  if (daCaixaDeTestes && pedido.caixaTestes && caixaPorImap(pedido.caixaTestes)) {
+    const ligacao = imapDaCaixa(pedido.caixaTestes);
+    const password = amb.segredo(SENHA_CAIXA);
+    if (!password) throw new ErroApi('Falta a palavra-passe da caixa de email de testes neste PC (Dados de teste › Caixa de email de testes › Palavra-passe).');
+    try {
+      return await abrirImap({ ...ligacao, password });
+    } catch (erro) {
+      throw new ErroApi(erro instanceof Error ? erro.message : String(erro));
+    }
+  }
   let urlBase = pedido.urlBase;
   let perfil = pedido.perfil;
   let caminho: string;
   let caixa: string;
-  if (daCaixaDeTestes) {
-    const falta = problemasDaCaixa(pedido.caixaTestes);
-    if (falta.length || !pedido.caixaTestes) throw new ErroApi(`A caixa de email de testes do projeto não está pronta: ${falta.join('; ')}.`);
+  if (daCaixaDeTestes && pedido.caixaTestes) {
     const api = apiDaCaixa(pedido.caixaTestes);
     urlBase = api.urlBase;
     caminho = api.caminho;
@@ -132,15 +173,6 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
     caixa = pedido.preencher(def.caixa).trim();
     caminho = `/users/${encodeURIComponent(caixa)}/messages`;
   }
-  // Com papel, o endereço de teste é exato (emailteste+gestor_tc0001_13112026@...): nunca apanha outro caso.
-  const endereco = def.papel?.trim() ? pedido.preencher(`{EMAIL:${def.papel.trim()}}`).trim().toLowerCase() : '';
-  const para = pedido.preencher(def.para ?? '').trim().toLowerCase();
-  const assuntoIgual = pedido.preencher(def.assuntoIgual ?? '').trim();
-  const assunto = pedido.preencher(def.assunto ?? '').trim().toLowerCase();
-  const esperaMs = Math.max(1, def.esperaSeg ?? 60) * 1000;
-  // Contam os emails chegados depois do início do caso, com uma margem (por omissão 2 minutos, para relógios
-  // desacertados; mais, quando o email é enviado antes do caso começar, por exemplo à mão ou por outro sistema).
-  const desde = pedido.desde - Math.max(0, def.antesMin ?? 2) * 60_000;
   // O pedido à caixa é um bloco de API "invisível": a mesma autenticação, rede e mascaramento de segredos.
   const consulta: Bloco = {
     id: `${pedido.bloco.id}-caixa`,
@@ -162,21 +194,49 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
       guardar: [],
     },
   };
+  return {
+    descricao: caixa,
+    async listar() {
+      const resposta = await executarBlocoApi({ bloco: consulta, urlBase, perfil, preencher: (t) => t }, amb);
+      if (resposta.resposta.estado !== 200) throw new ErroApi(`A caixa de correio ${caixa} respondeu HTTP ${resposta.resposta.estado}.`);
+      try {
+        return ((JSON.parse(resposta.resposta.corpo) as { value?: MensagemGraph[] }).value ?? []).map(paraEmail);
+      } catch {
+        throw new ErroApi(`A caixa de correio ${caixa} não respondeu em JSON (é uma API ao estilo do Microsoft Graph?).`);
+      }
+    },
+    async anexos(email) {
+      if (!email.id) return [];
+      const url = `${caminho}/${encodeURIComponent(email.id)}/attachments`;
+      const pedidoAnexos: Bloco = { ...consulta, id: `${consulta.id}-anexos`, pedido: { ...consulta.pedido!, url, parametros: [] } };
+      const r = await executarBlocoApi({ bloco: pedidoAnexos, urlBase, perfil, preencher: (t) => t }, amb);
+      if (r.resposta.estado !== 200) throw new ErroApi(`Não foi possível ler os anexos do email (HTTP ${r.resposta.estado}).`);
+      try {
+        return ((JSON.parse(r.resposta.corpo) as { value?: Array<{ name?: string }> }).value ?? []).map((a) => a.name ?? '').filter(Boolean);
+      } catch {
+        throw new ErroApi('A lista de anexos do email não veio em JSON.');
+      }
+    },
+  };
+}
+
+async function lerDaFonte(pedido: PedidoEmail, def: NonNullable<Bloco['email']>, fonte: FonteEmail, caixa: string): Promise<ResultadoEmail> {
+  // Com papel, o endereço de teste é exato (emailteste+gestor_tc0001_13112026@...): nunca apanha outro caso.
+  const endereco = def.papel?.trim() ? pedido.preencher(`{EMAIL:${def.papel.trim()}}`).trim().toLowerCase() : '';
+  const para = pedido.preencher(def.para ?? '').trim().toLowerCase();
+  const assuntoIgual = pedido.preencher(def.assuntoIgual ?? '').trim();
+  const assunto = pedido.preencher(def.assunto ?? '').trim().toLowerCase();
+  const esperaMs = Math.max(1, def.esperaSeg ?? 60) * 1000;
+  // Contam os emails chegados depois do início do caso, com uma margem (por omissão 2 minutos, para relógios
+  // desacertados; mais, quando o email é enviado antes do caso começar, por exemplo à mão ou por outro sistema).
+  const desde = pedido.desde - Math.max(0, def.antesMin ?? 2) * 60_000;
   const fim = Date.now() + esperaMs;
   let tentativas = 0;
   let encontrado: EmailRecebido | undefined;
   for (;;) {
     tentativas += 1;
-    const resposta = await executarBlocoApi({ bloco: consulta, urlBase, perfil, preencher: (t) => t }, amb);
-    if (resposta.resposta.estado !== 200) throw new ErroApi(`A caixa de correio ${caixa} respondeu HTTP ${resposta.resposta.estado}.`);
-    let mensagens: MensagemGraph[] = [];
-    try {
-      mensagens = (JSON.parse(resposta.resposta.corpo) as { value?: MensagemGraph[] }).value ?? [];
-    } catch {
-      throw new ErroApi(`A caixa de correio ${caixa} não respondeu em JSON (é uma API ao estilo do Microsoft Graph?).`);
-    }
+    const mensagens = await fonte.listar();
     encontrado = mensagens
-      .map(paraEmail)
       .filter((m) => !m.recebido || Date.parse(m.recebido) >= desde)
       .find(
         (m) =>
@@ -187,6 +247,7 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
     if (encontrado || Date.now() >= fim || pedido.devePararAgora?.()) break;
     await new Promise((r) => setTimeout(r, pedido.intervaloMs ?? 3_000));
   }
+  if (encontrado && fonte.completar) encontrado = await fonte.completar(encontrado);
   const filtros = [endereco && `para ${endereco}`, para && `para "${para}"`, assunto && `com o assunto "${assunto}"`].filter(Boolean).join(' e ');
   if (def.naoDeveChegar) {
     // Aqui esperou o tempo todo: chegar é que é a diferença.
@@ -239,7 +300,7 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
   // Anexos: lidos só se o bloco os verificar.
   const anexosPedidos = (def.anexos ?? []).map((a) => pedido.preencher(a).trim()).filter(Boolean);
   if (anexosPedidos.length) {
-    const nomes = encontrado.id ? await lerAnexos(`${caminho}/${encodeURIComponent(encontrado.id)}/attachments`) : [];
+    const nomes = encontrado.anexos ?? (fonte.anexos ? await fonte.anexos(encontrado) : []);
     encontrado.anexos = nomes;
     for (const a of anexosPedidos) {
       const ok = nomes.some((n) => n.toLowerCase().includes(a.toLowerCase()));
@@ -270,15 +331,4 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
     link = { variavel: def.link.variavel.trim(), url, abrir: Boolean(def.link.abrir) };
   }
   return { email: encontrado, ...(endereco ? { endereco } : {}), ...(link ? { link } : {}), tentativas, verificacoes, guardadas };
-
-  async function lerAnexos(url: string): Promise<string[]> {
-    const pedidoAnexos: Bloco = { ...consulta, id: `${consulta.id}-anexos`, pedido: { ...consulta.pedido!, url, parametros: [] } };
-    const r = await executarBlocoApi({ bloco: pedidoAnexos, urlBase, perfil, preencher: (t) => t }, amb);
-    if (r.resposta.estado !== 200) throw new ErroApi(`Não foi possível ler os anexos do email (HTTP ${r.resposta.estado}).`);
-    try {
-      return ((JSON.parse(r.resposta.corpo) as { value?: Array<{ name?: string }> }).value ?? []).map((a) => a.name ?? '').filter(Boolean);
-    } catch {
-      throw new ErroApi('A lista de anexos do email não veio em JSON.');
-    }
-  }
 }
