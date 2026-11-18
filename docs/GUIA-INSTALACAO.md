@@ -28,6 +28,9 @@
 1. Correr `UAT-Studio-Diagnostico.exe`.
 2. Escrever o endereço de um site interno de testes (fica só na janela, não é guardado) e carregar em **Verificar**.
 3. Tudo verde: pode usar o UAT Studio. Algo vermelho: a explicação diz o que falta; copie o resultado e fale com a IT.
+4. Os amarelos (opcionais) não impedem o uso: "Login e email da Microsoft" só é preciso para a caixa de email Microsoft 365; "Ligação direta sem proxy" só para o email por IMAP (Gmail) e para certificados de cliente; "Apps de demonstração" só para correr o projeto de exemplo.
+
+O que é verificado (17 linhas): arranque, gravar ficheiros, Edge instalado, controlar o Edge, prints, abrir o site no Edge (proxy e certificados), Edge em background, pedidos de API fora do browser, ficheiros e separadores no Edge (carregar, descarregar, novo separador), cofre de segredos, servidor local (traces), janelas da ferramenta (login e traces), PDF para assinatura e os opcionais (Microsoft, ligação direta, apps de demonstração, Chrome).
 
 ## 6. Problemas comuns
 | Sintoma | O que fazer |

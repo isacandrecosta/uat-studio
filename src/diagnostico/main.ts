@@ -33,7 +33,7 @@ function validarUrl(texto: string): string {
 function criarJanela(): BrowserWindow {
   const janela = new BrowserWindow({
     width: 760,
-    height: 780,
+    height: 900,
     minWidth: 600,
     minHeight: 560,
     title: 'UAT Studio: diagnóstico',
