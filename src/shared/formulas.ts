@@ -176,6 +176,19 @@ export function gerarIban(ctx: ContextoFormula): string {
   return `PT50${nib19}${String(controlo).padStart(2, '0')}`;
 }
 
+/**
+ * Número de telefone português de teste (9 algarismos, sem indicativo):
+ * telemóvel (por omissão) começa por 91, 92, 93 ou 96; fixo começa por um indicativo de rede fixa (21 Lisboa,
+ * 22 Porto, 2xx no resto do país). Com "+351" (2.º argumento) fica com o indicativo do país.
+ */
+export const PREFIXOS_MOVEL = ['91', '92', '93', '96'];
+export const PREFIXOS_FIXO = ['21', '22', '231', '232', '233', '234', '236', '238', '239', '241', '243', '244', '245', '249', '251', '252', '253', '254', '255', '256', '258', '259', '261', '262', '263', '265', '266', '268', '269', '271', '272', '273', '274', '275', '276', '277', '278', '279', '281', '282', '283', '284', '285', '286', '289', '291', '292', '295', '296'];
+export function gerarTelefone(ctx: ContextoFormula, tipo = 'movel'): string {
+  const lista = tipo === 'fixo' ? PREFIXOS_FIXO : PREFIXOS_MOVEL;
+  const prefixo = lista[Math.floor(ctx.aleatorio() * lista.length) % lista.length];
+  return `${prefixo}${digitosAoAcaso(9 - prefixo.length, ctx)}`;
+}
+
 function resolverMarcador(conteudo: string, ctx: ContextoFormula): Resultado {
   const [cabeca, ...resto] = conteudo.split(':');
   const argumento = resto.join(':').trim();
@@ -276,6 +289,15 @@ const FUNCOES: Record<string, Funcao> = {
   // Geradores
   NIF: (a, ctx) => (exigir('NIF', a, 0), txt(gerarNif(ctx))),
   IBAN: (a, ctx) => (exigir('IBAN', a, 0), txt(gerarIban(ctx))),
+  /** TELEFONE() → telemóvel (912345678); TELEFONE("fixo") → fixo (213456789); 2.º argumento "+351" acrescenta o indicativo. */
+  TELEFONE: (a, ctx) => {
+    exigir('TELEFONE', a, 0, 2);
+    const tipo = a.length ? semAcentos(comoTexto(a[0])).toLowerCase().trim() : 'movel';
+    if (!['movel', 'telemovel', 'fixo'].includes(tipo)) throw new ErroFormula('TELEFONE: o tipo é "movel" (telemóvel) ou "fixo".');
+    const numero = gerarTelefone(ctx, tipo === 'fixo' ? 'fixo' : 'movel');
+    const indicativo = a.length === 2 ? comoTexto(a[1]).trim() : '';
+    return txt(indicativo ? `${indicativo}${numero}` : numero);
+  },
   ALEATORIOENTRE: (a, ctx) => {
     exigir('ALEATORIOENTRE', a, 2);
     const minimo = comoInteiro(a[0], 'ALEATORIOENTRE');
@@ -320,6 +342,7 @@ export const AJUDA_FORMULAS: Array<{ exemplo: string; descricao: string }> = [
   { exemplo: 'SE({Valor} > 1000; "Alto"; "Baixo")', descricao: 'Condições com =, <>, <, >, <=, >=.' },
   { exemplo: 'TEXTO({Total}; 2)   PONTO({Total})', descricao: 'TEXTO fixa as casas decimais ("86,40"); PONTO usa ponto decimal ("86.4").' },
   { exemplo: 'NIF()   IBAN()   ALEATORIOENTRE(1; 100)', descricao: 'Geradores: NIF e IBAN de teste válidos, número entre mínimo e máximo.' },
+  { exemplo: 'TELEFONE()   TELEFONE("fixo")   TELEFONE("movel"; "+351")', descricao: 'Telefone português de teste com 9 algarismos: telemóvel começa por 91, 92, 93 ou 96 (912345678); fixo por um indicativo de rede fixa (213456789). Com "+351", leva o indicativo do país.' },
   { exemplo: 'TOTP({ChaveMfa})', descricao: 'MFA: o código de 6 algarismos da app autenticadora, a partir da chave secreta (base32) da conta de teste.' },
   { exemplo: '{EMAIL:supervisor}   EMAIL("gestor")', descricao: 'Endereço de teste desse papel na caixa de testes do projeto (por exemplo emailteste+supervisor_tc0001_13112026@outlook.com).' },
   { exemplo: 'EMAIL("cliente"; "exemplo.pt")', descricao: 'Email único sem caixa de testes: qa+cliente.<caso>.<run>@exemplo.pt' },

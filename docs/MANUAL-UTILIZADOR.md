@@ -87,6 +87,8 @@ Ecrã **Cenários › Aplicações › Nova aplicação**: nome, tipo (Front Off
    - **de onde vem o valor**: **valor fixo**, **coluna dos dados** (vem do Excel) ou **fórmula**.
 3. O passo é **executado logo**, para confirmar que funciona, e só depois fica gravado.
 4. Para valores de resultados (por exemplo a prestação), use **Verificar**: o popup sugere o valor que está no ecrã. Para euros, escolha "Número": as contas são exatas e aceita "86,40" ou "86.40".
+   - **Guardar variável** serve para **valores que a aplicação cria durante o teste** e que se usam mais à frente no mesmo cenário: por exemplo, o **número do pedido** que aparece depois de submeter. Clique nesse número, escolha "Guardar variável" e dê-lhe um nome (`PedidoId`). A partir daí, `{PedidoId}` pode ser usado nos passos seguintes: pesquisar o pedido no Backoffice, procurar a linha da tabela, chamar a API, verificar o email ("Pedido {PedidoId} aprovado"). Não é uma verificação: só lê e guarda o que está no ecrã.
+   - **Fórmula no popup**: enquanto escreve a fórmula, o **valor de exemplo** é preenchido sozinho com o resultado (aparece "Resultado agora: ..."). A ferramenta usa os valores de exemplo das colunas e as variáveis guardadas **nesta gravação** (por exemplo `"P-" & {PedidoId}` depois de guardar o PedidoId). Se a fórmula usar uma coluna que ainda não teve valor de exemplo, aparece o aviso e escreve o valor de exemplo à mão.
 5. Carregue em **Guardar o bloco**.
 
 Casos especiais no popup e no editor de passos:
@@ -300,6 +302,8 @@ Uma **fórmula** calcula um valor na altura em que o caso corre. Escreve-se como
 
 O ecrã **Dados de teste** tem a caixa **Experimentar**: escreva a fórmula e vê logo o resultado com os dados de um caso de exemplo (sem gastar contadores).
 
+**Lista de fórmulas numa janela à parte**: o botão **Fórmulas** (barra lateral, em qualquer ecrã), **Lista de fórmulas ↗** (Dados de teste) ou "abrir a lista de fórmulas" (Passos de um bloco no editor do cenário) abre uma janela com todos os exemplos deste capítulo, com pesquisa e um botão **Copiar** em cada um. Ponha-a ao lado da janela principal (ou do Edge, quando está a gravar); a opção **Manter por cima das outras janelas** deixa-a sempre visível.
+
 ### 11.1 O básico
 
 | Escrever | Dá | Para quê |
@@ -328,6 +332,9 @@ O ecrã **Dados de teste** tem a caixa **Experimentar**: escreva a fórmula e v�
 | Escrever | Dá |
 |---|---|
 | `NIF()` | um NIF válido diferente em cada execução |
+| `TELEFONE()` | um telemóvel português ao acaso: começa por 91, 92, 93 ou 96 e tem 9 algarismos (`912345678`) |
+| `TELEFONE("fixo")` | um telefone fixo: `21` (Lisboa), `22` (Porto) ou outro indicativo `2xx` (`213456789`) |
+| `TELEFONE("movel"; "+351")` | o telemóvel com o indicativo do país (`+351912345678`) |
 | `IBAN()` | um IBAN português válido |
 | `{CONTADOR:clientes}` | 1, 2, 3... (fica guardado entre execuções) |
 | `{ALEATORIO:6}` | 6 algarismos ao acaso |

@@ -13,13 +13,13 @@ import {
   PedidoGravacao,
   Valor,
 } from '../../shared/modelo';
-import { validarFormula } from '../../shared/formulas';
+import { avaliarFormula, validarFormula } from '../../shared/formulas';
 import { resolverSegredosDeTeste } from '../cofre';
 import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, linhasCom, paraLocator } from '../motor/localizar';
 import * as repo from '../projeto/repositorio';
 import { scriptGravador } from './injetado';
-import { definirCaixaDoProjeto, repetirPassosAte, resolverValor } from './regravar';
+import { contextoDosValores, definirCaixaDoProjeto, repetirPassosAte, resolverValor } from './regravar';
 
 interface Sessao {
   pasta: string;
@@ -38,6 +38,22 @@ interface Sessao {
   regravar?: { passoId: string; valores: Record<string, string>; feito: boolean };
   /** Modo print: os elementos da última captura (com os localizadores, que não vão para a interface). */
   print?: Array<ElementoDoPrint & { localizadores: Localizador[]; widget?: string }>;
+  /** Valores de exemplo já usados nesta gravação (colunas e variáveis guardadas), para calcular fórmulas ao vivo. */
+  exemplos: Record<string, string>;
+}
+
+/** Calcula uma fórmula com os valores de exemplo da gravação (para o "valor de exemplo" do popup). */
+function calcularNaGravacao(s: Sessao, expressao: string): { ok: boolean; texto: string } {
+  if (!expressao.trim()) return { ok: false, texto: '' };
+  const problema = validarFormula(expressao);
+  if (problema) return { ok: false, texto: problema };
+  try {
+    const valores = { ...(s.regravar?.valores ?? {}), ...s.exemplos, TESTE: 'GRAVACAO', RUN: 'gravacao' };
+    return { ok: true, texto: avaliarFormula(expressao, contextoDosValores(valores)) };
+  } catch (erro) {
+    const texto = erro instanceof Error ? erro.message : String(erro);
+    return { ok: false, texto: /\{[^}]+\}/.test(texto) ? `${texto} Esta coluna ainda não teve um valor de exemplo nesta gravação: escreva o valor de exemplo à mão.` : texto };
+  }
 }
 
 /** O que a página envia quando o utilizador confirma o popup. */
@@ -228,6 +244,8 @@ async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; 
     } else {
       const leitura = await lerElemento(s.pagina, passo, { limiteMs: 5_000, linha: m.linhaExemplo });
       resumo = `Passo gravado (agora o ecrã mostra "${leitura.texto.slice(0, 60)}").`;
+      // "Guardar variável": o que o ecrã mostra agora fica como exemplo dessa variável nas fórmulas seguintes.
+      if (m.variavel) s.exemplos[m.variavel] = leitura.texto;
     }
   } catch (erro) {
     const texto = erro instanceof Error ? erro.message.split('\n')[0] : String(erro);
@@ -235,6 +253,8 @@ async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; 
   }
 
   s.bloco.passos.push(passo);
+  // O valor de exemplo de uma coluna serve às fórmulas seguintes (nunca o de uma password).
+  if (m.valor?.tipo === 'variavel' && !passo.secreto && m.exemplo !== undefined) s.exemplos[m.valor.nome] = m.exemplo;
   if (m.valor?.tipo === 'variavel' && !s.colunas.includes(m.valor.nome)) s.colunas.push(m.valor.nome);
   if (m.variavel && !s.colunas.includes(m.variavel)) s.colunas.push(m.variavel);
   const daLinha = m.alvo.linha?.valor;
@@ -301,6 +321,7 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
       urlBase,
       modo: 'gravar',
       colunas: [...colunas],
+      exemplos: {},
       ...(pedido.regravar ? { regravar: { passoId: pedido.regravar.passoId, valores: resolverSegredosDeTeste(pasta, { ...pedido.regravar.valores }), feito: false } } : {}),
     };
     await contexto.exposeBinding('__uatGravador', async (_origem, mensagem: { tipo: string; modo?: 'gravar' | 'livre' }) => {
@@ -314,6 +335,7 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
         return null;
       }
       if (mensagem.tipo === 'passo') return tratarPasso(nova, mensagem as unknown as MensagemPasso);
+      if (mensagem.tipo === 'formula') return calcularNaGravacao(nova, String((mensagem as { expressao?: unknown }).expressao ?? ''));
       return null;
     });
     await contexto.addInitScript(scriptGravador);

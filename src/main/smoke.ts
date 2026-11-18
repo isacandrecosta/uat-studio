@@ -188,6 +188,30 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await popup.getByLabel('Nome da variável').fill('PedidoId');
         await gravar();
 
+        // Fórmula no popup: o valor de exemplo é calculado enquanto se escreve, com os valores desta gravação
+        // ({PedidoId} acabou de ser guardado). Cancela-se: o bloco continua com 7 passos.
+        const pedidoNoEcra = ((await tid('resPedidoId').textContent()) ?? '').trim();
+        await tid('inpValor').click();
+        await popup.waitFor();
+        await popup.locator('input[value="formula"]').check();
+        await popup.getByRole('textbox', { name: 'Fórmula' }).fill('"P-" & {PedidoId}');
+        await p.waitForFunction(
+          (esperado) => {
+            const raiz = document.querySelector('#__uat-gravador')?.shadowRoot;
+            const campo = raiz?.querySelector('input[aria-label="Valor de exemplo"]') as HTMLInputElement | null;
+            return campo?.value === esperado;
+          },
+          `P-${pedidoNoEcra}`,
+          { timeout: 10_000 },
+        ).catch(async () => {
+          throw new Error(`O valor de exemplo não foi calculado pela fórmula (esperava P-${pedidoNoEcra}).`);
+        });
+        await popup.getByRole('textbox', { name: 'Fórmula' }).fill('{NaoExiste} & "x"');
+        await popup.getByText('ainda não teve um valor de exemplo').waitFor({ timeout: 10_000 });
+        await popup.getByRole('button', { name: 'Cancelar' }).click();
+        await popup.waitFor({ state: 'detached' });
+        console.log(`[smoke]   fórmula no popup calculada ao vivo: P-${pedidoNoEcra}`);
+
         await esperar(j, "document.getElementById('contagem-passos')?.textContent === '7 passos'");
         await tirarPrint(j, raiz, 'gravar');
         await p.screenshot({ path: path.join(raiz, 'out', 'smoke-gravar-browser.png') }).catch(() => undefined);
@@ -327,6 +351,28 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         const fim = Date.now() + 5_000;
         while (!(fs.existsSync(ficheiro) && fs.readFileSync(ficheiro, 'utf8').includes('ARRED')) && Date.now() < fim) await new Promise((r) => setTimeout(r, 100));
         confirmar(fs.readFileSync(ficheiro, 'utf8').includes('ARRED'), 'A fórmula não foi guardada em variaveis.json.');
+
+        // Lista de fórmulas numa janela à parte: abre, tem o TELEFONE(), filtra, e um 2.º clique não abre outra.
+        await naPagina(j, "document.getElementById('btn-lista-formulas').click()");
+        const janelaDasFormulas = async (): Promise<BrowserWindow | undefined> => {
+          const fimJanela = Date.now() + 15_000;
+          while (Date.now() < fimJanela) {
+            const w = BrowserWindow.getAllWindows().find((b) => b.webContents.getURL().endsWith('formulas.html'));
+            if (w && !w.webContents.isLoading()) return w;
+            await new Promise((r) => setTimeout(r, 200));
+          }
+          return undefined;
+        };
+        const jf = await janelaDasFormulas();
+        if (!jf) throw new Error('A janela das fórmulas não abriu.');
+        await esperar(jf, "document.querySelectorAll('.exemplo-formula').length > 20 && document.body.textContent.includes('TELEFONE()')");
+        await naPagina(jf, "(() => { const f = document.getElementById('filtro-formulas'); f.value = 'telefone'; f.dispatchEvent(new Event('input')); })()");
+        await esperar(jf, "document.querySelectorAll('.exemplo-formula').length === 3");
+        await tirarPrint(jf, raiz, 'janela-formulas');
+        await naPagina(j, "document.getElementById('btn-formulas').click()");
+        await new Promise((r) => setTimeout(r, 500));
+        confirmar(BrowserWindow.getAllWindows().filter((b) => b.webContents.getURL().endsWith('formulas.html')).length === 1, 'Devia haver uma só janela das fórmulas.');
+        jf.close();
 
         // No editor: {ComissaoEsperada} passa a vir da variável calculada.
         await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"editor\"]').click()");

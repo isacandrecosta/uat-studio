@@ -431,11 +431,41 @@ export function scriptGravador(): void {
       const nomeColuna = el('input', { type: 'text', list: idLista, placeholder: 'Por exemplo: Valor', 'aria-label': 'Nome da coluna' });
       const zonaFixo = el('div', {}, campoFixo);
       const rotuloNome = el('label', {}, 'Nome da coluna');
+      // Fórmula: o resultado aparece logo no valor de exemplo (calculado pela ferramenta com os valores desta gravação).
+      const resultadoFormula = el('p', { class: 'nota', role: 'status' });
+      let esperaFormula: number | undefined;
+      const calcularFormula = (): void => {
+        if (origem !== 'formula') return;
+        window.clearTimeout(esperaFormula);
+        esperaFormula = window.setTimeout(async () => {
+          const expressao = nomeColuna.value.trim();
+          if (!expressao) {
+            resultadoFormula.textContent = '';
+            return;
+          }
+          const r = (await enviar({ tipo: 'formula', expressao })) as { ok: boolean; texto: string } | null;
+          if (!r || nomeColuna.value.trim() !== expressao) return;
+          if (r.ok) {
+            const campo = campoExemplo as HTMLInputElement | HTMLSelectElement;
+            if (campo instanceof HTMLSelectElement) {
+              const opcao = Array.from(campo.options).find((o) => o.value === r.texto || o.text.trim() === r.texto);
+              if (opcao) campo.value = opcao.value;
+            } else campo.value = r.texto;
+            resultadoFormula.textContent = `Resultado agora: ${r.texto}`;
+            resultadoFormula.style.color = '#1a7f37';
+          } else {
+            resultadoFormula.textContent = r.texto;
+            resultadoFormula.style.color = '#b42318';
+          }
+        }, 300);
+      };
+      nomeColuna.addEventListener('input', calcularFormula);
       const zonaVariavel = el(
         'div',
         {},
         rotuloNome,
         nomeColuna,
+        resultadoFormula,
         el('label', {}, 'Valor de exemplo (usado agora, na gravação)'),
         campoExemplo,
       );
@@ -452,6 +482,8 @@ export function scriptGravador(): void {
         nomeColuna.placeholder = formula ? 'Por exemplo: "cliente_" & {TESTE}' : 'Por exemplo: Valor';
         if (formula) nomeColuna.removeAttribute('list');
         else nomeColuna.setAttribute('list', idLista);
+        resultadoFormula.style.display = formula ? 'block' : 'none';
+        if (formula) calcularFormula();
       };
       atualizar();
       const no = el(

@@ -126,3 +126,15 @@ test('fórmulas nas células dos casos: "=..." é calculado (também dentro de o
   assert.equal(eFormulaDoCaso('1=1'), false);
   assert.equal(eFormulaDoCaso('='), false);
 });
+
+test('TELEFONE(): telemóvel 91/92/93/96 ou fixo 2xx, sempre 9 algarismos, e +351', () => {
+  const ctx = contextoDeExemplo({});
+  for (let i = 0; i < 200; i++) {
+    const movel = avaliarFormula('TELEFONE()', ctx);
+    assert.match(movel, /^9[1236]\d{7}$/, movel);
+    const fixo = avaliarFormula('TELEFONE("fixo")', ctx);
+    assert.match(fixo, /^2\d{8}$/, fixo);
+  }
+  assert.match(avaliarFormula('TELEFONE("telemóvel"; "+351")', ctx), /^\+3519[1236]\d{7}$/);
+  assert.throws(() => avaliarFormula('TELEFONE("satelite")', ctx), /movel/);
+});

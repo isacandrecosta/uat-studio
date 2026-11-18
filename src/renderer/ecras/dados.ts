@@ -159,7 +159,7 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
     return h(
       'section',
       { class: 'cartao' },
-      h('header', { class: 'cartao-topo' }, h('div', {}, h('h2', {}, 'Experimentar uma fórmula'), h('p', { class: 'suave' }, 'Não guarda nada nem gasta contadores.'))),
+      h('header', { class: 'cartao-topo' }, h('div', {}, h('h2', {}, 'Experimentar uma fórmula'), h('p', { class: 'suave' }, 'Não guarda nada nem gasta contadores.')), h('button', { id: 'btn-lista-formulas', type: 'button', class: 'botao', title: 'Abre a lista de fórmulas numa janela à parte', onclick: () => void api.app.janelaFormulas() }, 'Lista de fórmulas ↗')),
       h('div', { class: 'formula-caixa' }, campo, resultado),
     );
   }

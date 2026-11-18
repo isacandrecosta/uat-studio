@@ -61,6 +61,10 @@ declare global {
         }>;
         /** Quantos casos em paralelo cabem na memória livre agora. */
         sugestaoParalelo(pedido: number): Promise<{ seguro: number; memLivreMB: number; excede: boolean }>;
+        /** Abre (ou traz para a frente) a janela à parte com a lista de fórmulas. */
+        janelaFormulas(): Promise<void>;
+        /** Mantém a janela das fórmulas por cima das outras (ou não). */
+        formulasPorCima(sim: boolean): Promise<void>;
       };
       blocos: {
         /** Reparar com um clique: o localizador que funcionou passa a ser o preferido do passo. */

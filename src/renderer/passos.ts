@@ -108,6 +108,12 @@ export function passosEditaveis(bloco: Bloco, usadoEm: number, guardar: () => Pr
     { class: 'passos-editaveis' },
     aviso,
     h(
+      'p',
+      { class: 'passos-ajuda suave' },
+      'Para escrever fórmulas: ',
+      h('button', { type: 'button', class: 'botao-ligacao', onclick: () => void window.uatStudio.app.janelaFormulas() }, 'abrir a lista de fórmulas ↗'),
+    ),
+    h(
       'ol',
       { class: 'lista-passos-editaveis' },
       bloco.passos.map((passo, indice) => {

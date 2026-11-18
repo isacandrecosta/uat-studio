@@ -280,6 +280,7 @@ document.addEventListener('keydown', (e) => {
 });
 obter<HTMLButtonElement>('btn-pesquisa').addEventListener('click', () => void abrirPesquisa(destinosDaPesquisa));
 obter<HTMLButtonElement>('btn-configuracoes').addEventListener('click', () => abrirConfiguracoes(irPara));
+obter<HTMLButtonElement>('btn-formulas').addEventListener('click', () => void window.uatStudio.app.janelaFormulas());
 obter<HTMLButtonElement>('indicador-modo').addEventListener('click', () => abrirConfiguracoes(irPara));
 
 escolhaProjeto.addEventListener('change', async () => {

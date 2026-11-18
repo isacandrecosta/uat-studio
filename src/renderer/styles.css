@@ -861,3 +861,16 @@ kbd { padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(255, 255, 255
 .passo-valor .erro-campo { grid-column: 1 / -1; }
 .passo-alvo { font-size: 12px; }
 @media (max-width: 700px) { .passo-editavel { grid-template-columns: 28px 1fr; } .passo-editavel .passo-campos { grid-column: 1 / -1; } .passo-valor { grid-template-columns: 1fr; } }
+
+/* Janela à parte com a lista de fórmulas */
+.janela-formulas { margin: 0; padding: 16px; background: var(--fundo); color: var(--texto); font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; }
+.janela-formulas-topo h1 { margin: 0 0 4px; font-size: 20px; }
+.janela-formulas-barra { display: grid; gap: 8px; margin: 12px 0; }
+.janela-formulas-lista { display: grid; gap: 12px; }
+.grupo-formulas h2 { margin: 0 0 8px; font-size: 15px; }
+.lista-exemplos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.exemplo-formula { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.exemplo-formula code { font-size: 13px; word-break: break-word; }
+.exemplo-formula .suave { grid-column: 1 / -1; font-size: 12px; }
+.passos-ajuda { margin: 4px 0; font-size: 12px; }
+.botao-ligacao { background: none; border: none; padding: 0; color: var(--primario); text-decoration: underline; cursor: pointer; font: inherit; }

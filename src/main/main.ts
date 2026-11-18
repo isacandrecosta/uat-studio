@@ -61,6 +61,10 @@ function criarJanela(): BrowserWindow {
     if (!destino.startsWith('file://')) evento.preventDefault();
   });
   void janela.loadFile(path.join(RAIZ, 'src', 'renderer', 'index.html'));
+  // A janela das fórmulas é uma ajuda da principal: fecha com ela.
+  janela.on('closed', () => {
+    if (janelaFormulas && !janelaFormulas.isDestroyed()) janelaFormulas.close();
+  });
   return janela;
 }
 
@@ -70,6 +74,38 @@ registarIpcPacotes();
 registarIpcCaixa();
 
 ipcMain.handle('app:modo', () => (MODO_SMOKE ? 'smoke' : MODO_DEMO ? 'demo' : 'normal'));
+
+// Janela à parte com a lista de fórmulas (uma só: se já estiver aberta, vem para a frente).
+let janelaFormulas: BrowserWindow | null = null;
+export function abrirJanelaFormulas(): BrowserWindow {
+  if (janelaFormulas && !janelaFormulas.isDestroyed()) {
+    if (janelaFormulas.isMinimized()) janelaFormulas.restore();
+    janelaFormulas.focus();
+    return janelaFormulas;
+  }
+  const janela = new BrowserWindow({
+    width: 560,
+    height: 760,
+    minWidth: 380,
+    minHeight: 400,
+    title: 'Fórmulas',
+    backgroundColor: '#f4f5f7',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  janela.setMenuBarVisibility(false);
+  janela.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  janela.webContents.on('will-navigate', (evento) => evento.preventDefault());
+  janela.on('closed', () => (janelaFormulas = null));
+  void janela.loadFile(path.join(RAIZ, 'src', 'renderer', 'formulas.html'));
+  janelaFormulas = janela;
+  return janela;
+}
+ipcMain.handle('app:janela-formulas', () => {
+  abrirJanelaFormulas();
+});
+ipcMain.handle('app:formulas-por-cima', (_e, sim: unknown) => {
+  janelaFormulas?.setAlwaysOnTop(sim === true);
+});
 // Desempenho: o PC agora, a memória da própria app e a duração média de um caso nas últimas execuções.
 ipcMain.handle('app:desempenho', () => {
   const sistema = leituraSistema();

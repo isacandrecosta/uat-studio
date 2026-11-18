@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('uatStudio', {
     modo: chamar('app:modo'),
     desempenho: chamar('app:desempenho'),
     sugestaoParalelo: chamar('app:sugestao-paralelo'),
+    janelaFormulas: chamar('app:janela-formulas'),
+    formulasPorCima: chamar('app:formulas-por-cima'),
   },
   blocos: {
     reparar: chamar('blocos:reparar'),

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <title>Fórmulas: lista e exemplos</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="janela-formulas">
+  <header class="janela-formulas-topo">
+    <h1>Fórmulas</h1>
+    <p class="suave">Copie um exemplo e cole-o onde está a definir a fórmula (passos, parâmetros, variáveis calculadas, células dos casos com "=", popup do gravador).</p>
+    <div class="janela-formulas-barra">
+      <input id="filtro-formulas" class="campo" type="search" placeholder="Procurar (por exemplo: data, email, arredondar)" aria-label="Procurar fórmula">
+      <label class="opcao"><input id="manter-por-cima" type="checkbox"> Manter por cima das outras janelas</label>
+    </div>
+  </header>
+  <main id="lista-formulas" class="janela-formulas-lista"></main>
+  <script type="module" src="../../dist/web/renderer/janelaFormulas.js"></script>
+</body>
+</html>
