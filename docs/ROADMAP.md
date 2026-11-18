@@ -4,7 +4,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 
 ## Fase 1: núcleo (gravar, compor, correr)
 - [x] 1. Esqueleto Electron + TypeScript (janela com o menu lateral dos 7 ecrãs, vazios) e um botão que abre o Edge com Playwright na app POC.
-- [x] 2. **Mini .exe de diagnóstico** para levar ao PC da empresa: abre o Edge e mostra verificações a verde/vermelho (arranque do .exe, controlo do Edge, proxy, certificados). Se bloquear, pedir a IT um ambiente aprovado (ver ESPECIFICACAO, secção 12). *Feito e testado no PC pessoal; falta corrê-lo no PC da empresa.*
+- [x] 2. **Mini .exe de diagnóstico** para levar ao PC da empresa: abre o Edge e mostra verificações a verde/vermelho (arranque do .exe, controlo do Edge, proxy, certificados). Se bloquear, pedir a IT um ambiente aprovado (ver ESPECIFICACAO, secção 12). *Feito e testado no PC pessoal; atualizado a 18/11/2026 com 17 verificações (ficheiros e separadores no Edge, cofre, servidor local, janelas, PDF e opcionais: Microsoft, ligação direta, apps de demonstração). Falta corrê-lo no PC da empresa.*
 - [x] 3. Modelo de dados em JSON na pasta do projeto: aplicações, épicos, jornadas, blocos, casos. Um ficheiro por item, etiquetas nos casos e tipo de ambiente (DEV/QA/PRD). Ecrã "escolher/criar projeto".
 - [x] 4. Gravador v1: realçar o elemento sob o rato, popup de ação (escrever, escolher, marcar, clicar, verificar, guardar variável), vários localizadores, passos gravados num bloco.
 - [x] 5. Editor de jornada v1: compor uma jornada com blocos da biblioteca (reutilizáveis), com parâmetros.
@@ -38,7 +38,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 ## Fase 4: avançado
 - [x] Login com sessão reutilizada e MFA (modo de teste / email / TOTP); várias sessões na mesma jornada.
 - [x] Blocos de Email (Microsoft Graph ou compatível).
-- [ ] Blocos de Email por IMAP (Gmail): por fazer, falta uma caixa de testes para o testar.
+- [x] Blocos de Email por IMAP (Gmail com palavra-passe de aplicação, ou outro servidor IMAP).
 - [x] Intercetar e simular respostas de APIs externas.
 - [x] Modo print híbrido (gravar passos sobre uma captura do ecrã, com a estrutura da página por baixo).
 - [x] Relatório PDF para assinatura do UAT, com ID do requisito.
@@ -58,7 +58,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Simplificar para quem não é técnico: assistente "Novo teste", aceitar os resultados como esperados, duplicar cenários e casos, modo simples/avançado.
 - [x] Caixa de email de testes: email base com endereços por papel, caso e data ({EMAIL:papel}), login numa janela da ferramenta, no Edge ou com código noutro dispositivo, bloco "Verificar email" por papel (assunto exato, valores com tolerância, anexos, link, "não deve chegar"), imagem do email como evidência. Guia de fórmulas no manual do utilizador.
 - [x] Caixa de email de testes testada com uma conta Outlook pessoal real (`npm.cmd run caixa:testar`).
-- [ ] Caixa de email de testes por IMAP (Gmail, com palavra-passe de aplicação no cofre).
+- [x] Caixa de email de testes por IMAP (Gmail, com palavra-passe de aplicação no cofre; caixa de entrada e spam), testada com uma conta Gmail real.
+- [x] A app de testes PortalCreditoPOC envia emails reais (aprovado, recusado, documentos em falta, pagamento; SMTP do ODC pelo Gmail de testes) e o projeto de exemplo tem o épico 5 "Emails que a app envia" (4 casos OK contra o Gmail real).
 - [ ] Simplificar, por decidir: "Gravar aqui" dentro do cenário, verificações sugeridas depois de um clique, modelo de Excel com explicações.
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

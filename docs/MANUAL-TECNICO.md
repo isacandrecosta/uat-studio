@@ -3,7 +3,7 @@
 Para quem mantém a ferramenta, para a equipa de segurança e para quem a aprova. Escrito de forma simples; os pormenores estão no código, com comentários em português.
 Para o uso do dia a dia, ver o [manual do utilizador](MANUAL-UTILIZADOR.md). Documentos de apoio: [auditoria de compliance](AUDITORIA-COMPLIANCE.md), [ficha de segurança](FICHA-SEGURANCA.md), [guia de instalação](GUIA-INSTALACAO.md), [licenças](LICENCAS.md), [especificação](ESPECIFICACAO.md), [roadmap](ROADMAP.md).
 
-> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova (ver "Novidades" no fim). Última atualização: 17/11/2026.
+> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova (ver "Novidades" no fim). Última atualização: 18/11/2026.
 
 ---
 
@@ -187,7 +187,10 @@ O detalhe e o resultado da revisão do código estão na [auditoria de complianc
 - O executável não está assinado: a IT pode assiná-lo com o certificado interno antes de o distribuir.
 
 ### 5.1.5 Uso no PC da empresa
-- Validar primeiro com o `UAT-Studio-Diagnostico.exe`.
+- Validar primeiro com o `UAT-Studio-Diagnostico.exe` (17 verificações; as opcionais dão aviso amarelo e não impedem o uso).
+- Levar o `UAT-Studio.exe` portátil e a pasta do projeto; não clonar o repositório (exigiria Node.js e `npm install` com acesso à internet). O ODC Studio não é preciso para correr testes.
+- O que **não viaja** com a pasta do projeto (cofre DPAPI por utilizador do Windows): segredos dos perfis, `{SEGREDO:...}`, palavra-passe IMAP, sessões OAuth (incluindo a da caixa de testes). Preencher outra vez no PC de destino.
+- Email: usar uma caixa de testes Microsoft 365 da empresa (Graph, pelo proxy do Windows) com aplicação registada pela IT; o IMAP liga diretamente à porta 993 e normalmente está bloqueado na rede da empresa (linha "Ligação direta sem proxy" do diagnóstico). Os endereços com `+` (plus addressing) dependem de a IT os manter ligados no Exchange Online.
 - Se for bloqueado, pedir à IT um ambiente aprovado (VM ou máquina de testes). **Nunca contornar os controlos** (por exemplo, com uma VM por conta própria).
 
 ### 5.1.6 Checklist antes de usar num projeto
@@ -256,6 +259,7 @@ Cuidados:
 
 - Um número só com ponto e 3 casas ("1.234") é lido como milhares (formato pt-PT).
 - A primeira execução depois de um ambiente OutSystems estar parado pode falhar por lentidão: repetir.
+- **Pastas**: pelo Microsoft Graph lê-se `/me/messages` (todas as pastas da caixa, incluindo subpastas criadas por regras, arquivo e itens eliminados); por IMAP só `INBOX` e a pasta `\Junk` (spam). Uma regra ou filtro que mova ou arquive os emails de teste só afeta o IMAP. Como o Graph também vê os "Itens enviados", um email enviado a partir da própria caixa de testes para um endereço com `+` pode aparecer duas vezes (a cópia enviada e a recebida) e o filtro por destinatário e assunto aceita qualquer uma; nos testes normais o email vem de outro remetente (a aplicação), por isso não acontece.
 - O IMAP não usa o proxy do Windows (ligação direta à porta 993): na rede da empresa pode estar bloqueado. Não há servidor IMAP falso no servidor de teste: a ligação IMAP é testada contra o Gmail real (`npm.cmd run caixa:testar`) e o resto com uma fonte falsa.
 - A caixa de testes com conta Microsoft real precisa de uma aplicação registada no Microsoft Entra (Client ID, permissão delegada Mail.Read): sem isso só funciona a caixa simulada.
 - "Abrir o browser de um worker" não existe (em background não há janela); há miniaturas ao vivo.

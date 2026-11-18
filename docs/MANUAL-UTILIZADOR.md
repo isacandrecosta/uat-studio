@@ -3,7 +3,7 @@
 Para quem cria e corre testes. Não é preciso saber programar.
 Para a parte técnica (como funciona por dentro, segurança, manutenção), ver o [manual técnico](MANUAL-TECNICO.md).
 
-> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 17/11/2026 (caixa de email de testes e guia de fórmulas).
+> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 18/11/2026 (Gmail, pastas e regras da caixa, emails enviados pela app de testes, PC da empresa).
 
 ---
 
@@ -62,6 +62,7 @@ O menu está pela ordem do trabalho:
    - **Wiki de componentes OutSystems**: uma "receita" para cada componente (campos, listas, calendários, sliders, tabelas, popups...) com uma prova que confirma que funciona.
 
    Ambos se apagam na mesma lista quando já não forem precisos.
+3. **Num PC novo (por exemplo, o da empresa)**: copie o `UAT-Studio.exe` e a pasta do projeto; os segredos (passwords, sessões) têm de ser preenchidos outra vez nesse PC. O passo a passo está no guia de instalação ("Levar para o PC da empresa").
 
 ## 5. Construir um teste, passo a passo
 
@@ -173,7 +174,7 @@ A ferramenta olha para a **caixa de entrada e para o spam** (os emails de teste 
 
 `emailteste+gestor_tc0001_13112026@outlook.com`
 
-Todos estes endereços chegam à mesma caixa (é uma regra do Outlook e do Gmail: tudo o que vem depois do `+` é ignorado na entrega), mas como cada caso tem o seu, **os emails de casos diferentes (ou de outros dias) nunca se misturam**. O formato pode mudar-se na definição da caixa.
+Todos estes endereços chegam à mesma caixa (é uma regra do Outlook e do Gmail: tudo o que vem depois do `+` é ignorado na entrega; no Microsoft 365 da empresa está ligado por omissão, mas a IT pode tê-lo desligado: confirme com um email de teste), mas como cada caso tem o seu, **os emails de casos diferentes (ou de outros dias) nunca se misturam**. O formato pode mudar-se na definição da caixa.
 
 **3. Acrescente um bloco "Verificar email"** ao cenário (**Cenários › Criar ▾ › Novo bloco de email**, escolha "Caixa de testes do projeto"):
 - **Para quem (papel)**: por exemplo `gestor`. O email tem de chegar ao endereço do gestor **deste caso**.
@@ -189,6 +190,12 @@ Todos estes endereços chegam à mesma caixa (é uma regra do Outlook e do Gmail
 **Evidências**: cada email recebido fica na pasta do caso (`email/`) como **imagem** (`.png`), como página (`.html`) e com os dados (`.json`). A imagem é desenhada sem carregar imagens da internet (para o email não "avisar" ninguém de que foi aberto).
 
 > Dica: um cenário típico é "o cliente submete → verificar email do gestor (papel gestor) → o gestor aprova no Backoffice → verificar email do cliente (papel cliente)".
+
+**Pastas e regras da caixa**: pode criar uma regra que mova os emails de teste para uma pasta (por exemplo, assunto com "UAT" → pasta UAT), para não encherem a caixa de entrada.
+- **Outlook / Microsoft 365**: a ferramenta procura em **todas as pastas** da caixa, por isso a regra não atrapalha. Prefira regras do Outlook na web ou do Outlook novo (correm no servidor); mesmo uma regra do Outlook clássico não impede a ferramenta de encontrar o email, só o põe noutra pasta.
+- **Gmail e outros por IMAP**: a ferramenta só procura na **caixa de entrada e no spam**. Um filtro que arquive o email ou o tire da caixa de entrada faz o teste dar "o email não chegou". Deixe os emails de teste na caixa de entrada (um marcador sem "Ignorar a caixa de entrada" não faz mal).
+
+**Que caixa usar na empresa**: uma caixa **só para testes**, de preferência partilhada pela equipa (por exemplo `uat-testes@empresa.pt`), e não o seu email de trabalho. A ferramenta só lê, e só os emails do endereço exato do caso, mas ligar a sua caixa de trabalho a uma ferramenta de testes pode precisar de autorização da IT.
 
 **Exemplo pronto**: no projeto de exemplo, o épico **"5. Emails que a app envia"** tem o cenário "Emails da app: aprovado, recusado e documentos em falta". O cliente pede o crédito com o seu **endereço de teste** (o campo Email é preenchido com a fórmula `{EMAIL:cliente}`), o gestor decide no Backoffice e o teste espera o email que a **própria app** envia (assunto, montante, prestação, motivo, link) ou confirma que **não** chega nenhum (o analista acima do limite). Para correr este cenário é preciso definir a caixa de email de testes do projeto (acima). A app de testes envia os emails pelo Gmail de testes (SMTP configurado no ODC); na app real da empresa, isto depende do servidor de email que a app usa em QA.
 
