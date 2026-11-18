@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { AmbitoRun, Bloco, OpcoesRun } from '../../shared/modelo';
 import { testarBloco } from '../api/ambiente';
 import { apagarSegredosDoPerfil, definirSegredo, definirSegredoDeTeste, listarSegredosDeTeste, segredosPreenchidos } from '../cofre';
-import { exportarCasos, importarCasos } from '../excel/casosExcel';
+import { exportarCasos, formulasDoCenario, importarCasos } from '../excel/casosExcel';
 import { pastaDoProjeto } from '../projeto/ipc';
 import * as repo from '../projeto/repositorio';
 import { criarAmbienteApi } from '../api/ambiente';
@@ -151,7 +151,7 @@ export function registarIpcExecucoes(): void {
     };
     const escolha = janela ? await dialog.showSaveDialog(janela, opcoes) : await dialog.showSaveDialog(opcoes);
     if (escolha.canceled || !escolha.filePath) return null;
-    await exportarCasos(escolha.filePath, conjunto);
+    await exportarCasos(escolha.filePath, conjunto, formulasDoCenario(jornada, repo.listar(pasta, 'blocos'), repo.lerVariaveis(pasta)));
     return escolha.filePath;
   });
 }

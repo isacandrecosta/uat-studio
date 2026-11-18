@@ -102,7 +102,6 @@ contextBridge.exposeInMainWorld('uatStudio', {
     testar: chamar('caixa:testar'),
     sessao: chamar('caixa:sessao'),
     esquecer: chamar('caixa:esquecer'),
-    password: chamar('caixa:password'),
   },
   login: {
     aoCodigo: ouvir('login:codigo'),

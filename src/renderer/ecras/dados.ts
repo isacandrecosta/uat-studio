@@ -27,7 +27,8 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
     const base = contextoDeExemplo(dados, contadores, estado.projeto.caixaTestes);
     const emCurso: string[] = [];
     const procurar = (nome: string): string | undefined => {
-      if (nome in dados) return dados[nome];
+      // As células com "=" (fórmulas dos casos) são calculadas pelo contexto de exemplo.
+      if (nome in dados) return base.variavel(nome);
       const outra = variaveis.find((v) => v.nome === nome);
       if (!outra || emCurso.includes(nome)) return undefined;
       emCurso.push(nome);
@@ -170,8 +171,6 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
     const TIPOS = [
       { valor: 'pessoal', texto: 'Outlook / Hotmail (conta Microsoft pessoal)' },
       { valor: 'empresa', texto: 'Microsoft 365 (conta da empresa)' },
-      { valor: 'gmail', texto: 'Gmail (IMAP, com palavra-passe de aplicação)' },
-      { valor: 'imap', texto: 'Outro servidor IMAP' },
       { valor: 'simulada', texto: 'Caixa simulada (servidor de teste local)' },
     ];
     const MODOS = [
@@ -179,19 +178,8 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
       { valor: 'edge', texto: 'No Microsoft Edge' },
       { valor: 'codigo', texto: 'Com um código noutro dispositivo (telemóvel ou outro PC)' },
     ];
-    const porImap = caixa?.ligacao === 'gmail' || caixa?.ligacao === 'imap';
-    const SEM_SESSAO = porImap ? 'por preencher neste PC' : 'sem sessão (o login é pedido na 1.ª utilização)';
-    const COM_SESSAO = porImap ? 'guardada neste PC (encriptada)' : 'sessão guardada neste PC (encriptada)';
-    const AJUDA_PASSWORD_GMAIL =
-      'A palavra-passe de aplicação do Gmail (16 letras, criada em myaccount.google.com/apppasswords), não a password da conta. Fica encriptada neste PC e nunca vai para os ficheiros do projeto nem para os logs.';
-    const pedirPassword = async (): Promise<boolean> => {
-      const r = await pedirFormulario('Palavra-passe da caixa', [
-        { id: 'password', rotulo: caixa?.ligacao === 'gmail' ? 'Palavra-passe de aplicação' : 'Palavra-passe', tipo: 'segredo' as const, obrigatorio: true, ajuda: AJUDA_PASSWORD_GMAIL },
-      ]);
-      if (!r) return false;
-      await api.caixa.password(r.password);
-      return true;
-    };
+    const SEM_SESSAO = 'sem sessão (o login é pedido na 1.ª utilização)';
+    const COM_SESSAO = 'sessão guardada neste PC (encriptada)';
     const definir = async (): Promise<void> => {
       const atual = caixa;
       const passo1 = await pedirFormulario(
@@ -211,7 +199,7 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
             tipo: 'escolha',
             opcoes: MODOS,
             valor: atual?.modoLogin ?? 'janela',
-            ajuda: 'Só para Outlook / Microsoft 365. Em todos os modos, a password é escrita na página da Microsoft (ou do fornecedor), nunca num campo da ferramenta. A sessão fica encriptada neste PC. (No Gmail e noutro IMAP usa-se uma palavra-passe guardada no cofre.)',
+            ajuda: 'Em todos os modos, a password é escrita na página da Microsoft (ou do fornecedor), nunca num campo da ferramenta. A sessão fica encriptada neste PC.',
           },
           { id: 'formato', rotulo: 'Formato dos endereços (opcional)', valor: atual?.formato ?? FORMATO_POR_OMISSAO, ajuda: 'Pode usar {nome}, {dominio}, {papel}, {caso}, {run} e {data}.' },
         ],
@@ -219,28 +207,9 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
       );
       if (!passo1) return;
       const simulada = passo1.tipo === 'simulada';
-      const imap = passo1.tipo === 'gmail' || passo1.tipo === 'imap';
-      // Já há palavra-passe guardada para esta mesma conta? Então pode ficar em branco.
-      const mesmaConta = Boolean(atual && atual.ligacao === passo1.tipo && atual.emailBase === passo1.emailBase.trim() && sessao);
-      const campoPassword = {
-        id: 'password',
-        rotulo: passo1.tipo === 'gmail' ? 'Palavra-passe de aplicação' : 'Palavra-passe',
-        tipo: 'segredo' as const,
-        obrigatorio: !mesmaConta,
-        ajuda: mesmaConta ? 'Já está guardada neste PC. Deixe em branco para a manter.' : AJUDA_PASSWORD_GMAIL,
-      };
       const passo2 = await pedirFormulario(
-        simulada ? 'Caixa simulada: endereços' : passo1.tipo === 'gmail' ? 'Ligação ao Gmail' : imap ? 'Servidor IMAP' : 'Ligação à Microsoft',
-        passo1.tipo === 'gmail'
-          ? [campoPassword]
-          : imap
-          ? [
-              { id: 'servidorImap', rotulo: 'Servidor IMAP', valor: atual?.servidorImap ?? '', obrigatorio: true, ajuda: 'Por exemplo imap.empresa.pt. A ligação é sempre encriptada (TLS) e não usa o proxy do Windows.' },
-              { id: 'portaImap', rotulo: 'Porta', valor: String(atual?.portaImap ?? 993) },
-              { id: 'utilizadorImap', rotulo: 'Utilizador (opcional)', valor: atual?.utilizadorImap ?? '', ajuda: 'Vazio = o email base.' },
-              campoPassword,
-            ]
-          : simulada
+        simulada ? 'Caixa simulada: endereços' : 'Ligação à Microsoft',
+        simulada
           ? [
               { id: 'urlApi', rotulo: 'Endereço da API (ao estilo do Microsoft Graph)', valor: atual?.urlApi ?? 'http://localhost:4010/graph/v1.0', obrigatorio: true },
               { id: 'urlAutorizacao', rotulo: 'Página de login', valor: atual?.urlAutorizacao ?? 'http://localhost:4010/oauth/authorize' },
@@ -262,19 +231,17 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
             ],
       );
       if (!passo2) return;
-      const { password, portaImap, ...resto } = passo2;
+      const resto = passo2;
       const nova: CaixaTestes = {
         emailBase: passo1.emailBase,
         formato: passo1.formato,
         modoLogin: passo1.modoLogin as ModoLogin,
-        ligacao: simulada || imap ? (passo1.tipo as CaixaTestes['ligacao']) : 'microsoft',
-        ...(simulada || imap ? {} : { conta: passo1.tipo as 'pessoal' | 'empresa' }),
-        ...(portaImap ? { portaImap: Number(portaImap) } : {}),
+        ligacao: simulada ? 'simulada' : 'microsoft',
+        ...(simulada ? {} : { conta: passo1.tipo as 'pessoal' | 'empresa' }),
         ...resto,
       };
       try {
         await api.caixa.gravar(nova);
-        if (imap && password) await api.caixa.password(password);
         await atualizar();
       } catch (erro) {
         await confirmar('Não foi possível guardar', mensagemDeErro(erro), 'Fechar');
@@ -284,7 +251,7 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
     const testar = async (botao: HTMLButtonElement): Promise<void> => {
       botao.disabled = true;
       resultado.className = 'suave';
-      resultado.textContent = porImap ? 'A ligar ao servidor de email...' : 'A ligar... (se for preciso, faça o login na janela que abrir)';
+      resultado.textContent = 'A ligar... (se for preciso, faça o login na janela que abrir)';
       try {
         const r = await api.caixa.testar();
         resultado.className = 'texto-ok';
@@ -327,36 +294,13 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
               'ul',
               { class: 'lista-itens' },
               h('li', { class: 'item' }, h('strong', {}, caixa.emailBase), h('span', { class: 'item-meta' }, tipoTexto)),
-              h('li', { class: 'item' }, h('span', {}, porImap ? `Palavra-passe (${caixa.ligacao === 'gmail' ? 'imap.gmail.com' : (caixa.servidorImap ?? '')}):` : `Login: ${MODOS.find((m) => m.valor === caixa.modoLogin)?.texto ?? ''}`), estadoSessao),
+              h('li', { class: 'item' }, h('span', {}, `Login: ${MODOS.find((m) => m.valor === caixa.modoLogin)?.texto ?? ''}`), estadoSessao),
               h('li', { class: 'item' }, h('span', {}, 'Exemplo: {EMAIL:gestor} ='), h('code', { id: 'caixa-exemplo' }, exemploEmail)),
             ),
             h(
               'div',
               { class: 'caixa-acoes' },
               h('button', { id: 'btn-caixa-testar', type: 'button', class: 'botao botao-primario', onclick: (e: Event) => void testar(e.currentTarget as HTMLButtonElement) }, 'Ligar e testar'),
-              porImap
-                ? h(
-                    'button',
-                    {
-                      id: 'btn-caixa-password',
-                      type: 'button',
-                      class: 'botao',
-                      onclick: async () => {
-                        try {
-                          if (!(await pedirPassword())) return;
-                          sessao = true;
-                          estadoSessao.textContent = COM_SESSAO;
-                          resultado.className = 'suave';
-                          resultado.textContent = 'Palavra-passe guardada neste PC. Carregue em "Ligar e testar".';
-                        } catch (erro) {
-                          resultado.className = 'texto-erro';
-                          resultado.textContent = mensagemDeErro(erro);
-                        }
-                      },
-                    },
-                    'Palavra-passe',
-                  )
-                : null,
               h(
                 'button',
                 {
@@ -368,10 +312,10 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
                     sessao = false;
                     estadoSessao.textContent = SEM_SESSAO;
                     resultado.className = 'suave';
-                    resultado.textContent = porImap ? 'Palavra-passe esquecida neste PC.' : 'Sessão esquecida neste PC.';
+                    resultado.textContent = 'Sessão esquecida neste PC.';
                   },
                 },
-                porImap ? 'Esquecer a palavra-passe' : 'Esquecer a sessão',
+                'Esquecer a sessão',
               ),
               h(
                 'button',
@@ -390,7 +334,7 @@ export async function ecraDados({ corpo, selecao, estado, atualizar }: Contexto)
             ),
             resultado,
           )
-        : h('p', { class: 'suave' }, 'Ainda não há caixa de testes. Peça à IT uma caixa dedicada (sem dados reais): para Microsoft, com o Client ID de uma aplicação com a permissão Mail.Read; para Gmail, com a verificação em 2 passos e uma palavra-passe de aplicação.'),
+        : h('p', { class: 'suave' }, 'Ainda não há caixa de testes. Peça à IT uma caixa dedicada (sem dados reais): com o Client ID de uma aplicação registada no Microsoft Entra com a permissão Mail.Read.'),
     );
   }
 

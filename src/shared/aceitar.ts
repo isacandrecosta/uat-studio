@@ -33,7 +33,8 @@ export function mudancasDosResultados(run: EstadoRun, conjuntos: ConjuntoCasos[]
     if (!atual) continue;
     for (const [coluna, depois] of Object.entries(caso.valoresLidos ?? {})) {
       const antes = atual.dados[coluna] ?? '';
-      if (depois === '' || mesmoValor(antes, depois)) continue;
+      // Uma célula com fórmula (=...) calcula o esperado sozinha: não é trocada pelo valor lido.
+      if (depois === '' || /^\s*=/.test(antes) || mesmoValor(antes, depois)) continue;
       mudancas.push({ chave: caso.chave, jornadaId: caso.jornadaId, casoId: caso.casoId, coluna, antes, depois });
     }
   }

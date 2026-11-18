@@ -531,6 +531,8 @@ code { padding: 1px 6px; border-radius: 4px; background: var(--neutro-fundo); fo
 .opcoes-bloco { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 8px 0 0 34px; font-size: 13px; }
 .opcao-condicao { flex: 1; min-width: 260px; display: flex; align-items: center; gap: 8px; color: var(--texto-suave); }
 .opcao-condicao span { white-space: nowrap; }
+.passo-condicao { display: flex; align-items: center; gap: 8px; color: var(--texto-suave); }
+.passo-condicao span { white-space: nowrap; }
 .opcoes-bloco .opcao { display: flex; align-items: center; gap: 6px; color: var(--texto-suave); }
 .opcoes-bloco .erro-campo { flex-basis: 100%; }
 .linha-esperar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -846,3 +848,16 @@ kbd { padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(255, 255, 255
 .texto-ok { color: var(--ok); font-weight: 600; }
 .texto-erro { color: var(--erro); }
 .codigo-login { font: 700 28px/1.2 Consolas, monospace; letter-spacing: 3px; text-align: center; padding: 14px; margin: 12px 0; border: 2px dashed var(--borda); border-radius: 8px; user-select: all; }
+
+/* Editor do cenário: passos de cada bloco à vista e alteráveis */
+.passos-do-bloco { margin: 8px 0 0 34px; }
+.passos-do-bloco summary { cursor: pointer; color: var(--texto-suave); font-size: 13px; }
+.aviso-partilhado { margin: 6px 0; font-size: 13px; color: var(--texto-suave); border-left: 3px solid var(--aviso); padding-left: 8px; }
+.lista-passos-editaveis { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.passo-editavel { display: grid; grid-template-columns: 28px 110px 1fr; gap: 8px; align-items: start; padding: 6px 0; border-top: 1px solid var(--borda); }
+.passo-editavel:first-child { border-top: none; }
+.passo-campos { display: grid; gap: 6px; min-width: 0; }
+.passo-valor { display: grid; grid-template-columns: minmax(175px, 1fr) 2fr; gap: 8px; }
+.passo-valor .erro-campo { grid-column: 1 / -1; }
+.passo-alvo { font-size: 12px; }
+@media (max-width: 700px) { .passo-editavel { grid-template-columns: 28px 1fr; } .passo-editavel .passo-campos { grid-column: 1 / -1; } .passo-valor { grid-template-columns: 1fr; } }

@@ -6,6 +6,7 @@ import type { Contexto } from '../app.js';
 import { codigoDaJornada } from '../../shared/codigo.js';
 import { validarFormula } from '../../shared/formulas.js';
 import { campoFiltro, confirmar, h, info, maisOpcoes, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from '../dom.js';
+import { passosEditaveis } from '../passos.js';
 
 const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -45,6 +46,8 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
   const blocoPorId = new Map<string, Bloco>(blocos.map((b) => [b.id, b]));
   const aplicacaoPorId = new Map<string, Aplicacao>(aplicacoes.map((a) => [a.id, a]));
 
+  /** Blocos do percurso com a lista de passos aberta (mantém-se depois de gravar um passo). */
+  const passosAbertos = new Set<number>();
   const guardarJornada = async (redesenhar = true): Promise<void> => {
     await dados.guardar('jornadas', jornada);
     if (redesenhar) await desenhar();
@@ -362,6 +365,25 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
             ),
           ),
         ),
+        bloco &&
+          bloco.passos.length > 0 &&
+          h(
+            'details',
+            {
+              class: 'passos-do-bloco',
+              open: passosAbertos.has(indice),
+              ontoggle: (e: Event) => {
+                if ((e.currentTarget as HTMLDetailsElement).open) passosAbertos.add(indice);
+                else passosAbertos.delete(indice);
+              },
+            },
+            h('summary', {}, `Passos (${bloco.passos.length})`),
+            passosEditaveis(bloco, jornadas.filter((j) => j.blocos.some((b) => b.blocoId === bloco.id)).length, async () => {
+              await dados.guardar('blocos', bloco);
+              passosAbertos.add(indice);
+              await desenhar();
+            }),
+          ),
         usa.length > 0 &&
           h(
             'details',

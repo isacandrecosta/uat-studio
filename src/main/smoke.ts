@@ -7,14 +7,14 @@ import * as path from 'node:path';
 import { ChildProcess, spawn } from 'node:child_process';
 import { Bloco, ConjuntoCasos, Jornada } from '../shared/modelo';
 import { testarBloco } from './api/ambiente';
-import { apagarSegredosDoPerfil, definirSegredo, lerSegredo, segredosPreenchidos } from './cofre';
+import { apagarSegredosDoPerfil, definirSegredo, segredosPreenchidos } from './cofre';
 import * as repo from './projeto/repositorio';
 import { continuarRun, esperarFimDoRun, estadoRun, iniciarRun, listarHistorico } from './executor/execucao';
 import { estadoGravador, paginaDoGravador, terminarGravacao } from './gravador/gravador';
 import { abrirProjeto, criarProjeto } from './projeto/ipc';
 import { definirAoAbrirJanelaDeLogin } from './api/loginJanela';
 import { ultimoAvisoDeCodigo } from './api/avisoCodigo';
-import { SENHA_CAIXA, SESSAO_CAIXA } from './email/caixaTestes';
+import { SESSAO_CAIXA } from './email/caixaTestes';
 
 type Passo = (janela: BrowserWindow) => Promise<void>;
 
@@ -266,6 +266,35 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await naPagina(j, "document.querySelector('#percurso > li:nth-child(2) .acoes button:last-child').click()");
         await esperar(j, "document.querySelectorAll('#percurso > li').length === 1");
         confirmar(lerJornada().blocos.length === 1 && lerCasos().casos.length === 6, 'O exemplo não voltou ao estado inicial.');
+
+        // Passos à vista no editor: o valor do passo "Preencher o valor" passa a fórmula ({Valor}, o mesmo
+        // resultado) e a descrição muda; tudo fica gravado no bloco.
+        const lerBloco = (): Bloco => JSON.parse(fs.readFileSync(path.join(pastaProjeto, 'exemplo', 'blocos', 'simular-credito.json'), 'utf8')) as Bloco;
+        await naPagina(j, "document.querySelector('#percurso > li:first-child details.passos-do-bloco > summary').click()");
+        await esperar(j, "document.querySelector('#percurso > li:first-child .passo-editavel[data-passo=\"p3\"] .passo-valor select')");
+        const passoValor = '#percurso > li:first-child .passo-editavel[data-passo="p3"]';
+        await mudar(`${passoValor} .passo-valor select`, 'formula');
+        await mudar(`${passoValor} .passo-valor input`, '{Valor}');
+        await esperar(j, `document.querySelector('${passoValor} .passo-valor select')?.value === 'formula'`);
+        await mudar(`${passoValor} .passo-campos > input`, 'Preencher o valor (fórmula)');
+        await esperar(j, `document.querySelector('${passoValor} .passo-campos > input')?.value === 'Preencher o valor (fórmula)'`);
+        const p3 = lerBloco().passos.find((p) => p.id === 'p3');
+        confirmar(p3?.valor?.tipo === 'formula' && p3.valor.expressao === '{Valor}' && p3.descricao === 'Preencher o valor (fórmula)', `O passo não foi gravado no bloco: ${JSON.stringify(p3)}`);
+        confirmar(await naPagina<boolean>(j, "document.querySelector('#percurso > li:first-child details.passos-do-bloco').open"), 'A lista de passos devia continuar aberta depois de gravar.');
+        await tirarPrint(j, raiz, 'editor-passos');
+        // Repor o passo (coluna Valor e a descrição original), também pela interface: os passos seguintes contam com ele.
+        await mudar(`${passoValor} .passo-valor select`, 'variavel');
+        await mudar(`${passoValor} .passo-valor input`, 'Valor');
+        await esperar(j, `document.querySelector('${passoValor} .passo-valor select')?.value === 'variavel'`);
+        await mudar(`${passoValor} .passo-campos > input`, 'Preencher o valor');
+        await esperar(j, `document.querySelector('${passoValor} .passo-campos > input')?.value === 'Preencher o valor'`);
+        const reposto = lerBloco().passos.find((p) => p.id === 'p3');
+        confirmar(reposto?.valor?.tipo === 'variavel' && reposto.valor.nome === 'Valor' && reposto.descricao === 'Preencher o valor', `O passo não foi reposto: ${JSON.stringify(reposto)}`);
+
+        // Fórmula numa célula do caso (como no Excel): =500 * 1 dá o mesmo valor; a execução seguinte confirma.
+        const comFormula = lerCasos();
+        comFormula.casos[0].dados.Valor = `=${comFormula.casos[0].dados.Valor.replace('.', ',')} * 1`;
+        fs.writeFileSync(path.join(pastaProjeto, 'exemplo', 'casos', 'simular-credito.json'), JSON.stringify(comFormula, null, 2));
       },
     ],
     [
@@ -337,6 +366,8 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(run.casos.every((c) => c.variaveis.PedidoId), 'Todos os casos deviam ter guardado {PedidoId}.');
         const calculadas = run.casos.map((c) => c.variaveis.ComissaoCalculada).join(' | ');
         confirmar(calculadas === '5 | 102,5 | 0 | 650 | 25,91 | 0', `As comissões calculadas por fórmula não são as esperadas: ${calculadas}`);
+        const tc1 = run.casos.find((c) => c.casoId === 'TC0001');
+        confirmar(tc1?.estado === 'OK' && tc1.variaveis.Valor === '500', `A fórmula na célula do caso (=500 * 1) devia dar 500 e o caso OK: ${tc1?.estado} ${tc1?.variaveis.Valor}`);
 
         const pastaRun = path.join(pastaProjeto, 'exemplo', 'execucoes', run.pasta);
         for (const ficheiro of ['run.json', 'run.log', 'relatorio.xlsx', 'relatorio.html']) {
@@ -1591,19 +1622,6 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         definirAoAbrirJanelaDeLogin(null);
         apagarSegredosDoPerfil(pasta, 'caixa-de-testes');
 
-        // Gmail por IMAP: escolher pela interface e guardar a palavra-passe de aplicação no cofre (sem ligar ao Gmail).
-        await naPagina(j, "document.getElementById('btn-caixa-definir').click()");
-        await esperar(j, "document.querySelector('dialog[open] #form-emailBase')");
-        await dialogo({ emailBase: 'caixa.uat@gmail.com', tipo: 'gmail' });
-        await esperar(j, "document.querySelector('dialog[open] #form-password')");
-        await dialogo({ password: 'abcd efgh ijkl mnop' });
-        await esperar(j, "document.getElementById('btn-caixa-password') && document.getElementById('caixa-sessao').textContent.startsWith('guardada')");
-        const caixaGmail = repo.lerProjeto(pasta).caixaTestes;
-        confirmar(caixaGmail?.ligacao === 'gmail' && caixaGmail.emailBase === 'caixa.uat@gmail.com', `A caixa do Gmail não ficou bem guardada: ${JSON.stringify(caixaGmail)}`);
-        confirmar(lerSegredo(pasta, SENHA_CAIXA) === 'abcdefghijklmnop', 'A palavra-passe de aplicação devia ficar no cofre (sem espaços).');
-        confirmar(!fs.readFileSync(path.join(pasta, 'projeto.json'), 'utf8').includes('abcd'), 'A palavra-passe não pode ir para o projeto.json.');
-        console.log('[smoke]   caixa do Gmail (IMAP) definida pela interface, palavra-passe no cofre');
-        apagarSegredosDoPerfil(pasta, 'caixa-de-testes');
         repo.gravarProjeto(pasta, { ...repo.lerProjeto(pasta), caixaTestes: caixaGuardada });
 
         // Ações do browser na página de teste do servidor local: upload, download, pergunta do browser, iframe e separadores.

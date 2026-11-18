@@ -40,7 +40,7 @@ export const VERIFICACOES: Verificacao[] = [
   { id: 'janela', nome: 'Janelas da ferramenta', descricao: 'Janela de login e visualizador de traces dentro da ferramenta.' },
   { id: 'pdf', nome: 'Relatório em PDF', descricao: 'Gerar o PDF para assinatura.' },
   { id: 'microsoft', nome: 'Login e email da Microsoft (opcional)', descricao: 'Chegar a login.microsoftonline.com e graph.microsoft.com (caixa de email Microsoft 365).' },
-  { id: 'direto', nome: 'Ligação direta sem proxy (opcional)', descricao: 'Usada pelo email por IMAP (Gmail) e pelos certificados de cliente (mTLS).' },
+  { id: 'direto', nome: 'Ligação direta sem proxy (opcional)', descricao: 'Usada pelos pedidos de API com certificado de cliente (mTLS).' },
   { id: 'apps-demo', nome: 'Apps de demonstração (opcional)', descricao: 'As apps de teste OutSystems do projeto de exemplo (fora da empresa).' },
   { id: 'chrome', nome: 'Chrome instalado (opcional)', descricao: 'Browser alternativo.' },
 ];
@@ -274,7 +274,7 @@ async function verificarMicrosoft(): Promise<Resultado> {
   }
 }
 
-/** HTTPS pelo Node, sem o proxy do Windows: é assim que ligam o IMAP e os certificados de cliente. */
+/** HTTPS pelo Node, sem o proxy do Windows: é assim que ligam os pedidos com certificado de cliente (mTLS). */
 function verificarDireto(url: string): Promise<Resultado> {
   const id = 'direto';
   return new Promise((resolve) => {
@@ -285,7 +285,7 @@ function verificarDireto(url: string): Promise<Resultado> {
       resolve({ id, estado: 'ok', detalhe: `Liga diretamente (HTTP ${resposta.statusCode}).` });
     });
     const falhar = (texto: string): void =>
-      resolve({ id, estado: 'aviso', detalhe: `${texto} Na rede da empresa é normal: o email por IMAP e os certificados de cliente (mTLS) não vão funcionar aqui; use uma caixa Microsoft 365.` });
+      resolve({ id, estado: 'aviso', detalhe: `${texto} Na rede da empresa é normal: só os pedidos de API com certificado de cliente (mTLS) não vão funcionar aqui.` });
     pedido.on('timeout', () => {
       pedido.destroy();
       falhar('Sem resposta (a rede provavelmente só deixa sair pelo proxy).');

@@ -2,7 +2,7 @@
 // Formato: 1.ª folha, 1.ª linha com os nomes das colunas. Colunas especiais (opcionais):
 // ID, Descricao (ou Descrição), Etiquetas (separadas por vírgulas) e Executar (N = não importar).
 import ExcelJS from 'exceljs';
-import { Caso, ConjuntoCasos } from '../../shared/modelo';
+import { Bloco, Caso, ConjuntoCasos, Jornada, VariavelCalculada } from '../../shared/modelo';
 import { ErroProjeto } from '../projeto/repositorio';
 
 const semAcentos = (texto: string): string => texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -14,7 +14,15 @@ function textoDaCelula(valor: ExcelJS.CellValue): string {
   if (typeof valor === 'boolean') return valor ? 'S' : 'N';
   if (valor instanceof Date) return valor.toISOString().slice(0, 10);
   if (typeof valor === 'object') {
-    if ('result' in valor) return textoDaCelula(valor.result as ExcelJS.CellValue); // fórmula
+    if ('formula' in valor || 'sharedFormula' in valor) {
+      // Fórmula do Excel: fica o resultado; se o Excel não a souber calcular (#NOME?, por ser uma função do
+      // UAT Studio como EMAIL ou ARRED.PAR), fica a própria fórmula, para o UAT Studio a calcular por caso.
+      const resultado = (valor as { result?: unknown }).result;
+      const formula = (valor as { formula?: string }).formula;
+      const semResultado = resultado === undefined || resultado === null || (typeof resultado === 'object' && 'error' in (resultado as object));
+      if (semResultado && formula) return `=${formula}`;
+      return textoDaCelula(resultado as ExcelJS.CellValue);
+    }
     if ('richText' in valor) return valor.richText.map((p) => p.text).join('');
     if ('text' in valor) return String(valor.text); // hiperligação
     if ('error' in valor) return '';
@@ -83,7 +91,37 @@ export async function importarCasos(ficheiro: string, jornadaId: string): Promis
   return { conjunto: { id: jornadaId, colunas: colunasDeDados.map((n) => n.nome), casos }, ignorados };
 }
 
-export async function exportarCasos(ficheiro: string, conjunto: ConjuntoCasos): Promise<void> {
+/** Uma fórmula do cenário que não vive nos casos (passos, parâmetros, condições, variáveis calculadas). */
+export interface FormulaDoCenario {
+  onde: string;
+  oQue: string;
+  formula: string;
+}
+
+/** As fórmulas que o cenário usa fora dos casos, para a folha "Fórmulas do cenário" (só para consulta). */
+export function formulasDoCenario(jornada: Jornada, blocos: Bloco[], calculadas: VariavelCalculada[]): FormulaDoCenario[] {
+  const linhas: FormulaDoCenario[] = [];
+  const porId = new Map(blocos.map((b) => [b.id, b]));
+  const usadas = new Set<string>();
+  jornada.blocos.forEach((item, i) => {
+    const bloco = porId.get(item.blocoId);
+    if (!bloco) return;
+    const onde = `${i + 1}. ${bloco.nome}`;
+    if (item.condicao?.trim()) linhas.push({ onde, oQue: 'Só se (neste cenário)', formula: item.condicao });
+    for (const [nome, valor] of Object.entries(item.parametros ?? {})) {
+      if (valor.tipo === 'formula') linhas.push({ onde, oQue: `Parâmetro {${nome}} (neste cenário)`, formula: valor.expressao });
+    }
+    for (const passo of bloco.passos) {
+      if (passo.valor?.tipo === 'formula') linhas.push({ onde, oQue: `Passo: ${passo.descricao}`, formula: passo.valor.expressao });
+      if (passo.condicao?.trim()) linhas.push({ onde, oQue: `Passo "${passo.descricao}": só se`, formula: passo.condicao });
+    }
+    for (const nome of JSON.stringify(bloco).match(/\{([A-Za-zÀ-ÿ_][\wÀ-ÿ.]*)\}/g) ?? []) usadas.add(nome.slice(1, -1));
+  });
+  for (const v of calculadas) if (usadas.has(v.nome)) linhas.push({ onde: 'Dados de teste', oQue: `Variável calculada {${v.nome}}`, formula: v.formula });
+  return linhas;
+}
+
+export async function exportarCasos(ficheiro: string, conjunto: ConjuntoCasos, formulas: FormulaDoCenario[] = []): Promise<void> {
   const livro = new ExcelJS.Workbook();
   const folha = livro.addWorksheet('Casos');
   folha.columns = [
@@ -109,6 +147,22 @@ export async function exportarCasos(ficheiro: string, conjunto: ConjuntoCasos): 
   topo.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   topo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
   folha.views = [{ state: 'frozen', ySplit: 1 }];
+  // Segunda folha, só para consulta: o que o cenário calcula fora dos casos. A importação lê só a 1.ª folha.
+  if (formulas.length > 0) {
+    const folhaFormulas = livro.addWorksheet('Fórmulas do cenário');
+    folhaFormulas.columns = [
+      { header: 'Bloco', key: 'onde', width: 36 },
+      { header: 'O quê', key: 'oQue', width: 48 },
+      { header: 'Fórmula', key: 'formula', width: 60 },
+    ];
+    for (const linha of formulas) folhaFormulas.addRow(linha);
+    folhaFormulas.addRow({});
+    folhaFormulas.addRow({ onde: 'Só para consulta: estas fórmulas mudam-se no UAT Studio. Na folha Casos, uma célula que começa por = (por exemplo =EMAIL("cliente")) é calculada para esse caso.' });
+    folhaFormulas.eachRow((linha) => linha.eachCell((celula) => (celula.numFmt = '@')));
+    const topoFormulas = folhaFormulas.getRow(1);
+    topoFormulas.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    topoFormulas.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+  }
   try {
     await livro.xlsx.writeFile(ficheiro);
   } catch {

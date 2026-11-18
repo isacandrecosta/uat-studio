@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { exportarCasos, importarCasos } from '../main/excel/casosExcel';
+import { exportarCasos, formulasDoCenario, importarCasos } from '../main/excel/casosExcel';
 import { planear } from '../main/executor/execucao';
 import { criarExemplo } from '../main/projeto/exemplo';
 import * as repo from '../main/projeto/repositorio';
@@ -38,6 +38,35 @@ test('importar um Excel: colunas especiais, números, fórmulas e Executar = N',
   const copia = path.join(pasta, 'copia.xlsx');
   await exportarCasos(copia, conjunto);
   assert.deepEqual((await importarCasos(copia, 'simular')).conjunto, conjunto);
+  fs.rmSync(pasta, { recursive: true, force: true });
+});
+
+test('Excel com fórmulas: "=..." nos casos vai e volta como texto, #NOME? fica a fórmula, folha das fórmulas do cenário', async () => {
+  const pasta = pastaTemporaria();
+  repo.criarProjeto(pasta, 'P');
+  criarExemplo(pasta);
+  const ficheiro = path.join(pasta, 'formulas.xlsx');
+  const livro = new ExcelJS.Workbook();
+  const folha = livro.addWorksheet('Casos');
+  folha.addRow(['ID', 'Email', 'Comissao']);
+  // Uma função do UAT Studio escrita no Excel: o Excel não a calcula (fica #NOME?) e a importação guarda a fórmula.
+  folha.addRow(['TC0001', { formula: 'EMAIL("cliente";"exemplo.pt")', result: { error: '#NAME?' } }, '=ARRED(1000 * 0,015; 2)']);
+  await livro.xlsx.writeFile(ficheiro);
+  const { conjunto } = await importarCasos(ficheiro, 'simular-credito');
+  assert.equal(conjunto.casos[0].dados.Email, '=EMAIL("cliente";"exemplo.pt")');
+  assert.equal(conjunto.casos[0].dados.Comissao, '=ARRED(1000 * 0,015; 2)');
+
+  const jornada = repo.ler(pasta, 'jornadas', 'simular-credito');
+  const blocos = repo.listar(pasta, 'blocos');
+  jornada.blocos[0].parametros = { Valor: { tipo: 'formula', expressao: '{Valor} * 2' } };
+  const formulas = formulasDoCenario(jornada, blocos, [{ nome: 'Valor', formula: '1' }]);
+  assert.ok(formulas.some((f) => f.oQue === 'Parâmetro {Valor} (neste cenário)' && f.formula === '{Valor} * 2'), JSON.stringify(formulas));
+  const copia = path.join(pasta, 'copia.xlsx');
+  await exportarCasos(copia, conjunto, formulas);
+  const lido = new ExcelJS.Workbook();
+  await lido.xlsx.readFile(copia);
+  assert.deepEqual(lido.worksheets.map((w) => w.name), ['Casos', 'Fórmulas do cenário']);
+  assert.deepEqual((await importarCasos(copia, 'simular-credito')).conjunto, conjunto);
   fs.rmSync(pasta, { recursive: true, force: true });
 });
 

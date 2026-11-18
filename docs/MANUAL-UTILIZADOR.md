@@ -3,7 +3,7 @@
 Para quem cria e corre testes. Não é preciso saber programar.
 Para a parte técnica (como funciona por dentro, segurança, manutenção), ver o [manual técnico](MANUAL-TECNICO.md).
 
-> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 18/11/2026 (Gmail, pastas e regras da caixa, emails enviados pela app de testes, PC da empresa).
+> Este manual é atualizado sempre que a ferramenta ganha uma funcionalidade nova. Última atualização: 18/11/2026 (passos alteráveis no editor do cenário, fórmulas nos casos e no Excel, EMAIL com base própria, sem Gmail).
 
 ---
 
@@ -117,12 +117,20 @@ Casos especiais no popup e no editor de passos:
    - **Sessão**: pessoas diferentes no mesmo teste (por exemplo "cliente" e "gestor"), cada uma no seu browser;
    - **Limpeza**: corre sempre, mesmo que um bloco anterior tenha falhado.
 4. **Resumo**: descreva o objetivo do teste e preencha o **ID do requisito** (aparece no PDF para assinatura).
+5. **Ver e mudar as ações de cada bloco**: abra **Passos (N)** no bloco. Aparecem todas as ações, pela ordem, e pode mudar:
+   - a **descrição** de cada passo;
+   - **de onde vem o valor**: valor fixo, coluna dos casos ou fórmula (as passwords vêm sempre de uma coluna);
+   - o **"Só se"** de cada passo.
+
+   **Atenção:** os blocos são partilhados. Se o bloco for usado noutros cenários, aparece um aviso: mudar um passo aqui muda-o em **todos**. Para mudar um valor **só neste cenário**, use os **Parâmetros** do bloco.
 
 ### 5.5 Escrever os casos de teste (e usar o Excel)
 **Editor do cenário › Casos de teste**: uma linha por caso, com os dados de entrada e os valores esperados.
 - **Exportar Excel** → crie as linhas que quiser (centenas, se for preciso) → **Importar Excel**.
 - Colunas especiais: `ID`, `Descricao`, `Etiquetas` (para correr só alguns) e `Executar` (`N` = não importar a linha).
 - Uma célula de valor esperado **vazia** quer dizer "não verificar isto neste caso".
+- **Fórmulas numa célula**: comece por `=` e a ferramenta calcula o valor **para esse caso**, por exemplo `=EMAIL("cliente")`, `=ARRED({Valor} * 0,015; 2)` ou `="cliente_" & {TESTE}`. Funciona na tabela e no Excel (no Excel aparece `#NOME?` nessas células, porque o Excel não conhece as funções do UAT Studio: é normal, e a importação guarda a fórmula).
+- **Na exportação para Excel** vem também a folha **"Fórmulas do cenário"**, só para consulta: as fórmulas que o cenário usa fora dos casos (parâmetros, passos, condições e variáveis calculadas). Essas mudam-se no UAT Studio; a importação lê só a folha dos casos.
 
 ### 5.5.1 Duplicar
 - **Duplicar um cenário** (botão "Duplicar" na lista de cenários): uma cópia com os mesmos blocos e os mesmos casos, para fazer uma variação.
@@ -148,8 +156,8 @@ Muitas aplicações enviam emails (aprovação ao gestor, código de acesso, con
 
 **1. Defina a caixa (uma vez por projeto)**, em **Dados de teste › Caixa de email de testes › Definir caixa**:
 - **Email base**: uma caixa **só para testes**, aprovada pela IT, por exemplo `emailteste@outlook.com`. Nunca uma caixa pessoal ou com dados reais.
-- **Que caixa é**: Outlook/Hotmail (conta pessoal), Microsoft 365 (conta da empresa), **Gmail**, outro servidor IMAP ou caixa simulada (só para experimentar no PC, com o servidor de teste).
-- **Como entrar na caixa** (só Outlook/Microsoft 365; em todos, a password é escrita na página da **Microsoft**, nunca num campo da ferramenta):
+- **Que caixa é**: Outlook/Hotmail (conta pessoal), Microsoft 365 (conta da empresa) ou caixa simulada (só para experimentar no PC, com o servidor de teste). O Gmail não é suportado (precisaria de uma ligação que a rede da empresa bloqueia).
+- **Como entrar na caixa** (em todos, a password é escrita na página da **Microsoft**, nunca num campo da ferramenta):
 
 | Modo | Como é | Quando usar |
 |---|---|---|
@@ -160,21 +168,11 @@ Muitas aplicações enviam emails (aprovação ao gestor, código de acesso, con
 - **Client ID**: o identificador da "aplicação" que a Microsoft autoriza a ler a caixa (permissão `Mail.Read`). Numa conta da empresa, é a **IT** que o dá.
 - Carregue em **Ligar e testar**: na 1.ª vez é pedido o login; depois a sessão fica **encriptada neste PC** e as execuções seguintes já não pedem login. **Esquecer a sessão** apaga-a.
 
-**Gmail** (o Gmail não usa o login da Microsoft; usa uma **palavra-passe de aplicação**):
-1. Na conta Google de testes, ligue a **verificação em 2 passos** (myaccount.google.com › Segurança).
-2. Em **myaccount.google.com/apppasswords**, crie uma palavra-passe de aplicação (por exemplo, com o nome "UAT Studio"). O Google mostra 16 letras **uma só vez**: guarde-as num sítio seguro. Não é a password da conta.
-3. No UAT Studio, em **Definir caixa**, escolha **Gmail** e cole as 16 letras (os espaços não contam). Ficam **encriptadas neste PC**: nunca vão para os ficheiros do projeto, os logs ou os relatórios. Noutro PC é preciso voltar a colá-las (botão **Palavra-passe**).
-4. Carregue em **Ligar e testar**: aparece o assunto do último email.
-
-A ferramenta olha para a **caixa de entrada e para o spam** (os emails de teste vão muitas vezes parar ao spam; o log diz quando o email estava lá). Para trocar a palavra-passe, use **Palavra-passe**; **Esquecer a palavra-passe** apaga-a deste PC. Também no Gmail os endereços com `+` chegam à mesma caixa (`emailteste+gestor_tc0001_17112026@gmail.com`).
-
-> Atenção: o Gmail lê-se por IMAP (porta 993), diretamente, **sem o proxy do Windows**. Na rede da empresa pode estar bloqueado; se "Ligar e testar" disser que não foi possível ligar, fale com a IT.
-
 **2. Use um endereço diferente por papel e por caso.** Nos dados do caso, onde a aplicação pede um email, escreva `{EMAIL:gestor}` (ou `{EMAIL:cliente}`, `{EMAIL:supervisor}`...). A ferramenta troca por um endereço próprio desse caso, por exemplo:
 
 `emailteste+gestor_tc0001_13112026@outlook.com`
 
-Todos estes endereços chegam à mesma caixa (é uma regra do Outlook e do Gmail: tudo o que vem depois do `+` é ignorado na entrega; no Microsoft 365 da empresa está ligado por omissão, mas a IT pode tê-lo desligado: confirme com um email de teste), mas como cada caso tem o seu, **os emails de casos diferentes (ou de outros dias) nunca se misturam**. O formato pode mudar-se na definição da caixa.
+Todos estes endereços chegam à mesma caixa (é uma regra do Outlook: tudo o que vem depois do `+` é ignorado na entrega; no Microsoft 365 da empresa está ligado por omissão, mas a IT pode tê-lo desligado: confirme com um email de teste), mas como cada caso tem o seu, **os emails de casos diferentes (ou de outros dias) nunca se misturam**. O formato pode mudar-se na definição da caixa.
 
 **3. Acrescente um bloco "Verificar email"** ao cenário (**Cenários › Criar ▾ › Novo bloco de email**, escolha "Caixa de testes do projeto"):
 - **Para quem (papel)**: por exemplo `gestor`. O email tem de chegar ao endereço do gestor **deste caso**.
@@ -192,9 +190,7 @@ Todos estes endereços chegam à mesma caixa (é uma regra do Outlook e do Gmail
 > Dica: um cenário típico é "o cliente submete → verificar email do gestor (papel gestor) → o gestor aprova no Backoffice → verificar email do cliente (papel cliente)".
 
 **Pastas e regras da caixa**: pode criar uma regra que mova os emails de teste para uma pasta (por exemplo, assunto com "UAT" → pasta UAT), para não encherem a caixa de entrada.
-- **Outlook / Microsoft 365**: a ferramenta procura em **todas as pastas** da caixa, por isso a regra não atrapalha. Prefira regras do Outlook na web ou do Outlook novo (correm no servidor); mesmo uma regra do Outlook clássico não impede a ferramenta de encontrar o email, só o põe noutra pasta.
-- **Gmail e outros por IMAP**: a ferramenta só procura na **caixa de entrada e no spam**. Um filtro que arquive o email ou o tire da caixa de entrada faz o teste dar "o email não chegou". Deixe os emails de teste na caixa de entrada (um marcador sem "Ignorar a caixa de entrada" não faz mal).
-
+A ferramenta procura em **todas as pastas** da caixa, por isso a regra não atrapalha. Prefira regras do Outlook na web ou do Outlook novo (correm no servidor); mesmo uma regra do Outlook clássico não impede a ferramenta de encontrar o email, só o põe noutra pasta.
 **Que caixa usar na empresa**: uma caixa **só para testes**, de preferência partilhada pela equipa (por exemplo `uat-testes@empresa.pt`), e não o seu email de trabalho. A ferramenta só lê, e só os emails do endereço exato do caso, mas ligar a sua caixa de trabalho a uma ferramenta de testes pode precisar de autorização da IT.
 
 **Exemplo pronto**: no projeto de exemplo, o épico **"5. Emails que a app envia"** tem o cenário "Emails da app: aprovado, recusado e documentos em falta". O cliente pede o crédito com o seu **endereço de teste** (o campo Email é preenchido com a fórmula `{EMAIL:cliente}`), o gestor decide no Backoffice e o teste espera o email que a **própria app** envia (assunto, montante, prestação, motivo, link) ou confirma que **não** chega nenhum (o analista acima do limite). Para correr este cenário é preciso definir a caixa de email de testes do projeto (acima). A app de testes envia os emails pelo Gmail de testes (SMTP configurado no ODC); na app real da empresa, isto depende do servidor de email que a app usa em QA.
@@ -314,6 +310,8 @@ O ecrã **Dados de teste** tem a caixa **Experimentar**: escreva a fórmula e v�
 | `{TESTE}` / `{RUN}` | `TC0001` / `run12` | o ID do caso / da execução |
 | `SE({Valor} > 1000; "Alto"; "Baixo")` | `Alto` | escolher conforme uma condição (`= <> < > <= >=`) |
 
+**Onde se escrevem fórmulas**: nos valores dos passos e nos Parâmetros (editor do cenário), nas variáveis calculadas (Dados de teste) e **nas células dos casos**, começando por `=` (por exemplo `=ARRED({Valor} * 0,015; 2)`), também no Excel.
+
 ### 11.2 Datas
 
 | Escrever | Dá (a 13/11/2026) |
@@ -361,6 +359,7 @@ O ecrã **Dados de teste** tem a caixa **Experimentar**: escreva a fórmula e v�
 |---|---|
 | `{EMAIL:gestor}` ou `EMAIL("gestor")` | o endereço de teste do gestor neste caso, na caixa de testes do projeto (ver 5.8) |
 | `EMAIL("cliente"; "exemplo.pt")` | um email único sem caixa de testes: `qa+cliente.tc0001.run12@exemplo.pt` |
+| `EMAIL("ana.silva"; "cliente"; "exemplo.pt")` | o mesmo, com a base que escolher (o que vem antes do `+`): `ana.silva+cliente.tc0001.run12@exemplo.pt` |
 | `TOTP({ChaveMfa})` | o código de 6 algarismos de uma app autenticadora, a partir da chave secreta da conta de teste |
 
 **Caso de uso**: o cliente regista-se com `{EMAIL:cliente}`, a aplicação envia um código, o bloco de email com papel `cliente` guarda-o em `{CodigoMfa}` e o passo seguinte escreve `{CodigoMfa}`.

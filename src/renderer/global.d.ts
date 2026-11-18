@@ -149,12 +149,10 @@ declare global {
         gravar(caixa: CaixaTestes | null): Promise<EstadoProjeto>;
         /** Entra (login, se preciso) e lê os emails mais recentes. */
         testar(): Promise<{ emails: number; ultimo: string }>;
-        /** Há uma sessão (Microsoft) ou palavra-passe (IMAP) guardada neste PC? */
+        /** Há uma sessão guardada neste PC? */
         sessao(): Promise<boolean>;
-        /** Esquece a sessão e a palavra-passe guardadas. */
+        /** Esquece a sessão guardada. */
         esquecer(): Promise<void>;
-        /** IMAP: guarda a palavra-passe (de aplicação) no cofre; nunca volta à interface. */
-        password(valor: string): Promise<void>;
       };
       login: {
         aoCodigo(callback: (aviso: { id: string; perfilNome: string; codigo: string; url: string; expiraSeg: number }) => void): () => void;

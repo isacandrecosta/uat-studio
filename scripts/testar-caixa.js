@@ -1,4 +1,4 @@
-// Testes de integração com uma caixa de email de testes REAL (por exemplo Outlook), dentro do Electron, com a
+// Testes de integração com uma caixa de email de testes REAL (Outlook / Microsoft 365), dentro do Electron, com a
 // sessão guardada no cofre do UAT Studio (nunca a password). Se a sessão já não servir, abre a janela de login.
 //   npm.cmd run caixa:testar -- --projeto=C:/caminho/do/projeto            (ligar e listar os emails recentes)
 //   npm.cmd run caixa:testar -- --projeto=... --cenario=<id da jornada>    (corre um cenário do projeto)
@@ -16,25 +16,10 @@ app.on('window-all-closed', () => undefined);
   const repo = require(raiz + '/dist/main/projeto/repositorio');
   const { criarAmbienteApi } = require(raiz + '/dist/main/api/ambiente');
   const { executarBlocoApi } = require(raiz + '/dist/main/api/pedidos');
-  const { apiDaCaixa, caixaPorImap, imapDaCaixa, perfilDaCaixa, problemasDaCaixa, SENHA_CAIXA } = require(raiz + '/dist/main/email/caixaTestes');
+  const { apiDaCaixa, perfilDaCaixa, problemasDaCaixa } = require(raiz + '/dist/main/email/caixaTestes');
   const caixa = repo.lerProjeto(pasta).caixaTestes;
   const falta = problemasDaCaixa(caixa);
   if (falta.length) throw new Error(`A caixa não está pronta: ${falta.join('; ')}`);
-  if (!cenario && caixaPorImap(caixa)) {
-    // IMAP (Gmail): a palavra-passe vem do cofre; nunca é mostrada.
-    const { lerSegredo } = require(raiz + '/dist/main/cofre');
-    const { abrirImap } = require(raiz + '/dist/main/email/imap');
-    const password = lerSegredo(pasta, SENHA_CAIXA);
-    if (!password) throw new Error('Falta a palavra-passe da caixa no cofre (Dados de teste › Caixa de email de testes › Palavra-passe).');
-    const t0 = Date.now();
-    const fonte = await abrirImap({ ...imapDaCaixa(caixa), password });
-    const msgs = await fonte.listar();
-    console.log(`IMAP ligado em ${Date.now() - t0} ms; ${msgs.length} emails das últimas 24 h:`);
-    for (const m of msgs.slice(0, 10)) console.log(`  ${m.recebido} | de ${m.de} | para ${m.para.join(', ')} | ${m.pasta ? `[${m.pasta}] ` : ''}${m.assunto}`);
-    await fonte.fechar();
-    app.exit(0);
-    return;
-  }
   if (!cenario) {
     const api = apiDaCaixa(caixa);
     const consulta = { id: 'ligar', nome: 'Caixa', tipo: 'API', passos: [], pedido: { metodo: 'GET', url: api.caminho, parametros: [{ nome: '$top', valor: '10' }, { nome: '$orderby', valor: 'receivedDateTime desc' }, { nome: '$select', valor: 'subject,receivedDateTime,from,toRecipients,hasAttachments' }], cabecalhos: [], tipoCorpo: 'nenhum', corpo: '', verificacoes: [], guardar: [] } };

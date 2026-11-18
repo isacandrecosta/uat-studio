@@ -34,11 +34,8 @@ export interface CaixaTestes {
   emailBase: string;
   /** Formato dos endereços de teste, com {nome}, {dominio}, {papel}, {caso}, {run}, {data}. */
   formato?: string;
-  /**
-   * microsoft: Outlook / Microsoft 365 (Microsoft Graph); gmail: Gmail por IMAP com palavra-passe de aplicação;
-   * imap: outro servidor IMAP; simulada: caixa de teste compatível com o Graph (servidor local).
-   */
-  ligacao: 'microsoft' | 'gmail' | 'imap' | 'simulada';
+  /** microsoft: Outlook / Microsoft 365 (Microsoft Graph); simulada: caixa de teste compatível com o Graph (servidor local). */
+  ligacao: 'microsoft' | 'simulada';
   /** Microsoft: conta pessoal (outlook.com, hotmail) ou de empresa (Microsoft 365). */
   conta?: 'pessoal' | 'empresa';
   /** Empresa: o "tenant" (domínio ou id do Microsoft Entra); vazio = qualquer organização. */
@@ -52,10 +49,6 @@ export interface CaixaTestes {
   urlAutorizacao?: string;
   urlToken?: string;
   urlDispositivo?: string;
-  /** IMAP (outro servidor): endereço, porta (por omissão 993, sempre TLS) e utilizador (por omissão, o email base). */
-  servidorImap?: string;
-  portaImap?: number;
-  utilizadorImap?: string;
 }
 
 export type ModoLogin = 'janela' | 'edge' | 'codigo';

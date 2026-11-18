@@ -306,9 +306,9 @@ const montarJornada: FuncaoCapitulo = async (r) => {
   await r.pausa(0.4);
   await r.realcar('#percurso');
   await r.legenda('O percurso: os blocos por ordem. Acrescentam-se da biblioteca, mudam de ordem, e cada bloco pode ter uma condição ("só se...") ou correr sempre, como limpeza.');
-  await naPagina(r.janela, "document.querySelector('#percurso > li details')?.setAttribute('open', '')");
+  await naPagina(r.janela, "document.querySelector('#percurso > li details.parametros')?.setAttribute('open', '')");
   await r.pausa(0.5);
-  await r.realcar('#percurso > li details');
+  await r.realcar('#percurso > li details.parametros');
   await r.legenda('Cada {variável} de um bloco vem da coluna com o mesmo nome, de outra coluna ou de um valor fixo. Assim o mesmo bloco serve muitos testes.');
   await r.clicar('.separador[data-painel="casos"]');
   await r.realcar('#tabela-casos');

@@ -296,12 +296,15 @@ const FUNCOES: Record<string, Funcao> = {
    * EMAIL("supervisor") → o endereço de teste desse papel na caixa de testes do projeto
    * (emailteste+supervisor_tc0001_13112026@outlook.com). Com 2 argumentos (sem caixa de testes):
    * EMAIL("cliente"; "exemplo.pt") → qa+cliente.TC0001.run12@exemplo.pt
+   * EMAIL("ana.silva"; "cliente"; "exemplo.pt") → ana.silva+cliente.TC0001.run12@exemplo.pt (com a base escolhida)
    */
   EMAIL: (a, ctx) => {
     if (a.length === 1) return txt(emailDeTeste(comoTexto(a[0]), ctx));
-    exigir('EMAIL', a, 1, 2);
+    exigir('EMAIL', a, 1, 3);
     const limpo = (t: string): string => t.toLowerCase().replace(/[^a-z0-9._-]/g, '');
-    return txt(`qa+${limpo(comoTexto(a[0]))}.${limpo(ctx.teste)}.${limpo(ctx.run)}@${comoTexto(a[1]).trim()}`);
+    const [base, papel, dominio] = a.length === 3 ? [limpo(comoTexto(a[0])), comoTexto(a[1]), comoTexto(a[2])] : ['qa', comoTexto(a[0]), comoTexto(a[1])];
+    if (!base) throw new ErroFormula('EMAIL: a base (o que vem antes do +) não pode ficar vazia.');
+    return txt(`${base}+${limpo(papel)}.${limpo(ctx.teste)}.${limpo(ctx.run)}@${dominio.trim()}`);
   },
 };
 
@@ -320,6 +323,7 @@ export const AJUDA_FORMULAS: Array<{ exemplo: string; descricao: string }> = [
   { exemplo: 'TOTP({ChaveMfa})', descricao: 'MFA: o código de 6 algarismos da app autenticadora, a partir da chave secreta (base32) da conta de teste.' },
   { exemplo: '{EMAIL:supervisor}   EMAIL("gestor")', descricao: 'Endereço de teste desse papel na caixa de testes do projeto (por exemplo emailteste+supervisor_tc0001_13112026@outlook.com).' },
   { exemplo: 'EMAIL("cliente"; "exemplo.pt")', descricao: 'Email único sem caixa de testes: qa+cliente.<caso>.<run>@exemplo.pt' },
+  { exemplo: 'EMAIL("ana.silva"; "cliente"; "exemplo.pt")', descricao: 'O mesmo, com a base que escolher: ana.silva+cliente.<caso>.<run>@exemplo.pt' },
   { exemplo: 'MAIUSCULAS  MINUSCULAS  ESQUERDA  DIREITA  COMPR  ABS  MIN  MAX  POTENCIA', descricao: 'Outras funções.' },
 ];
 
@@ -442,6 +446,11 @@ function calcular(tokens: Token[], ctx: ContextoFormula): Resultado {
 }
 
 /** Calcula uma fórmula e devolve o resultado como texto. Dá ErroFormula com uma explicação simples. */
+/** Uma célula de um caso (ou do Excel) que começa por "=" é uma fórmula calculada para esse caso. */
+export function eFormulaDoCaso(valor: unknown): valor is string {
+  return typeof valor === 'string' && /^\s*=/.test(valor) && valor.trim().length > 1;
+}
+
 export function avaliarFormula(formula: string, ctx: ContextoFormula): string {
   const limpa = formula.trim().replace(/^=/, '');
   if (!limpa) return '';
@@ -519,13 +528,25 @@ export function validarFormula(formula: string): string | null {
 
 /** Contexto para pré-visualizar uma fórmula sem gastar contadores. */
 export function contextoDeExemplo(variaveis: Record<string, string>, contadores: Record<string, number> = {}, caixaTestes?: Pick<CaixaTestes, 'emailBase' | 'formato'>): ContextoFormula {
-  return {
+  const emCalculo = new Set<string>();
+  const ctx: ContextoFormula = {
     caixaTestes,
-    variavel: (nome) => variaveis[nome],
+    // Uma célula do caso com "=" é calculada, como na execução (sem ciclos: uma fórmula que se usa a si própria fica vazia).
+    variavel: (nome) => {
+      const valor = variaveis[nome];
+      if (!eFormulaDoCaso(valor) || emCalculo.has(nome)) return eFormulaDoCaso(valor) ? undefined : valor;
+      emCalculo.add(nome);
+      try {
+        return avaliarFormula(valor.trim().slice(1), ctx);
+      } finally {
+        emCalculo.delete(nome);
+      }
+    },
     teste: variaveis.TESTE ?? 'TC0001',
     run: variaveis.RUN ?? 'run1',
     agora: new Date(),
     contador: (nome) => (contadores[nome] ?? 0) + 1,
     aleatorio: Math.random,
   };
+  return ctx;
 }

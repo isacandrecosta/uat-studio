@@ -1,7 +1,7 @@
 // "Regravar este elemento": repete os passos do bloco que vêm antes do passo a regravar
 // (com os dados do caso que falhou), para o testador chegar ao ecrã certo e apontar para o elemento.
 import { Page } from 'playwright-core';
-import { avaliarCondicao, avaliarFormula, type ContextoFormula } from '../../shared/formulas';
+import { avaliarCondicao, avaliarFormula, contextoDeExemplo, type ContextoFormula } from '../../shared/formulas';
 import type { Bloco, CaixaTestes, Valor } from '../../shared/modelo';
 import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 
@@ -13,15 +13,8 @@ export function definirCaixaDoProjeto(caixa: CaixaTestes | undefined): void {
 }
 
 export function contextoDosValores(valores: Record<string, string>): ContextoFormula {
-  return {
-    caixaTestes: caixaDoProjeto,
-    variavel: (nome) => valores[nome],
-    teste: valores.TESTE ?? 'REGRAVAR',
-    run: valores.RUN ?? 'regravar',
-    agora: new Date(),
-    contador: () => 1,
-    aleatorio: Math.random,
-  };
+  // As células com "=" (fórmulas dos casos) são calculadas como na execução.
+  return contextoDeExemplo({ TESTE: 'REGRAVAR', RUN: 'regravar', ...valores }, {}, caixaDoProjeto);
 }
 
 /** O valor de um passo com os dados do caso. Dá erro se faltar uma variável. */
@@ -31,7 +24,7 @@ export function resolverValor(valor: Valor | undefined, valores: Record<string, 
     case 'fixo':
       return valor.valor;
     case 'variavel': {
-      const v = valores[valor.nome];
+      const v = contextoDosValores(valores).variavel(valor.nome);
       if (v === undefined) throw new Error(`falta o valor de {${valor.nome}}`);
       return v;
     }

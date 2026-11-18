@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { arredondar, dividir, formatar, lerNumero, potencia } from '../shared/decimal';
-import { avaliarFormula, ContextoFormula, ErroFormula, variaveisDaFormula } from '../shared/formulas';
+import { avaliarFormula, contextoDeExemplo, ContextoFormula, eFormulaDoCaso, ErroFormula, variaveisDaFormula } from '../shared/formulas';
 
 function contexto(variaveis: Record<string, string> = {}): ContextoFormula {
   const contadores: Record<string, number> = {};
@@ -96,6 +96,7 @@ test('fórmulas: geradores válidos', () => {
   const entre = Number(f('ALEATORIOENTRE(5; 8)'));
   assert.ok(entre >= 5 && entre <= 8);
   assert.equal(f('EMAIL("Cliente FO"; "exemplo.pt")'), 'qa+clientefo.tc0007.run12@exemplo.pt');
+  assert.equal(f('EMAIL("Ana.Silva"; "cliente"; "exemplo.pt")'), 'ana.silva+cliente.tc0007.run12@exemplo.pt');
 });
 
 test('fórmulas: erros explicados', () => {
@@ -115,4 +116,13 @@ test('fórmulas: erros explicados', () => {
 
 test('variaveisDaFormula ignora os marcadores', () => {
   assert.deepEqual(variaveisDaFormula('{Valor} * {Taxa} & {TESTE} & {DATA:yyyy} & {HOJE+3} & {CONTADOR:x} & {Valor}'), ['Valor', 'Taxa']);
+});
+
+test('fórmulas nas células dos casos: "=..." é calculado (também dentro de outras fórmulas)', () => {
+  const ctx = contextoDeExemplo({ TESTE: 'TC0003', Valor: '=500 * 2', Comissao: '=ARRED({Valor} * 0,015; 2)', Texto: '= não é fórmula?' });
+  assert.equal(avaliarFormula('{Valor}', ctx), '1000');
+  assert.equal(avaliarFormula('{Comissao}', ctx), '15');
+  assert.equal(eFormulaDoCaso('=1'), true);
+  assert.equal(eFormulaDoCaso('1=1'), false);
+  assert.equal(eFormulaDoCaso('='), false);
 });

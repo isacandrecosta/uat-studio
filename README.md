@@ -3,7 +3,7 @@
 Aplicação desktop portátil para Windows, **offline e sem IA**, para criar e correr testes UAT e de regressão de aplicações OutSystems sem programar.
 
 - **Gravar** ações no browser e definir os valores com cliques (fixo, coluna do Excel, fórmula, gerador), também **sobre uma captura do ecrã** (modo print).
-- Organizar os testes em **Épicos → Cenários de teste → Blocos reutilizáveis → Casos de teste**. Blocos de **UI**, de **API** (REST e SOAP, OAuth 2.0 incluindo login com PKCE, API Key, Basic, Bearer, certificado de cliente), de **Email** (Microsoft 365/Outlook pelo Microsoft Graph, ou Gmail e outros por IMAP, com uma **caixa de testes** que dá a cada caso o seu endereço: `{EMAIL:gestor}`) e **passos manuais**.
+- Organizar os testes em **Épicos → Cenários de teste → Blocos reutilizáveis → Casos de teste**. Blocos de **UI**, de **API** (REST e SOAP, OAuth 2.0 incluindo login com PKCE, API Key, Basic, Bearer, certificado de cliente), de **Email** (Microsoft 365/Outlook pelo Microsoft Graph, com uma **caixa de testes** que dá a cada caso o seu endereço: `{EMAIL:gestor}`) e **passos manuais**.
 - **Correr** casos, cenários ou épicos no Edge ou no Chrome, visível ou em background, em paralelo, com **execução ao vivo**, pausa por passo/worker, retomar a meio, evidências e logs por execução, relatórios Excel/HTML e **PDF para assinatura**.
 - **Manter** os testes: "onde é usado", reparar localizadores com um clique, regravar um elemento, sugestões por regras quando algo falha, matriz de cobertura e comparação com execuções anteriores, pacotes de blocos para partilhar.
 - Login reutilizado entre casos, várias sessões no mesmo cenário (cliente, operador, aprovador) e MFA (modo de teste, TOTP ou código por email).

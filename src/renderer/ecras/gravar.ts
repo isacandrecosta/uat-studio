@@ -4,23 +4,8 @@ import type { Contexto } from '../app.js';
 import { validarFormula } from '../../shared/formulas.js';
 import { colunaValida, valoresFixos } from '../../shared/parametrizar.js';
 import { confirmar, h, info, mensagemDeErro, pedirFormulario, plural } from '../dom.js';
+import { NOMES_ACAO } from '../passos.js';
 
-const NOMES_ACAO: Record<Passo['acao'], string> = {
-  navegar: 'Abrir',
-  escrever: 'Escrever',
-  escolher: 'Escolher',
-  marcar: 'Marcar',
-  clicar: 'Clicar',
-  verificar: 'Verificar',
-  guardar: 'Guardar',
-  esperar: 'Esperar',
-  simular: 'Simular API',
-  intercetar: 'Intercetar',
-  carregar: 'Carregar ficheiro',
-  descarregar: 'Descarregar',
-  separador: 'Separador',
-  dialogo: 'Pergunta do browser',
-};
 
 let deixarDeOuvir: (() => void) | null = null;
 /** Modo print: a última captura do ecrã (mantém-se entre redesenhos da gravação). */

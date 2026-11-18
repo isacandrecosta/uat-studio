@@ -4,8 +4,7 @@
 import type { Bloco, CaixaTestes, PerfilAutenticacao } from '../../shared/modelo';
 import { compararComTolerancia, deInteiro, formatar, lerNumero } from '../../shared/decimal';
 import { AmbienteApi, ErroApi, executarBlocoApi } from '../api/pedidos';
-import { apiDaCaixa, caixaPorImap, imapDaCaixa, perfilDaCaixa, problemasDaCaixa, SENHA_CAIXA } from './caixaTestes';
-import { abrirImap } from './imap';
+import { apiDaCaixa, perfilDaCaixa, problemasDaCaixa } from './caixaTestes';
 
 export interface EmailRecebido {
   id?: string;
@@ -19,13 +18,13 @@ export interface EmailRecebido {
   /** Corpo sem etiquetas HTML (para verificar e extrair). */
   texto: string;
   html: string;
-  /** Pasta onde estava, quando não é a caixa de entrada (por exemplo o spam, no IMAP). */
+  /** Pasta onde estava, quando a fonte o diz. */
   pasta?: string;
 }
 
 /**
- * De onde vêm os emails: a API ao estilo do Microsoft Graph ou uma caixa IMAP. `listar` devolve os mais
- * recentes primeiro; no IMAP vêm sem corpo e `completar` descarrega o email escolhido (com os anexos).
+ * De onde vêm os emails (a API ao estilo do Microsoft Graph). `listar` devolve os mais recentes primeiro;
+ * `completar` (opcional) completa o email escolhido e `anexos` lê os nomes dos anexos.
  */
 export interface FonteEmail {
   descricao: string;
@@ -146,19 +145,9 @@ export async function lerEmail(pedido: PedidoEmail, amb: AmbienteApi): Promise<R
   }
 }
 
-/** A fonte dos emails do bloco: a caixa de testes (Graph ou IMAP) ou a caixa da aplicação do bloco. */
+/** A fonte dos emails do bloco: a caixa de testes do projeto ou a caixa da aplicação do bloco. */
 async function abrirFonte(pedido: PedidoEmail, daCaixaDeTestes: boolean, amb: AmbienteApi): Promise<FonteEmail> {
   const def = pedido.bloco.email!;
-  if (daCaixaDeTestes && pedido.caixaTestes && caixaPorImap(pedido.caixaTestes)) {
-    const ligacao = imapDaCaixa(pedido.caixaTestes);
-    const password = amb.segredo(SENHA_CAIXA);
-    if (!password) throw new ErroApi('Falta a palavra-passe da caixa de email de testes neste PC (Dados de teste › Caixa de email de testes › Palavra-passe).');
-    try {
-      return await abrirImap({ ...ligacao, password });
-    } catch (erro) {
-      throw new ErroApi(erro instanceof Error ? erro.message : String(erro));
-    }
-  }
   let urlBase = pedido.urlBase;
   let perfil = pedido.perfil;
   let caminho: string;

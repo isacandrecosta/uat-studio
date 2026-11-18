@@ -38,7 +38,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 ## Fase 4: avançado
 - [x] Login com sessão reutilizada e MFA (modo de teste / email / TOTP); várias sessões na mesma jornada.
 - [x] Blocos de Email (Microsoft Graph ou compatível).
-- [x] Blocos de Email por IMAP (Gmail com palavra-passe de aplicação, ou outro servidor IMAP).
+- [x] ~~Blocos de Email por IMAP (Gmail)~~: feito e testado, depois retirado a 18/11/2026 (o IMAP está bloqueado na rede da empresa).
 - [x] Intercetar e simular respostas de APIs externas.
 - [x] Modo print híbrido (gravar passos sobre uma captura do ecrã, com a estrutura da página por baixo).
 - [x] Relatório PDF para assinatura do UAT, com ID do requisito.
@@ -58,7 +58,8 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] Simplificar para quem não é técnico: assistente "Novo teste", aceitar os resultados como esperados, duplicar cenários e casos, modo simples/avançado.
 - [x] Caixa de email de testes: email base com endereços por papel, caso e data ({EMAIL:papel}), login numa janela da ferramenta, no Edge ou com código noutro dispositivo, bloco "Verificar email" por papel (assunto exato, valores com tolerância, anexos, link, "não deve chegar"), imagem do email como evidência. Guia de fórmulas no manual do utilizador.
 - [x] Caixa de email de testes testada com uma conta Outlook pessoal real (`npm.cmd run caixa:testar`).
-- [x] Caixa de email de testes por IMAP (Gmail, com palavra-passe de aplicação no cofre; caixa de entrada e spam), testada com uma conta Gmail real.
+- [x] ~~Caixa de email de testes por IMAP (Gmail)~~: retirada a 18/11/2026 (bloqueada na rede da empresa).
+- [x] Editor do cenário com os passos de cada bloco à vista e alteráveis (descrição, valor fixo/coluna/fórmula, "só se"); fórmulas nos casos (células com "=") e no Excel (folha "Fórmulas do cenário"); `EMAIL(base; papel; domínio)`.
 - [x] A app de testes PortalCreditoPOC envia emails reais (aprovado, recusado, documentos em falta, pagamento; SMTP do ODC pelo Gmail de testes) e o projeto de exemplo tem o épico 5 "Emails que a app envia" (4 casos OK contra o Gmail real).
 - [ ] Simplificar, por decidir: "Gravar aqui" dentro do cenário, verificações sugeridas depois de um clique, modelo de Excel com explicações.
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.

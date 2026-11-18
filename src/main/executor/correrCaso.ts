@@ -30,7 +30,7 @@ import { createHash } from 'node:crypto';
 import { mesmoLocalizador } from '../../shared/blocos';
 import { variaveisDoBloco } from '../../shared/variaveis';
 import { sugerirParaCaso } from '../../shared/sugestoes';
-import { avaliarCondicao, avaliarFormula, ErroFormula, preencherTexto } from '../../shared/formulas';
+import { avaliarCondicao, avaliarFormula, eFormulaDoCaso, ErroFormula, preencherTexto } from '../../shared/formulas';
 import { AmbienteApi, ErroApi, executarBlocoApi, lerCaminho } from '../api/pedidos';
 import { lerEmail } from '../email/email';
 import { construirUrl, ErroAcao, executarAcao, lerElemento } from '../motor/acoes';
@@ -305,6 +305,13 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
   };
 
   const formulas = new Map(pedido.calculadas.map((v) => [v.nome, v.formula]));
+  // Fórmulas nos próprios casos (também vindas do Excel): uma célula que começa por "=" é calculada para
+  // este caso, como uma variável calculada (por exemplo =EMAIL("cliente") ou =ARRED({Valor} * 0,015; 2)).
+  for (const [coluna, valor] of Object.entries(caso.dados)) {
+    if (!eFormulaDoCaso(valor) || pedido.variaveisIniciais?.[coluna] !== undefined) continue;
+    formulas.set(coluna, valor.trim().slice(1));
+    delete variaveis[coluna];
+  }
   const emCalculo: string[] = [];
 
   /** Valor de uma variável do caso; as variáveis calculadas são avaliadas na 1.ª vez e ficam guardadas. */
@@ -901,11 +908,14 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           const qual = (resolver(passo.valor, item).texto.trim() || 'novo').toLowerCase();
           const ctx = contexto as BrowserContext;
           let destino: Page | undefined;
-          if (qual === 'principal') destino = ctx.pages()[0];
+          // Páginas internas do browser (por exemplo edge://downloads-hub, que o Edge abre sozinho depois de um
+          // download) não são separadores da aplicação.
+          const daAplicacao = (): Page[] => ctx.pages().filter((pg) => !/^(edge|chrome|about|devtools):/i.test(pg.url()) || pg.url() === 'about:blank');
+          if (qual === 'principal') destino = daAplicacao()[0];
           else {
             const fim = Date.now() + limiteMs;
             while (!destino && Date.now() < fim) {
-              const paginas = ctx.pages();
+              const paginas = daAplicacao();
               const ultima = paginas[paginas.length - 1];
               if (paginas.length > 1 && ultima !== pagina) destino = ultima;
               else await p.waitForTimeout(200);
