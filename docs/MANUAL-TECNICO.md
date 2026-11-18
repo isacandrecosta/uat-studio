@@ -267,6 +267,8 @@ Cuidados:
 
 ## 10. Novidades
 
+Até à 1.ª versão, esta tabela é o histórico do desenvolvimento (o que foi acrescentado e quando), não uma lista de versões publicadas.
+
 | Data | O que mudou |
 |---|---|
 | 17/11/2026 | **Diagnóstico com 17 verificações** (`src/diagnostico/verificacoes.ts`): novas "Ficheiros e separadores no Edge", "Cofre de segredos" (`safeStorage`), "Servidor local" (127.0.0.1, como o visualizador de traces), "Janelas da ferramenta" (janela escondida, isolada, com partição própria, a abrir a página do servidor local), "Relatório em PDF" (`printToPDF`) e as opcionais (aviso, não falha) "Login e email da Microsoft", "Ligação direta sem proxy" (HTTPS pelo Node, com User-Agent porque o microsoft.com ignora pedidos sem ele) e "Apps de demonstração" (`URL_APPS_DEMO`). |
