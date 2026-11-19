@@ -88,6 +88,7 @@ Ecrã **Cenários › Aplicações › Nova aplicação**: nome, tipo (Front Off
 3. O passo é **executado logo**, para confirmar que funciona, e só depois fica gravado.
 4. Para valores de resultados (por exemplo a prestação), use **Verificar**: o popup sugere o valor que está no ecrã. Para euros, escolha "Número": as contas são exatas e aceita "86,40" ou "86.40".
    - **Guardar variável** serve para **valores que a aplicação cria durante o teste** e que se usam mais à frente no mesmo cenário: por exemplo, o **número do pedido** que aparece depois de submeter. Clique nesse número, escolha "Guardar variável" e dê-lhe um nome (`PedidoId`). A partir daí, `{PedidoId}` pode ser usado nos passos seguintes: pesquisar o pedido no Backoffice, procurar a linha da tabela, chamar a API, verificar o email ("Pedido {PedidoId} aprovado"). Não é uma verificação: só lê e guarda o que está no ecrã.
+   - **Escrever e guardar ao mesmo tempo**: em "Escrever" e "Escolher" há o campo opcional **Guardar o valor em**. Por exemplo, escreva no campo NIF com a fórmula `NIF()` e guarde em `NifCliente`: o NIF gerado é escrito **e** fica em `{NifCliente}` para os passos seguintes (verificar o resumo, pesquisar no Backoffice). Não é preciso um segundo passo. Também se pode acrescentar ou mudar depois, no editor do cenário (Passos do bloco).
    - **Fórmula no popup**: enquanto escreve a fórmula, o **valor de exemplo** é preenchido sozinho com o resultado (aparece "Resultado agora: ..."). A ferramenta usa os valores de exemplo das colunas e as variáveis guardadas **nesta gravação** (por exemplo `"P-" & {PedidoId}` depois de guardar o PedidoId). Se a fórmula usar uma coluna que ainda não teve valor de exemplo, aparece o aviso e escreve o valor de exemplo à mão.
 5. Carregue em **Guardar o bloco**.
 
@@ -119,10 +120,17 @@ Casos especiais no popup e no editor de passos:
    - **Sessão**: pessoas diferentes no mesmo teste (por exemplo "cliente" e "gestor"), cada uma no seu browser;
    - **Limpeza**: corre sempre, mesmo que um bloco anterior tenha falhado.
 4. **Resumo**: descreva o objetivo do teste e preencha o **ID do requisito** (aparece no PDF para assinatura).
-5. **Ver e mudar as ações de cada bloco**: abra **Passos (N)** no bloco. Aparecem todas as ações, pela ordem, e pode mudar:
+5. **Ver e mudar as ações de cada bloco**: abra **Passos (N)** no bloco. Aparecem todas as ações, pela ordem, e tem controlo total sobre cada uma:
+   - **↑ / ↓** muda a ordem, **⧉** duplica o passo e **✕** apaga-o (pede confirmação);
    - a **descrição** de cada passo;
    - **de onde vem o valor**: valor fixo, coluna dos casos ou fórmula (as passwords vêm sempre de uma coluna);
+   - **→ Coluna do Excel** (só em valores fixos): o valor passa a vir de uma coluna dos casos e os casos que já existem ficam com o valor gravado. Depois é exportar para Excel e multiplicar as linhas;
+   - nas **verificações**: o que se verifica (texto, número com diferença máxima, ou só "está visível") e **Esperar até** (segundos);
+   - **Guarda em** (passos "Guardar"): o nome da variável;
+   - **Guardar o valor em** (passos Escrever e Escolher, opcional): o valor escrito fica numa variável para os passos seguintes. Útil com geradores: escreva `NIF()` como fórmula e guarde em `NifCliente`; mais à frente, verifique ou pesquise com `{NifCliente}`;
    - o **"Só se"** de cada passo.
+
+   Para **acrescentar** passos novos, use o ecrã **Gravar** (continuar a gravar o bloco).
 
    **Atenção:** os blocos são partilhados. Se o bloco for usado noutros cenários, aparece um aviso: mudar um passo aqui muda-o em **todos**. Para mudar um valor **só neste cenário**, use os **Parâmetros** do bloco.
 

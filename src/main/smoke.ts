@@ -300,8 +300,8 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await mudar(`${passoValor} .passo-valor select`, 'formula');
         await mudar(`${passoValor} .passo-valor input`, '{Valor}');
         await esperar(j, `document.querySelector('${passoValor} .passo-valor select')?.value === 'formula'`);
-        await mudar(`${passoValor} .passo-campos > input`, 'Preencher o valor (fórmula)');
-        await esperar(j, `document.querySelector('${passoValor} .passo-campos > input')?.value === 'Preencher o valor (fórmula)'`);
+        await mudar(`${passoValor} .passo-topo > input`, 'Preencher o valor (fórmula)');
+        await esperar(j, `document.querySelector('${passoValor} .passo-topo > input')?.value === 'Preencher o valor (fórmula)'`);
         const p3 = lerBloco().passos.find((p) => p.id === 'p3');
         confirmar(p3?.valor?.tipo === 'formula' && p3.valor.expressao === '{Valor}' && p3.descricao === 'Preencher o valor (fórmula)', `O passo não foi gravado no bloco: ${JSON.stringify(p3)}`);
         confirmar(await naPagina<boolean>(j, "document.querySelector('#percurso > li:first-child details.passos-do-bloco').open"), 'A lista de passos devia continuar aberta depois de gravar.');
@@ -310,10 +310,52 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         await mudar(`${passoValor} .passo-valor select`, 'variavel');
         await mudar(`${passoValor} .passo-valor input`, 'Valor');
         await esperar(j, `document.querySelector('${passoValor} .passo-valor select')?.value === 'variavel'`);
-        await mudar(`${passoValor} .passo-campos > input`, 'Preencher o valor');
-        await esperar(j, `document.querySelector('${passoValor} .passo-campos > input')?.value === 'Preencher o valor'`);
+        await mudar(`${passoValor} .passo-topo > input`, 'Preencher o valor');
+        await esperar(j, `document.querySelector('${passoValor} .passo-topo > input')?.value === 'Preencher o valor'`);
         const reposto = lerBloco().passos.find((p) => p.id === 'p3');
         confirmar(reposto?.valor?.tipo === 'variavel' && reposto.valor.nome === 'Valor' && reposto.descricao === 'Preencher o valor', `O passo não foi reposto: ${JSON.stringify(reposto)}`);
+
+        // Controlo total dos passos: descer e subir, duplicar e apagar, guardar o valor escrito numa variável e
+        // passar um valor fixo para uma coluna (os casos ficam como estavam, porque já têm a coluna Valor).
+        const ordem = (): string => lerBloco().passos.map((p) => p.id).join(',');
+        const ordemInicial = ordem();
+        const posP3 = lerBloco().passos.findIndex((p) => p.id === 'p3');
+        const clicarPasso = (rotulo: string): Promise<void> => naPagina(j, `document.querySelector('#percurso > li:first-child button[aria-label=${JSON.stringify(rotulo)}]').click()`);
+        await clicarPasso(`Descer o passo ${posP3 + 1}`);
+        await esperar(j, `document.querySelectorAll('#percurso > li:first-child .passo-editavel')[${posP3 + 1}]?.dataset.passo === 'p3'`);
+        confirmar(lerBloco().passos[posP3 + 1].id === 'p3', 'O passo não desceu no bloco.');
+        await clicarPasso(`Subir o passo ${posP3 + 2}`);
+        await esperar(j, `document.querySelectorAll('#percurso > li:first-child .passo-editavel')[${posP3}]?.dataset.passo === 'p3'`);
+        const totalPassos = lerBloco().passos.length;
+        await clicarPasso(`Duplicar o passo ${posP3 + 1}`);
+        await esperar(j, `document.querySelectorAll('#percurso > li:first-child .passo-editavel').length === ${totalPassos + 1}`);
+        const copia = lerBloco().passos[posP3 + 1];
+        confirmar(copia.id !== 'p3' && copia.descricao === 'Preencher o valor', `A cópia do passo não ficou a seguir: ${JSON.stringify(copia)}`);
+        await clicarPasso(`Apagar o passo ${posP3 + 2}`);
+        await esperar(j, "document.querySelector('dialog.dialogo .botao-perigo')");
+        await naPagina(j, "document.querySelector('dialog.dialogo .botao-perigo').click()");
+        await esperar(j, `document.querySelectorAll('#percurso > li:first-child .passo-editavel').length === ${totalPassos}`);
+        confirmar(ordem() === ordemInicial, `A ordem dos passos não voltou ao início: ${ordem()}`);
+        await mudar(`${passoValor} input[aria-label^="Variável do passo"]`, 'ValorEscrito');
+        await esperar(j, `document.querySelector('${passoValor} input[aria-label^="Variável do passo"]')?.value === 'ValorEscrito'`);
+        confirmar(lerBloco().passos.find((p) => p.id === 'p3')?.variavel === 'ValorEscrito', 'A variável do passo não foi gravada.');
+        await mudar(`${passoValor} input[aria-label^="Variável do passo"]`, '');
+        await esperar(j, `document.querySelector('${passoValor} input[aria-label^="Variável do passo"]')?.value === ''`);
+        confirmar(lerBloco().passos.find((p) => p.id === 'p3')?.variavel === undefined, 'A variável do passo não foi retirada.');
+        const casosAntes = JSON.stringify(lerCasos());
+        await mudar(`${passoValor} .passo-valor select`, 'fixo');
+        await mudar(`${passoValor} .passo-valor input`, '500');
+        await esperar(j, `document.querySelector('${passoValor} .botao-para-coluna')`);
+        await naPagina(j, `document.querySelector('${passoValor} .botao-para-coluna').click()`);
+        await esperar(j, "document.querySelector('dialog.dialogo input')");
+        await naPagina(j, "(() => { const c = document.querySelector('dialog.dialogo input'); c.value = 'Valor'; document.querySelector('dialog.dialogo button[type=submit]').click(); })()");
+        await esperar(j, `document.querySelector('${passoValor} .passo-valor select')?.value === 'variavel'`);
+        const emColuna = lerBloco().passos.find((p) => p.id === 'p3');
+        confirmar(emColuna?.valor?.tipo === 'variavel' && emColuna.valor.nome === 'Valor', `O passo não passou para a coluna: ${JSON.stringify(emColuna)}`);
+        confirmar(JSON.stringify(lerCasos()) === casosAntes, 'Os casos mudaram ao passar para uma coluna que já existia.');
+        // O valor escrito fica guardado em {ValorEscrito}: a execução seguinte confirma.
+        await mudar(`${passoValor} input[aria-label^="Variável do passo"]`, 'ValorEscrito');
+        await esperar(j, `document.querySelector('${passoValor} input[aria-label^="Variável do passo"]')?.value === 'ValorEscrito'`);
 
         // Fórmula numa célula do caso (como no Excel): =500 * 1 dá o mesmo valor; a execução seguinte confirma.
         const comFormula = lerCasos();
@@ -414,6 +456,7 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
         confirmar(calculadas === '5 | 102,5 | 0 | 650 | 25,91 | 0', `As comissões calculadas por fórmula não são as esperadas: ${calculadas}`);
         const tc1 = run.casos.find((c) => c.casoId === 'TC0001');
         confirmar(tc1?.estado === 'OK' && tc1.variaveis.Valor === '500', `A fórmula na célula do caso (=500 * 1) devia dar 500 e o caso OK: ${tc1?.estado} ${tc1?.variaveis.Valor}`);
+        confirmar(tc1?.variaveis.ValorEscrito === '500', `O valor escrito devia ficar guardado em {ValorEscrito}: ${tc1?.variaveis.ValorEscrito}`);
 
         const pastaRun = path.join(pastaProjeto, 'exemplo', 'execucoes', run.pasta);
         for (const ficheiro of ['run.json', 'run.log', 'relatorio.xlsx', 'relatorio.html']) {

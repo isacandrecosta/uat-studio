@@ -7,6 +7,7 @@ import { codigoDaJornada } from '../../shared/codigo.js';
 import { validarFormula } from '../../shared/formulas.js';
 import { campoFiltro, confirmar, h, info, maisOpcoes, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from '../dom.js';
 import { passosEditaveis } from '../passos.js';
+import { parametrizar } from '../../shared/parametrizar.js';
 
 const NOMES_TIPO: Record<string, string> = { UI: 'UI', API: 'API', EMAIL: 'Email', VERIFICACAO: 'Verificação' };
 
@@ -378,11 +379,40 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
               },
             },
             h('summary', {}, `Passos (${bloco.passos.length})`),
-            passosEditaveis(bloco, jornadas.filter((j) => j.blocos.some((b) => b.blocoId === bloco.id)).length, async () => {
-              await dados.guardar('blocos', bloco);
-              passosAbertos.add(indice);
-              await desenhar();
-            }),
+            passosEditaveis(
+              bloco,
+              jornadas.filter((j) => j.blocos.some((b) => b.blocoId === bloco.id)).length,
+              async () => {
+                await dados.guardar('blocos', bloco);
+                passosAbertos.add(indice);
+                await desenhar();
+              },
+              {
+                // O valor fixo passa a coluna: o bloco fica com {Coluna} e os casos de todos os cenários que o
+                // usam ganham a coluna com o valor gravado.
+                paraColuna: async (passo, coluna) => {
+                  try {
+                    const r = parametrizar(bloco, jornadas, conjuntos, [{ passoId: passo.id, coluna }]);
+                    bloco.passos = r.bloco.passos;
+                    await dados.guardar('blocos', bloco);
+                    for (const c of r.conjuntos) {
+                      await dados.guardar('casos', c);
+                      const i = conjuntos.findIndex((x) => x.id === c.id);
+                      if (i >= 0) conjuntos[i] = c;
+                      else conjuntos.push(c);
+                      if (c.id === conjunto.id) {
+                        conjunto.colunas = c.colunas;
+                        conjunto.casos = c.casos;
+                      }
+                    }
+                    passosAbertos.add(indice);
+                    await desenhar();
+                  } catch (erro) {
+                    await confirmar('Não foi possível passar para coluna', mensagemDeErro(erro), 'Fechar');
+                  }
+                },
+              },
+            ),
           ),
         usa.length > 0 &&
           h(

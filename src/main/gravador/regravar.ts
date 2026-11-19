@@ -51,9 +51,12 @@ export async function repetirPassosAte(pagina: Page, bloco: Bloco, ate: number, 
         case 'escrever':
         case 'escolher':
         case 'marcar':
-        case 'clicar':
-          await executarAcao(pagina, passo, resolverValor(passo.valor, valores), { limiteMs: 15_000, linha });
+        case 'clicar': {
+          const valor = resolverValor(passo.valor, valores);
+          await executarAcao(pagina, passo, valor, { limiteMs: 15_000, linha });
+          if (passo.variavel && passo.acao !== 'clicar' && passo.acao !== 'marcar') valores[passo.variavel] = valor;
           break;
+        }
         case 'guardar':
           if (passo.variavel) valores[passo.variavel] = (await lerElemento(pagina, passo, { limiteMs: 15_000, linha })).texto;
           break;

@@ -508,6 +508,26 @@ export function scriptGravador(): void {
       return { no, obter, nomeColuna };
     }
 
+    /** "Guardar o valor em": opcional, o valor escrito/escolhido fica numa variável para os passos seguintes. */
+    function campoGuardarValor() {
+      const nome = el('input', { type: 'text', placeholder: 'Opcional, por exemplo NifCliente', 'aria-label': 'Guardar o valor em' });
+      const no = el(
+        'div',
+        {},
+        el('label', {}, 'Guardar o valor em (opcional)'),
+        nome,
+        el('p', { class: 'nota' }, 'O valor escrito (por exemplo o NIF gerado por NIF()) fica guardado para usar nos passos seguintes como {nome}.'),
+      );
+      const juntar = (dados: Record<string, unknown> | string): Record<string, unknown> | string => {
+        if (typeof dados === 'string') return dados;
+        const n = nome.value.trim().replace(/^\{|\}$/g, '');
+        if (!n) return dados;
+        if (!/^[\p{L}_][\p{L}\p{N}_]*$/u.test(n)) return 'Dá um nome simples à variável (letras, números e _; sem espaços).';
+        return { ...dados, variavel: n };
+      };
+      return { no, juntar };
+    }
+
     function desenhar(): void {
       erro.style.display = 'none';
       for (const b of Array.from(botoesAcao.children)) b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.acao === acao));
@@ -519,16 +539,22 @@ export function scriptGravador(): void {
         if (secreto) exemplo.style.cssText = 'width:100%;padding:6px 8px;border:1px solid #d5d9e2;border-radius:6px;font:inherit;';
         const origem = origemDoValor(el('div', {}, el('label', {}, 'Texto a escrever'), fixo), () => fixo.value, exemplo, () => exemplo.value, secreto);
         corpo.append(origem.no);
-        ler = () => origem.obter();
+        if (secreto) ler = () => origem.obter();
+        else {
+          const guardar = campoGuardarValor();
+          corpo.append(guardar.no);
+          ler = () => guardar.juntar(origem.obter());
+        }
       } else if (acao === 'escolher') {
         const criarLista = (rotuloAria: string) =>
           el('select', { 'aria-label': rotuloAria }, ...opcoes.map((o) => el('option', { value: o, selected: o === atual }, o)));
         const fixo = criarLista('Opção a escolher');
         const exemplo = criarLista('Opção de exemplo');
         const origem = origemDoValor(el('div', {}, el('label', {}, 'Opção a escolher'), fixo), () => fixo.value, exemplo, () => exemplo.value, false);
-        corpo.append(origem.no);
+        const guardar = campoGuardarValor();
+        corpo.append(origem.no, guardar.no);
         if (opcoes.length === 0) corpo.append(el('p', { class: 'nota' }, 'A lista ainda não tem opções. Espera que carregue e clica outra vez.'));
-        ler = () => (opcoes.length === 0 ? 'A lista não tem opções.' : origem.obter());
+        ler = () => (opcoes.length === 0 ? 'A lista não tem opções.' : guardar.juntar(origem.obter()));
       } else if (acao === 'marcar') {
         const criarLista = (rotuloAria: string) =>
           el('select', { 'aria-label': rotuloAria }, el('option', { value: 'S' }, 'Marcar'), el('option', { value: 'N' }, 'Desmarcar'));

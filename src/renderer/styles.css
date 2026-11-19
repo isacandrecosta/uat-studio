@@ -860,6 +860,19 @@ kbd { padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(255, 255, 255
 .passo-valor { display: grid; grid-template-columns: minmax(175px, 1fr) 2fr; gap: 8px; }
 .passo-valor .erro-campo { grid-column: 1 / -1; }
 .passo-alvo { font-size: 12px; }
+.passo-topo { display: flex; gap: 8px; align-items: center; }
+.passo-topo > .campo { flex: 1; min-width: 0; }
+.passo-ferramentas { display: flex; gap: 4px; flex-shrink: 0; }
+.passo-ferramentas .perigo:hover:not(:disabled) { color: var(--erro); border-color: var(--erro); }
+.passo-valor-campo { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.passo-valor-campo > .campo { flex: 1; min-width: 0; }
+.botao-para-coluna { white-space: nowrap; }
+.passo-verificacao { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.passo-verificacao .erro-campo { flex-basis: 100%; }
+.passo-linha { display: flex; align-items: center; gap: 8px; color: var(--texto-suave); }
+.passo-linha span { white-space: nowrap; }
+.campo-curto { width: 80px; }
+.campo-medio { width: 220px; max-width: 100%; }
 @media (max-width: 700px) { .passo-editavel { grid-template-columns: 28px 1fr; } .passo-editavel .passo-campos { grid-column: 1 / -1; } .passo-valor { grid-template-columns: 1fr; } }
 
 /* Janela à parte com a lista de fórmulas */

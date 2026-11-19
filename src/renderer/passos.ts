@@ -1,8 +1,11 @@
-// Passos de um bloco à vista e alteráveis (descrição, de onde vem o valor, condição), usado no editor do
-// cenário. Os blocos são partilhados: mudar um passo aqui muda-o em todos os cenários que usam o bloco.
-import type { Bloco, Passo, Valor } from '../shared/modelo.js';
+// Passos de um bloco à vista e alteráveis, usado no editor do cenário: descrição, de onde vem o valor (fixo,
+// coluna, fórmula), passar para coluna do Excel, tipo de verificação, guardar numa variável, condição "só se",
+// mudar a ordem, duplicar e apagar. Os blocos são partilhados: mudar um passo aqui muda-o em todos os cenários
+// que usam o bloco.
+import type { Bloco, Passo, TipoVerificacao, Valor } from '../shared/modelo.js';
 import { validarFormula } from '../shared/formulas.js';
-import { h, info } from './dom.js';
+import { colunaValida, nomeDeColuna } from '../shared/parametrizar.js';
+import { confirmar, h, info, pedirTexto } from './dom.js';
 
 export const NOMES_ACAO: Record<Passo['acao'], string> = {
   navegar: 'Abrir',
@@ -23,8 +26,19 @@ export const NOMES_ACAO: Record<Passo['acao'], string> = {
 
 /** Ações cujo valor faz sentido mudar (o que se escreve, escolhe, verifica, carrega...). */
 const COM_VALOR = new Set<Passo['acao']>(['navegar', 'escrever', 'escolher', 'marcar', 'verificar', 'carregar', 'descarregar', 'separador', 'dialogo']);
+/** Ações cujo valor pode passar a vir de uma coluna dos casos (e do Excel). */
+const PARA_COLUNA = new Set<Passo['acao']>(['escrever', 'escolher', 'marcar', 'verificar', 'carregar']);
+/** Ações em que se pode guardar o valor usado numa variável (além de "Guardar"). */
+const GUARDA_VALOR = new Set<Passo['acao']>(['escrever', 'escolher']);
+
+const NOME_SIMPLES = /^[\p{L}_][\p{L}\p{N}_]*$/u;
 
 type Origem = 'fixo' | 'variavel' | 'formula' | 'gerador';
+
+export interface OpcoesPassos {
+  /** Passa o valor fixo do passo para uma coluna dos casos (os casos ficam com o valor gravado). */
+  paraColuna?: (passo: Passo, coluna: string) => Promise<void>;
+}
 
 /** O texto que se mostra/edita para um valor. */
 function textoDoValor(valor: Valor | undefined): string {
@@ -35,8 +49,18 @@ function textoDoValor(valor: Valor | undefined): string {
   return valor.gerador;
 }
 
+/** Id novo para um passo do bloco (p1, p2, ...). */
+function idNovo(bloco: Bloco): string {
+  let maior = 0;
+  for (const p of bloco.passos) {
+    const n = Number(/^p(\d+)$/.exec(p.id)?.[1] ?? 0);
+    if (n > maior) maior = n;
+  }
+  return `p${maior + 1}`;
+}
+
 /** Editor do valor de um passo: de onde vem (fixo, coluna dos casos, fórmula) e o valor. */
-function editorDoValor(passo: Passo, indice: number, aoMudar: () => Promise<void>): HTMLElement {
+function editorDoValor(passo: Passo, indice: number, aoMudar: () => Promise<void>, opcoes: OpcoesPassos): HTMLElement {
   const atual = passo.valor;
   const origemAtual: Origem = atual?.tipo ?? 'fixo';
   const erro = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
@@ -48,7 +72,7 @@ function editorDoValor(passo: Passo, indice: number, aoMudar: () => Promise<void
     !passo.secreto && h('option', { value: 'formula', selected: origemAtual === 'formula' }, 'Fórmula'),
     origemAtual === 'gerador' && h('option', { value: 'gerador', selected: true }, 'Gerador'),
   );
-  const ajudas: Record<Origem, string> = { fixo: 'Valor', variavel: 'Nome da coluna, por exemplo Valor', formula: 'Por exemplo ARRED({Valor} * 0,015; 2)', gerador: '' };
+  const ajudas: Record<Origem, string> = { fixo: 'Valor', variavel: 'Nome da coluna, por exemplo Valor', formula: 'Por exemplo ARRED({Valor} * 0,015; 2) ou NIF()', gerador: '' };
   const campo = h('input', {
     type: 'text',
     class: `campo${origemAtual === 'formula' ? ' campo-formula' : ''}`,
@@ -73,7 +97,7 @@ function editorDoValor(passo: Passo, indice: number, aoMudar: () => Promise<void
       passo.valor = { tipo: 'formula', expressao: texto.trim() };
     } else if (origem === 'variavel') {
       const nome = texto.trim().replace(/^\{|\}$/g, '');
-      if (!/^[A-Za-zÀ-ÿ_][\wÀ-ÿ]*$/.test(nome)) {
+      if (!NOME_SIMPLES.test(nome)) {
         erro.textContent = 'O nome da coluna só pode ter letras, números e _ (sem espaços), por exemplo NomeEmpresa.';
         erro.hidden = false;
         return;
@@ -90,19 +114,146 @@ function editorDoValor(passo: Passo, indice: number, aoMudar: () => Promise<void
     campo.focus();
   });
   campo.addEventListener('change', () => void aplicar());
-  return h('div', { class: 'passo-valor' }, escolha, campo, erro);
+
+  // "Passar para coluna": o valor fixo vai para uma coluna dos casos (e para o Excel), com o valor gravado.
+  const podeColuna =
+    opcoes.paraColuna && PARA_COLUNA.has(passo.acao) && !passo.secreto && atual?.tipo === 'fixo' && passo.verificacao?.tipo !== 'visivel';
+  const botaoColuna =
+    podeColuna &&
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'botao-pequeno-livre botao-para-coluna',
+        title: 'O valor passa a vir de uma coluna dos casos de teste (e do Excel). Os casos que já existem ficam com o valor gravado.',
+        onclick: async () => {
+          const sugestao = nomeDeColuna(passo.alvo?.descricao || passo.descricao, passo.acao);
+          const coluna = await pedirTexto('Passar para uma coluna dos casos', 'Nome da coluna (letras e números, sem espaços)', sugestao);
+          if (!coluna) return;
+          if (!colunaValida(coluna.trim())) {
+            erro.textContent = `O nome "${coluna}" não serve: use letras e números, sem espaços (por exemplo NomeEmpresa).`;
+            erro.hidden = false;
+            return;
+          }
+          await opcoes.paraColuna?.(passo, coluna.trim());
+        },
+      },
+      '→ Coluna do Excel',
+    );
+  return h('div', { class: 'passo-valor' }, escolha, h('div', { class: 'passo-valor-campo' }, campo, botaoColuna), erro);
+}
+
+/** Tipo de verificação, tolerância e "esperar até". */
+function editorDaVerificacao(passo: Passo, indice: number, aoMudar: () => Promise<void>): HTMLElement {
+  const v = (passo.verificacao ??= { tipo: 'texto' });
+  const erro = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
+  const tipo = h(
+    'select',
+    { class: 'campo', 'aria-label': `O que verifica o passo ${indice + 1}` },
+    h('option', { value: 'texto', selected: v.tipo === 'texto' || v.tipo === 'valor' }, 'O texto é igual a'),
+    h('option', { value: 'numero', selected: v.tipo === 'numero' }, 'O número é igual a'),
+    h('option', { value: 'visivel', selected: v.tipo === 'visivel' }, 'O elemento está visível'),
+  );
+  const tolerancia = h('input', { type: 'text', class: 'campo campo-curto', value: v.tolerancia ?? '0', 'aria-label': `Tolerância do passo ${indice + 1}`, hidden: v.tipo !== 'numero' });
+  const espera = h('input', { type: 'number', min: '0', max: '600', class: 'campo campo-curto', value: v.esperaSeg ? String(v.esperaSeg) : '', placeholder: '—', 'aria-label': `Esperar até (segundos) no passo ${indice + 1}` });
+  tipo.addEventListener('change', () => {
+    v.tipo = tipo.value as TipoVerificacao;
+    if (v.tipo !== 'numero') delete v.tolerancia;
+    void aoMudar();
+  });
+  tolerancia.addEventListener('change', () => {
+    v.tolerancia = tolerancia.value.trim() || '0';
+    void aoMudar();
+  });
+  espera.addEventListener('change', () => {
+    const n = Number(espera.value);
+    erro.hidden = true;
+    if (espera.value && (!Number.isFinite(n) || n < 0)) {
+      erro.textContent = 'Escreva um número de segundos (ou deixe vazio).';
+      erro.hidden = false;
+      return;
+    }
+    if (n > 0) v.esperaSeg = n;
+    else delete v.esperaSeg;
+    void aoMudar();
+  });
+  return h(
+    'div',
+    { class: 'passo-verificacao' },
+    tipo,
+    v.tipo === 'numero' && h('label', { class: 'passo-linha' }, h('span', {}, 'Diferença máxima'), tolerancia),
+    h('label', { class: 'passo-linha' }, h('span', {}, 'Esperar até (s)', info('Quantos segundos esperar que o valor apareça no ecrã. Vazio: poucos segundos.')), espera),
+    erro,
+  );
+}
+
+/** Nome da variável onde se guarda o valor (obrigatório em "Guardar", opcional em escrever/escolher). */
+function editorDaVariavel(passo: Passo, indice: number, aoMudar: () => Promise<void>): HTMLElement {
+  const obrigatoria = passo.acao === 'guardar';
+  const erro = h('p', { class: 'erro-campo', role: 'alert', hidden: true });
+  const campo = h('input', {
+    type: 'text',
+    class: 'campo campo-medio',
+    value: passo.variavel ?? '',
+    placeholder: obrigatoria ? 'Por exemplo PedidoId' : 'Não guarda',
+    spellcheck: 'false',
+    'aria-label': `Variável do passo ${indice + 1}`,
+  });
+  campo.addEventListener('change', () => {
+    const nome = campo.value.trim().replace(/^\{|\}$/g, '');
+    erro.hidden = true;
+    if (!nome && !obrigatoria) {
+      delete passo.variavel;
+      void aoMudar();
+      return;
+    }
+    if (!NOME_SIMPLES.test(nome)) {
+      erro.textContent = 'Dê um nome simples à variável (letras, números e _; sem espaços).';
+      erro.hidden = false;
+      return;
+    }
+    passo.variavel = nome;
+    void aoMudar();
+  });
+  const rotulo = obrigatoria ? 'Guarda em' : 'Guardar o valor em';
+  const ajuda = obrigatoria
+    ? 'O que o ecrã mostra fica nesta variável, para usar nos passos e blocos seguintes como {nome}.'
+    : 'Opcional: o valor escrito (por exemplo o NIF gerado por NIF()) fica nesta variável, para usar nos passos e blocos seguintes como {nome}.';
+  return h('div', {}, h('label', { class: 'passo-linha' }, h('span', {}, rotulo, info(ajuda)), campo), erro);
 }
 
 /**
- * Os passos de um bloco, alteráveis: descrição, valor (fixo, coluna ou fórmula) e condição "só se".
- * `guardar` grava o bloco (e redesenha o que depender dele).
+ * Os passos de um bloco, alteráveis. `guardar` grava o bloco (e redesenha o que depender dele).
  */
-export function passosEditaveis(bloco: Bloco, usadoEm: number, guardar: () => Promise<void>): HTMLElement {
+export function passosEditaveis(bloco: Bloco, usadoEm: number, guardar: () => Promise<void>, opcoes: OpcoesPassos = {}): HTMLElement {
   const aviso =
     usadoEm > 1
       ? h('p', { class: 'aviso-partilhado' }, `Este bloco é usado em ${usadoEm} cenários: mudar um passo aqui muda-o em todos. Para mudar só neste cenário, use os Parâmetros.`)
       : null;
   if (bloco.passos.length === 0) return h('div', {}, h('p', { class: 'suave' }, 'Este bloco não tem passos.'));
+
+  const mover = async (indice: number, delta: number): Promise<void> => {
+    const destino = indice + delta;
+    if (destino < 0 || destino >= bloco.passos.length) return;
+    const [passo] = bloco.passos.splice(indice, 1);
+    bloco.passos.splice(destino, 0, passo);
+    await guardar();
+  };
+  const duplicar = async (indice: number): Promise<void> => {
+    const copia: Passo = { ...structuredClone(bloco.passos[indice]), id: idNovo(bloco) };
+    bloco.passos.splice(indice + 1, 0, copia);
+    await guardar();
+  };
+  const apagar = async (indice: number): Promise<void> => {
+    const passo = bloco.passos[indice];
+    const nota = passo.variavel ? ` Atenção: os passos seguintes que usam {${passo.variavel}} deixam de ter esse valor.` : '';
+    const extra = usadoEm > 1 ? ` O passo sai do bloco em todos os ${usadoEm} cenários que o usam.` : '';
+    if (!(await confirmar('Apagar o passo', `Apagar o passo ${indice + 1} "${passo.descricao}"?${extra}${nota}`))) return;
+    bloco.passos.splice(indice, 1);
+    await guardar();
+  };
+
+  const total = bloco.passos.length;
   return h(
     'div',
     { class: 'passos-editaveis' },
@@ -141,12 +292,15 @@ export function passosEditaveis(bloco: Bloco, usadoEm: number, guardar: () => Pr
           passo.condicao = texto || undefined;
           void guardar();
         });
-        const extra =
-          passo.acao === 'guardar' && passo.variavel
-            ? h('span', { class: 'suave' }, 'Guarda em ', h('code', {}, `{${passo.variavel}}`))
-            : passo.rede
-              ? h('span', { class: 'suave' }, passo.rede.url)
-              : null;
+        const ferramentas = h(
+          'div',
+          { class: 'passo-ferramentas', role: 'group', 'aria-label': `Ações do passo ${indice + 1}` },
+          h('button', { type: 'button', class: 'botao-icone', title: 'Subir', 'aria-label': `Subir o passo ${indice + 1}`, disabled: indice === 0, onclick: () => void mover(indice, -1) }, '↑'),
+          h('button', { type: 'button', class: 'botao-icone', title: 'Descer', 'aria-label': `Descer o passo ${indice + 1}`, disabled: indice === total - 1, onclick: () => void mover(indice, 1) }, '↓'),
+          h('button', { type: 'button', class: 'botao-icone', title: 'Duplicar', 'aria-label': `Duplicar o passo ${indice + 1}`, onclick: () => void duplicar(indice) }, '⧉'),
+          h('button', { type: 'button', class: 'botao-icone perigo', title: 'Apagar', 'aria-label': `Apagar o passo ${indice + 1}`, onclick: () => void apagar(indice) }, '✕'),
+        );
+        const visivel = passo.acao === 'verificar' && passo.verificacao?.tipo === 'visivel';
         return h(
           'li',
           { class: 'passo-editavel', 'data-acao': passo.acao, 'data-passo': passo.id },
@@ -155,11 +309,13 @@ export function passosEditaveis(bloco: Bloco, usadoEm: number, guardar: () => Pr
           h(
             'div',
             { class: 'passo-campos' },
-            descricao,
+            h('div', { class: 'passo-topo' }, descricao, ferramentas),
             passo.alvo && h('span', { class: 'suave passo-alvo' }, `Elemento: ${passo.alvo.descricao}${passo.alvo.linha ? ' (numa linha da tabela)' : ''}`),
-            COM_VALOR.has(passo.acao) && editorDoValor(passo, indice, guardar),
+            passo.acao === 'verificar' && editorDaVerificacao(passo, indice, guardar),
+            COM_VALOR.has(passo.acao) && !visivel && editorDoValor(passo, indice, guardar, opcoes),
             passo.secreto && h('span', { class: 'suave' }, 'Password: vem sempre de uma coluna (com {SEGREDO:nome} nos casos).'),
-            extra,
+            (passo.acao === 'guardar' || (GUARDA_VALOR.has(passo.acao) && !passo.secreto)) && editorDaVariavel(passo, indice, guardar),
+            passo.rede && h('span', { class: 'suave' }, passo.rede.url),
             h('label', { class: 'passo-condicao' }, h('span', {}, 'Só se', info('O passo só corre quando a condição se cumpre para o caso. Vazio: corre sempre.')), condicao),
             erroCondicao,
           ),

@@ -116,9 +116,9 @@ function descreverPasso(m: MensagemPasso): string {
   const nome = m.alvo.linha ? `${m.alvo.descricao} da linha ${descreverValor(m.alvo.linha.valor)}` : m.alvo.descricao;
   switch (m.acao) {
     case 'escrever':
-      return `Escrever ${m.secreto ? '(segredo)' : descreverValor(m.valor)} em ${nome}`;
+      return `Escrever ${m.secreto ? '(segredo)' : descreverValor(m.valor)} em ${nome}${m.variavel ? ` e guardar em {${m.variavel}}` : ''}`;
     case 'escolher':
-      return `Escolher ${descreverValor(m.valor)} em ${nome}`;
+      return `Escolher ${descreverValor(m.valor)} em ${nome}${m.variavel ? ` e guardar em {${m.variavel}}` : ''}`;
     case 'marcar':
       return m.valor?.tipo === 'fixo'
         ? `${m.valor.valor === 'S' ? 'Marcar' : 'Desmarcar'} ${nome}`
@@ -241,6 +241,8 @@ async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; 
   try {
     if (m.acao === 'escrever' || m.acao === 'escolher' || m.acao === 'marcar' || m.acao === 'clicar') {
       await executarAcao(s.pagina, passo, m.exemplo ?? '', { limiteMs: 10_000, linha: m.linhaExemplo });
+      // "Guardar o valor em": o valor de exemplo escrito fica como exemplo dessa variável nas fórmulas seguintes.
+      if (m.variavel && !passo.secreto && (m.acao === 'escrever' || m.acao === 'escolher')) s.exemplos[m.variavel] = m.exemplo ?? '';
     } else {
       const leitura = await lerElemento(s.pagina, passo, { limiteMs: 5_000, linha: m.linhaExemplo });
       resumo = `Passo gravado (agora o ecrã mostra "${leitura.texto.slice(0, 60)}").`;

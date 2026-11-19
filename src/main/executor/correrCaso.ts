@@ -833,8 +833,16 @@ export async function correrCaso(pedido: PedidoCaso): Promise<ResultadoCaso> {
           const valor = resolver(passo.valor, item).texto;
           const feito = await executarAcao(p, passo, valor, { limiteMs, linha });
           ecraAssente = false;
-          const mostrado = passo.acao === 'clicar' ? undefined : passoSecreto(passo, item) ? 'valor: ***' : feito.detalhe ?? `valor: "${valor}"`;
-          return { estado: 'ok', detalhe: juntar(mostrado, notaLinha, alternativa(feito.encontrado)) };
+          const secreto = passoSecreto(passo, item);
+          const mostrado = passo.acao === 'clicar' ? undefined : secreto ? 'valor: ***' : feito.detalhe ?? `valor: "${valor}"`;
+          // "Guardar o valor em": o valor escrito/escolhido (por exemplo um NIF gerado) fica para os passos seguintes.
+          let guardado: string | undefined;
+          if (passo.variavel && (passo.acao === 'escrever' || passo.acao === 'escolher') && !secreto) {
+            variaveis[passo.variavel] = valor;
+            resultado.variaveis[passo.variavel] = valor;
+            guardado = `guardado em {${passo.variavel}}`;
+          }
+          return { estado: 'ok', detalhe: juntar(mostrado, guardado, notaLinha, alternativa(feito.encontrado)) };
         }
         case 'guardar': {
           if (!passo.variavel) throw new ErroDados(`O passo "${passo.descricao}" não diz em que variável guardar.`);

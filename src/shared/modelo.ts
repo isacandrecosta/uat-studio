@@ -163,7 +163,10 @@ export interface Passo {
   };
   /** Passo condicional: fórmula que tem de ser verdadeira para o passo correr (por exemplo `{Produto} = "CP12"`). */
   condicao?: string;
-  /** Para `guardar`: nome da variável onde fica o valor lido. */
+  /**
+   * Para `guardar`: nome da variável onde fica o valor lido. Em `escrever`/`escolher` (opcional): a variável
+   * onde fica o valor escrito/escolhido (por exemplo um NIF gerado), nunca em passos secretos.
+   */
   variavel?: string;
   /** Para `simular` e `intercetar`: o pedido de rede a apanhar. */
   rede?: PassoRede;
