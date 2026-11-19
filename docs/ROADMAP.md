@@ -61,6 +61,7 @@ Regra: cada passo é pequeno, testável e cabe numa sessão. No fim de cada sess
 - [x] ~~Caixa de email de testes por IMAP (Gmail)~~: retirada a 18/11/2026 (bloqueada na rede da empresa).
 - [x] Editor do cenário com os passos de cada bloco à vista e alteráveis (descrição, valor fixo/coluna/fórmula, "só se"); fórmulas nos casos (células com "=") e no Excel (folha "Fórmulas do cenário"); `EMAIL(base; papel; domínio)`.
 - [x] A app de testes PortalCreditoPOC envia emails reais (aprovado, recusado, documentos em falta, pagamento; SMTP do ODC pelo Gmail de testes) e o projeto de exemplo tem o épico 5 "Emails que a app envia" (4 casos OK contra o Gmail real).
-- [ ] Simplificar, por decidir: "Gravar aqui" dentro do cenário, verificações sugeridas depois de um clique, modelo de Excel com explicações.
+- [x] "Gravar aqui" dentro do cenário (19/11).
+- [ ] Simplificar, por decidir: verificações sugeridas depois de um clique, modelo de Excel com explicações.
 - [ ] Assinatura do executável: falta um certificado de assinatura de código (da empresa); o processo está descrito na ficha.
 - [ ] Só se for pedido: mascarar dados nos prints, limpeza automática de execuções, auditoria detalhada.

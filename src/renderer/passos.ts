@@ -38,6 +38,8 @@ type Origem = 'fixo' | 'variavel' | 'formula' | 'gerador';
 export interface OpcoesPassos {
   /** Passa o valor fixo do passo para uma coluna dos casos (os casos ficam com o valor gravado). */
   paraColuna?: (passo: Passo, coluna: string) => Promise<void>;
+  /** "Gravar aqui": abre o gravador e os passos novos entram a seguir ao passo nesta posição (1 = a seguir ao 1.º). */
+  gravarDepois?: (posicao: number) => void;
 }
 
 /** O texto que se mostra/edita para um valor. */
@@ -299,6 +301,18 @@ export function passosEditaveis(bloco: Bloco, usadoEm: number, guardar: () => Pr
           h('button', { type: 'button', class: 'botao-icone', title: 'Descer', 'aria-label': `Descer o passo ${indice + 1}`, disabled: indice === total - 1, onclick: () => void mover(indice, 1) }, '↓'),
           h('button', { type: 'button', class: 'botao-icone', title: 'Duplicar', 'aria-label': `Duplicar o passo ${indice + 1}`, onclick: () => void duplicar(indice) }, '⧉'),
           h('button', { type: 'button', class: 'botao-icone perigo', title: 'Apagar', 'aria-label': `Apagar o passo ${indice + 1}`, onclick: () => void apagar(indice) }, '✕'),
+          opcoes.gravarDepois &&
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'botao-icone gravar-aqui',
+                title: 'Gravar aqui: abre o browser no ecrã a que este passo leva e os passos novos entram a seguir a ele',
+                'aria-label': `Gravar a seguir ao passo ${indice + 1}`,
+                onclick: () => opcoes.gravarDepois?.(indice + 1),
+              },
+              '● Gravar a seguir',
+            ),
         );
         const visivel = passo.acao === 'verificar' && passo.verificacao?.tipo === 'visivel';
         return h(

@@ -130,7 +130,13 @@ Casos especiais no popup e no editor de passos:
    - **Guardar o valor em** (passos Escrever e Escolher, opcional): o valor escrito fica numa variável para os passos seguintes. Útil com geradores: escreva `NIF()` como fórmula e guarde em `NifCliente`; mais à frente, verifique ou pesquise com `{NifCliente}`;
    - o **"Só se"** de cada passo.
 
-   Para **acrescentar** passos novos, use o ecrã **Gravar** (continuar a gravar o bloco).
+6. **Gravar aqui** (acrescentar passos sem sair do cenário):
+   - **● Gravar a seguir** (em cada passo): os passos novos entram a seguir a esse passo;
+   - **+ Gravar um bloco novo a seguir** (no fundo de cada bloco) ou **+ Gravar um bloco novo** (cenário vazio): grava um bloco novo, que entra no percurso nessa posição.
+
+   Escolhe-se **com que caso** repetir o que vem antes (por omissão o 1.º). A ferramenta abre o Edge e **repete sozinha** os blocos de ecrã anteriores (da mesma sessão) e os passos do bloco até ao ponto escolhido, com os dados desse caso. Quando aparecer "Pronto", grave os passos novos como no ecrã Gravar (popup, fórmulas, guardar variável). **Terminar e guardar bloco** volta ao editor do cenário com os passos no sítio.
+   - Se o bloco for usado noutros cenários, escolhe entre **acrescentar no bloco** (muda em todos) ou **criar uma cópia só para este cenário** (os outros ficam iguais).
+   - Os blocos de API e de email não são repetidos (é avisado): se forem precisos para chegar ao ecrã, faça esses passos à mão no browser. Se a repetição parar num passo, continue à mão até ao ecrã certo.
 
    **Atenção:** os blocos são partilhados. Se o bloco for usado noutros cenários, aparece um aviso: mudar um passo aqui muda-o em **todos**. Para mudar um valor **só neste cenário**, use os **Parâmetros** do bloco.
 

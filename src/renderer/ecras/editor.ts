@@ -1,11 +1,12 @@
 // Editor de jornada: compor o percurso com blocos da biblioteca, definir parâmetros e editar os casos.
-import type { Aplicacao, Bloco, BlocoDaJornada, Caso, ConjuntoCasos, Jornada, Valor } from '../../shared/modelo.js';
+import type { Aplicacao, Bloco, BlocoDaJornada, Caso, ConjuntoCasos, InserirNaGravacao, Jornada, PedidoGravacao, Valor } from '../../shared/modelo.js';
 import { SESSAO_PRINCIPAL } from '../../shared/modelo.js';
 import { variaveisDaJornada, variaveisDoBloco } from '../../shared/variaveis.js';
 import type { Contexto } from '../app.js';
 import { codigoDaJornada } from '../../shared/codigo.js';
 import { validarFormula } from '../../shared/formulas.js';
-import { campoFiltro, confirmar, h, info, maisOpcoes, mensagemDeErro, mostrarCodigo, pedirTexto, plural } from '../dom.js';
+import { campoFiltro, confirmar, h, info, maisOpcoes, mensagemDeErro, mostrarCodigo, pedirFormulario, pedirTexto, plural } from '../dom.js';
+import type { CampoFormulario } from '../dom.js';
 import { passosEditaveis } from '../passos.js';
 import { parametrizar } from '../../shared/parametrizar.js';
 
@@ -52,6 +53,137 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
   const guardarJornada = async (redesenhar = true): Promise<void> => {
     await dados.guardar('jornadas', jornada);
     if (redesenhar) await desenhar();
+  };
+  /** Campo "com que caso repetir" dos formulários do "Gravar aqui". */
+  const campoCaso = (): CampoFormulario => ({
+    id: 'caso',
+    rotulo: 'Repetir o que vem antes com os dados do caso',
+    tipo: 'escolha',
+    opcoes: [
+      ...conjunto.casos.map((c) => ({ valor: c.id, texto: c.nome && c.nome !== c.id ? `${c.id} · ${c.nome}` : c.id })),
+      { valor: '', texto: 'Nenhum (só valores fixos)' },
+    ],
+    valor: conjunto.casos[0]?.id ?? '',
+    ajuda: 'A ferramenta repete os blocos e os passos anteriores com estes dados, para começar a gravar no ecrã certo.',
+  });
+  /** Os blocos do cenário antes de `indice` na mesma sessão do browser (os que a repetição percorre). */
+  const blocosAntes = (indice: number, sessao: string | undefined): NonNullable<InserirNaGravacao['antes']> =>
+    jornada.blocos
+      .slice(0, indice)
+      .filter((b) => (b.sessao ?? SESSAO_PRINCIPAL) === (sessao ?? SESSAO_PRINCIPAL))
+      .map((b) => ({ blocoId: b.blocoId, ...(b.parametros ? { parametros: b.parametros } : {}), ...(b.condicao ? { condicao: b.condicao } : {}) }));
+  /** Começa a gravação (com confirmação se o ambiente for de produção) e abre o ecrã Gravar. */
+  const comecarGravacao = async (pedido: PedidoGravacao): Promise<void> => {
+    try {
+      await window.uatStudio.gravador.iniciar(pedido);
+    } catch (e) {
+      const texto = mensagemDeErro(e);
+      if (!/PRODUÇÃO/.test(texto) || !(await confirmar('Gravar em produção?', texto, 'Gravar mesmo assim'))) {
+        if (!/PRODUÇÃO/.test(texto)) await confirmar('Não foi possível começar a gravar', texto, 'Fechar');
+        return;
+      }
+      try {
+        await window.uatStudio.gravador.iniciar({ ...pedido, confirmouProducao: true });
+      } catch (e2) {
+        await confirmar('Não foi possível começar a gravar', mensagemDeErro(e2), 'Fechar');
+        return;
+      }
+    }
+    irPara('gravar');
+  };
+  /** "Gravar a seguir a este passo": os passos novos entram no bloco a seguir ao passo `posicao` (0 = no início). */
+  const gravarAqui = async (indice: number, posicao: number): Promise<void> => {
+    const item = jornada.blocos[indice];
+    const bloco = blocoPorId.get(item.blocoId);
+    if (!bloco?.aplicacaoId) return;
+    const usadoEm = jornadas.filter((j) => j.blocos.some((b) => b.blocoId === bloco.id)).length;
+    const campos: CampoFormulario[] = [campoCaso()];
+    if (usadoEm > 1) {
+      campos.push({
+        id: 'onde',
+        rotulo: `Este bloco é usado em ${usadoEm} cenários`,
+        tipo: 'escolha',
+        opcoes: [
+          { valor: 'bloco', texto: `Acrescentar no bloco (muda nos ${usadoEm} cenários)` },
+          { valor: 'copia', texto: 'Criar uma cópia só para este cenário' },
+        ],
+        valor: 'bloco',
+      });
+    }
+    const onde = posicao === 0 ? 'no início do bloco' : `a seguir ao passo ${posicao}`;
+    const respostas = await pedirFormulario(`Gravar aqui: ${onde} de "${bloco.nome}"`, campos, 'Abrir o browser');
+    if (!respostas) return;
+    let alvo = bloco;
+    if (respostas.onde === 'copia') {
+      // A cópia fica só neste cenário (os outros continuam com o bloco original).
+      const { id: _id, ...resto } = structuredClone(bloco);
+      alvo = await dados.guardar('blocos', { ...resto, nome: `${bloco.nome} (${jornada.nome})` });
+      item.blocoId = alvo.id;
+      await dados.guardar('jornadas', jornada);
+    }
+    const caso = conjunto.casos.find((c) => c.id === respostas.caso);
+    await comecarGravacao({
+      aplicacaoId: alvo.aplicacaoId ?? '',
+      blocoId: alvo.id,
+      abrirAplicacao: false,
+      canal: 'msedge',
+      inserir: {
+        posicao,
+        valores: { ...(caso?.dados ?? {}), TESTE: caso?.id ?? 'GRAVACAO' },
+        ...(item.parametros ? { parametros: item.parametros } : {}),
+        antes: blocosAntes(indice, item.sessao),
+      },
+    });
+  };
+  /** "Gravar um bloco novo aqui": grava um bloco novo que entra no percurso na posição `posicao`. */
+  const gravarBlocoNovo = async (posicao: number): Promise<void> => {
+    const deUi = aplicacoes.filter((a) => a.tipo === 'FO' || a.tipo === 'BO');
+    if (deUi.length === 0) {
+      await confirmar('Gravar um bloco novo', 'O projeto ainda não tem aplicações de ecrã. Crie uma no ecrã Cenários.', 'Fechar');
+      return;
+    }
+    const anterior = jornada.blocos[posicao - 1];
+    const blocoAnterior = anterior ? blocoPorId.get(anterior.blocoId) : undefined;
+    const respostas = await pedirFormulario(
+      posicao >= jornada.blocos.length ? 'Gravar um bloco novo no fim do cenário' : `Gravar um bloco novo antes do bloco ${posicao + 1}`,
+      [
+        { id: 'nome', rotulo: 'Nome do bloco', obrigatorio: true, ajuda: 'Por exemplo: Confirmar a proposta' },
+        {
+          id: 'aplicacao',
+          rotulo: 'Aplicação',
+          tipo: 'escolha',
+          opcoes: deUi.map((a) => ({ valor: a.id, texto: a.nome })),
+          valor: (blocoAnterior?.aplicacaoId && deUi.some((a) => a.id === blocoAnterior.aplicacaoId) ? blocoAnterior.aplicacaoId : deUi[0].id) ?? '',
+        },
+        {
+          id: 'abrir',
+          rotulo: 'O bloco começa por abrir a aplicação?',
+          tipo: 'escolha',
+          opcoes: [
+            { valor: 'nao', texto: 'Não: continua no ecrã onde o bloco anterior acaba' },
+            { valor: 'sim', texto: 'Sim: abre a página inicial da aplicação' },
+          ],
+          valor: posicao === 0 ? 'sim' : 'nao',
+        },
+        campoCaso(),
+      ],
+      'Abrir o browser',
+    );
+    if (!respostas) return;
+    const caso = conjunto.casos.find((c) => c.id === respostas.caso);
+    const sessao = anterior?.sessao;
+    await comecarGravacao({
+      aplicacaoId: respostas.aplicacao,
+      nomeNovo: respostas.nome,
+      abrirAplicacao: respostas.abrir === 'sim',
+      canal: 'msedge',
+      inserir: {
+        posicao: 0,
+        valores: { ...(caso?.dados ?? {}), TESTE: caso?.id ?? 'GRAVACAO' },
+        antes: blocosAntes(posicao, sessao),
+        cenario: { id: jornada.id, posicao, ...(sessao ? { sessao } : {}) },
+      },
+    });
   };
   const guardarCasos = async (redesenhar = false): Promise<void> => {
     await dados.guardar('casos', conjunto);
@@ -388,6 +520,7 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
                 await desenhar();
               },
               {
+                ...(bloco.tipo === 'UI' && bloco.aplicacaoId ? { gravarDepois: (posicao: number) => void gravarAqui(indice, posicao) } : {}),
                 // O valor fixo passa a coluna: o bloco fica com {Coluna} e os casos de todos os cenários que o
                 // usam ganham a coluna com o valor gravado.
                 paraColuna: async (passo, coluna) => {
@@ -423,6 +556,16 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
           ),
         produz.length > 0 && h('p', { class: 'suave produz' }, 'Guarda: ', produz.map((n) => h('code', {}, `{${n}}`))),
         opcoesDoBloco(item, indice),
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'botao-ligacao gravar-bloco-aqui',
+            title: 'Abre o browser no ecrã onde este bloco acaba e grava um bloco novo, que entra a seguir a este.',
+            onclick: () => void gravarBlocoNovo(indice + 1),
+          },
+          '+ Gravar um bloco novo a seguir',
+        ),
       );
     });
     return h(
@@ -431,7 +574,12 @@ export async function ecraEditor(contexto: Contexto): Promise<void> {
       h('header', { class: 'cartao-topo' }, h('h2', {}, 'Percurso', info("Os blocos do cenário, pela ordem em que correm. Cada bloco pode ter parâmetros e, em \"Mais opções\", uma condição, uma sessão ou ser de limpeza.")), h('span', { class: 'etiqueta' }, plural(jornada.blocos.length, 'bloco'))),
       emFalta.length > 0 && h('p', { class: 'aviso-erro', role: 'alert' }, 'Há blocos neste cenário que já não existem. Retira-os do percurso.'),
       jornada.blocos.length === 0
-        ? h('p', { class: 'suave' }, 'O cenário ainda não tem blocos. Acrescenta-os a partir da biblioteca, à direita.')
+        ? h(
+            'div',
+            {},
+            h('p', { class: 'suave' }, 'O cenário ainda não tem blocos. Acrescenta-os a partir da biblioteca, à direita, ou grava um agora.'),
+            h('button', { type: 'button', class: 'botao gravar-bloco-aqui', onclick: () => void gravarBlocoNovo(0) }, '+ Gravar um bloco novo'),
+          )
         : h('ol', { id: 'percurso', class: 'percurso' }, itens),
     );
   }

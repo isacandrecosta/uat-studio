@@ -218,6 +218,8 @@ export interface EstadoGravador {
   regravar?: string;
   /** O elemento já foi regravado (e o bloco guardado). */
   regravado?: boolean;
+  /** "Gravar aqui": onde entram os passos novos (por exemplo "a seguir ao passo 3") e o cenário, se for um bloco novo. */
+  inserir?: { onde: string; posicao: number | null; cenario?: string };
 }
 
 /**
@@ -404,6 +406,24 @@ export interface PedidoGravacao {
    * por exemplo os dados e as variáveis do caso que falhou) e substitui só o elemento do passo.
    */
   regravar?: { passoId: string; valores: Record<string, string> };
+  /**
+   * "Gravar aqui" (editor do cenário): repete o que vem antes (os blocos de UI anteriores do cenário e os
+   * passos do bloco até `posicao`, com os dados de um caso) e os passos novos entram nessa posição do bloco.
+   */
+  inserir?: InserirNaGravacao;
+}
+
+export interface InserirNaGravacao {
+  /** Os passos novos entram a partir desta posição do bloco (0 = no início; o nº de passos = no fim). */
+  posicao: number;
+  /** Os dados do caso escolhido (as referências {SEGREDO:nome} são resolvidas pela ferramenta). */
+  valores: Record<string, string>;
+  /** Parâmetros do bloco neste cenário. */
+  parametros?: Record<string, Valor>;
+  /** Blocos do cenário que correm antes (na mesma sessão do browser); só os de UI são repetidos. */
+  antes?: Array<{ blocoId: string; parametros?: Record<string, Valor>; condicao?: string }>;
+  /** Bloco novo: ao guardar, entra no percurso deste cenário nesta posição. */
+  cenario?: { id: string; posicao: number; sessao?: string };
 }
 
 export type TipoBloco = 'UI' | 'API' | 'EMAIL' | 'VERIFICACAO' | 'MANUAL';

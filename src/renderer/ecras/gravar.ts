@@ -44,7 +44,7 @@ export function listaDePassos(bloco: Bloco, aoRemover?: (passo: Passo) => void):
   );
 }
 
-export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto): Promise<void> {
+export async function ecraGravar({ estado, corpo, acoes, atualizar, irPara }: Contexto): Promise<void> {
   const api = window.uatStudio;
   deixarDeOuvir?.();
   deixarDeOuvir = null;
@@ -72,8 +72,14 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
         if (!sim) return;
       }
       printAtual = null;
+      // Deixa de ouvir antes de terminar: senão o aviso de fim da gravação redesenha o ecrã ao mesmo tempo
+      // que se muda de ecrã (e o editor ficava desenhado duas vezes).
+      deixarDeOuvir?.();
+      deixarDeOuvir = null;
       await api.gravador.terminar(guardar);
-      await atualizar();
+      // "Gravar aqui" começa no editor do cenário: volta lá (com os passos novos à vista).
+      if (g.inserir) irPara('editor');
+      else await atualizar();
     };
     // "Regravar este elemento": o bloco é guardado logo que o elemento é trocado; aqui só se fecha.
     if (g.regravar !== undefined) {
@@ -132,7 +138,14 @@ export async function ecraGravar({ estado, corpo, acoes, atualizar }: Contexto):
           ),
           h('span', { class: 'etiqueta', id: 'contagem-passos' }, plural(bloco.passos.length, 'passo')),
         ),
-        g.mensagem && h('p', { class: 'aviso-erro', role: 'alert' }, g.mensagem),
+        g.inserir &&
+          h(
+            'p',
+            { class: 'caixa-sugestoes', id: 'gravar-aqui-info', role: 'status' },
+            `Gravar aqui: os passos novos entram ${g.inserir.onde}.`,
+            g.inserir.cenario ? ` Ao guardar, o bloco entra no cenário "${g.inserir.cenario}".` : ' Ao guardar, volta ao editor do cenário.',
+          ),
+        g.mensagem && h('p', { class: g.inserir && !/parou|Não /.test(g.mensagem) ? 'suave' : 'aviso-erro', id: 'mensagem-gravacao', role: 'alert' }, g.mensagem),
         h(
           'div',
           { class: 'acoes' },

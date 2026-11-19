@@ -961,6 +961,95 @@ export async function correrSmoke(janela: BrowserWindow, raiz: string): Promise<
       },
     ],
     [
+      '"Gravar aqui" no editor do cenário: passo novo a meio de um bloco e bloco novo a seguir',
+      async (j) => {
+        const pasta = path.join(pastaProjeto, 'exemplo');
+        const lerBloco = (): Bloco => repo.ler(pasta, 'blocos', 'simular-credito');
+        const lerJornada = (): Jornada => repo.ler(pasta, 'jornadas', 'simular-credito');
+        const esperarPronto = async (): Promise<void> => {
+          const fim = Date.now() + 120_000;
+          while (!(estadoGravador().mensagem ?? '').startsWith('Pronto') && Date.now() < fim) await new Promise((r) => setTimeout(r, 200));
+          confirmar((estadoGravador().mensagem ?? '').startsWith('Pronto'), `A repetição do que vem antes falhou: ${estadoGravador().mensagem}`);
+        };
+        const submeterFormulario = (): Promise<void> => naPagina(j, "document.querySelector('dialog[open] button[type=submit]').click()");
+        const abrirCenario = async (): Promise<void> => {
+          await naPagina(j, "document.querySelector('.menu-item[data-ecra=\"jornadas\"]').click()");
+          await esperar(j, "document.querySelector('[data-jornada=\"simular-credito\"]')");
+          await naPagina(j, "document.querySelector('[data-jornada=\"simular-credito\"]').click()");
+          await esperar(j, "document.querySelector('#percurso > li:first-child details.passos-do-bloco > summary')");
+        };
+
+        // 1) Passo novo a seguir ao passo "Preencher o valor": a ferramenta repete os passos até lá com o TC0001.
+        const idsAntes = lerBloco().passos.map((x) => x.id);
+        const posP3 = idsAntes.indexOf('p3');
+        await abrirCenario();
+        await naPagina(j, "(() => { const d = document.querySelector('#percurso > li:first-child details.passos-do-bloco'); if (!d.open) d.querySelector('summary').click(); })()");
+        await naPagina(j, `document.querySelector('#percurso > li:first-child button[aria-label="Gravar a seguir ao passo ${posP3 + 1}"]').click()`);
+        await esperar(j, "document.querySelector('dialog[open] #form-caso')");
+        confirmar(await naPagina<string>(j, "document.querySelector('#form-caso').value") === 'TC0001', 'O caso proposto devia ser o primeiro (TC0001).');
+        await submeterFormulario();
+        await esperar(j, "document.getElementById('gravar-aqui-info')", 90_000);
+        await esperarPronto();
+        const p = paginaDoGravador();
+        if (!p) throw new Error('O gravador não tem página.');
+        const escrito = await p.locator('[data-testid="inpValor"]').evaluate((el) => (el instanceof HTMLInputElement ? el.value : (el.querySelector('input') as HTMLInputElement | null)?.value ?? ''));
+        confirmar(escrito === '500', `A repetição devia ter escrito o valor do TC0001 (500): "${escrito}"`);
+        const info = await naPagina<string>(j, "document.getElementById('gravar-aqui-info').textContent");
+        confirmar(info.includes(`a seguir ao passo ${posP3 + 1}`), `O ecrã Gravar devia dizer onde entram os passos: ${info}`);
+        const popup = p.locator('#__uat-gravador .popup');
+        await p.locator('[data-testid="inpValor"]').click();
+        await popup.waitFor();
+        await popup.getByRole('button', { name: 'Escrever', exact: true }).click();
+        await popup.getByLabel('Texto a escrever').fill('500');
+        await popup.getByRole('button', { name: 'Gravar passo' }).click();
+        const fimPasso = Date.now() + 20_000;
+        while ((estadoGravador().bloco?.passos.length ?? 0) <= idsAntes.length && Date.now() < fimPasso) await new Promise((r) => setTimeout(r, 100));
+        const novo = estadoGravador().bloco?.passos[posP3 + 1];
+        confirmar(novo?.acao === 'escrever' && !idsAntes.includes(novo.id), `O passo novo devia entrar a seguir ao passo ${posP3 + 1}: ${JSON.stringify(estadoGravador().bloco?.passos.map((x) => x.id))}`);
+        await naPagina(j, "document.getElementById('btn-guardar-bloco').click()");
+        await esperar(j, "document.querySelector('#percurso > li:first-child details.passos-do-bloco')");
+        confirmar(lerBloco().passos[posP3 + 1]?.id === novo?.id, 'O bloco guardado não tem o passo novo no sítio certo.');
+        // Apagar o passo novo pela interface (o exemplo fica como estava).
+        await naPagina(j, "(() => { const d = document.querySelector('#percurso > li:first-child details.passos-do-bloco'); if (!d.open) d.querySelector('summary').click(); })()");
+        await naPagina(j, `document.querySelector('#percurso > li:first-child button[aria-label="Apagar o passo ${posP3 + 2}"]').click()`);
+        await esperar(j, "document.querySelector('dialog.dialogo .botao-perigo')");
+        await naPagina(j, "document.querySelector('dialog.dialogo .botao-perigo').click()");
+        await esperar(j, `document.querySelectorAll('#percurso > li:first-child .passo-editavel').length === ${idsAntes.length}`);
+        confirmar(lerBloco().passos.map((x) => x.id).join(',') === idsAntes.join(','), 'O bloco não voltou ao que era.');
+
+        // 2) Bloco novo a seguir ao último: a ferramenta corre o bloco anterior e grava-se no ecrã do resultado.
+        const nBlocos = lerJornada().blocos.length;
+        await naPagina(j, `document.querySelector('#percurso > li:nth-child(${nBlocos}) .gravar-bloco-aqui').click()`);
+        await esperar(j, "document.querySelector('dialog[open] #form-nome')");
+        await naPagina(j, "(() => { const c = document.querySelector('#form-nome'); c.value = 'Ler o estado (gravado aqui)'; c.dispatchEvent(new Event('input', { bubbles: true })); })()");
+        confirmar(await naPagina<string>(j, "document.querySelector('#form-abrir').value") === 'nao', 'Um bloco a seguir a outro não devia abrir a aplicação por omissão.');
+        await submeterFormulario();
+        await esperar(j, "document.getElementById('gravar-aqui-info')", 90_000);
+        await esperarPronto();
+        const p2 = paginaDoGravador();
+        if (!p2) throw new Error('O gravador não tem página.');
+        const popup2 = p2.locator('#__uat-gravador .popup');
+        await p2.locator('[data-testid="resEstado"]').waitFor({ timeout: 30_000 });
+        await p2.locator('[data-testid="resEstado"]').click();
+        await popup2.waitFor();
+        await popup2.getByRole('button', { name: 'Guardar variável' }).click();
+        await popup2.getByLabel('Nome da variável').fill('EstadoFinal');
+        await popup2.getByRole('button', { name: 'Gravar passo' }).click();
+        const fimBloco = Date.now() + 20_000;
+        while ((estadoGravador().bloco?.passos.length ?? 0) < 1 && Date.now() < fimBloco) await new Promise((r) => setTimeout(r, 100));
+        await naPagina(j, "document.getElementById('btn-guardar-bloco').click()");
+        await esperar(j, `document.querySelectorAll('#percurso > li').length === ${nBlocos + 1}`);
+        const itemNovo = lerJornada().blocos[nBlocos];
+        const blocoNovo = repo.ler(pasta, 'blocos', itemNovo.blocoId);
+        confirmar(blocoNovo.nome === 'Ler o estado (gravado aqui)' && blocoNovo.passos.length === 1 && blocoNovo.passos[0].variavel === 'EstadoFinal', `O bloco novo não ficou como devia: ${JSON.stringify(blocoNovo)}`);
+        await tirarPrint(j, raiz, 'gravar-aqui');
+        // Arrumar: retirar o bloco novo do cenário e apagá-lo.
+        await naPagina(j, `document.querySelector('#percurso > li:nth-child(${nBlocos + 1}) .acoes button:last-child').click()`);
+        await esperar(j, `document.querySelectorAll('#percurso > li').length === ${nBlocos}`);
+        fs.unlinkSync(path.join(pasta, 'blocos', `${blocoNovo.id}.json`));
+      },
+    ],
+    [
       'exportar e importar um pacote de blocos pela interface',
       async (j) => {
         const pasta = path.join(pastaProjeto, 'exemplo');

@@ -13,7 +13,7 @@ import {
   PedidoGravacao,
   Valor,
 } from '../../shared/modelo';
-import { avaliarFormula, validarFormula } from '../../shared/formulas';
+import { avaliarCondicao, avaliarFormula, validarFormula } from '../../shared/formulas';
 import { resolverSegredosDeTeste } from '../cofre';
 import { construirUrl, executarAcao, lerElemento } from '../motor/acoes';
 import { descreverLocalizador, linhasCom, paraLocator } from '../motor/localizar';
@@ -40,6 +40,48 @@ interface Sessao {
   print?: Array<ElementoDoPrint & { localizadores: Localizador[]; widget?: string }>;
   /** Valores de exemplo já usados nesta gravação (colunas e variáveis guardadas), para calcular fórmulas ao vivo. */
   exemplos: Record<string, string>;
+  /** "Gravar aqui": os passos novos entram nesta posição do bloco (sem valor: no fim). */
+  posicao?: number;
+  /** "Gravar aqui": os dados do caso usado na repetição (e as variáveis guardadas pelo caminho). */
+  valoresCaso?: Record<string, string>;
+  /** "Gravar aqui" de um bloco novo: o cenário onde entra ao guardar. */
+  cenario?: { id: string; nome: string; posicao: number; sessao?: string };
+}
+
+/** Os valores do caso com os parâmetros do bloco neste cenário (fixo, coluna ou fórmula). */
+function comParametros(valores: Record<string, string>, parametros: Record<string, Valor> | undefined): Record<string, string> {
+  const resultado = { ...valores };
+  for (const [nome, valor] of Object.entries(parametros ?? {})) {
+    try {
+      resultado[nome] = resolverValor(valor, valores);
+    } catch {
+      // Sem o valor (por exemplo uma variável de um bloco de API que não é repetido): fica o que houver.
+    }
+  }
+  return resultado;
+}
+
+/** Junta ao caso as variáveis guardadas na repetição de um bloco (sem os parâmetros, que são do bloco). */
+function juntarGuardadas(valores: Record<string, string>, doBloco: Record<string, string>, parametros: Record<string, Valor> | undefined): void {
+  for (const [nome, valor] of Object.entries(doBloco)) if (!(nome in (parametros ?? {}))) valores[nome] = valor;
+}
+
+/** Acrescenta um passo gravado: no fim do bloco ou, com "Gravar aqui", na posição escolhida. */
+function inserirPasso(s: Sessao, passo: Passo): void {
+  if (s.posicao === undefined || s.posicao >= s.bloco.passos.length) {
+    s.bloco.passos.push(passo);
+    if (s.posicao !== undefined) s.posicao = s.bloco.passos.length;
+  } else {
+    s.bloco.passos.splice(s.posicao, 0, passo);
+    s.posicao += 1;
+  }
+}
+
+/** Texto para a interface: onde entram os passos novos. */
+function ondeEntram(s: Sessao): string {
+  if (s.posicao === undefined || s.posicao >= s.bloco.passos.length) return 'no fim do bloco';
+  if (s.posicao === 0) return 'no início do bloco';
+  return `a seguir ao passo ${s.posicao} ("${s.bloco.passos[s.posicao - 1].descricao}")`;
 }
 
 /** Calcula uma fórmula com os valores de exemplo da gravação (para o "valor de exemplo" do popup). */
@@ -48,7 +90,7 @@ function calcularNaGravacao(s: Sessao, expressao: string): { ok: boolean; texto:
   const problema = validarFormula(expressao);
   if (problema) return { ok: false, texto: problema };
   try {
-    const valores = { ...(s.regravar?.valores ?? {}), ...s.exemplos, TESTE: 'GRAVACAO', RUN: 'gravacao' };
+    const valores = { ...(s.regravar?.valores ?? s.valoresCaso ?? {}), ...s.exemplos, TESTE: 'GRAVACAO', RUN: 'gravacao' };
     return { ok: true, texto: avaliarFormula(expressao, contextoDosValores(valores)) };
   } catch (erro) {
     const texto = erro instanceof Error ? erro.message : String(erro);
@@ -87,6 +129,9 @@ export function estadoGravador(): EstadoGravador {
     bloco: sessao.bloco,
     mensagem: sessao.mensagem,
     ...(sessao.regravar ? { regravar: sessao.bloco.passos.find((p) => p.id === sessao?.regravar?.passoId)?.alvo?.descricao ?? '', regravado: sessao.regravar.feito } : {}),
+    ...(sessao.posicao !== undefined || sessao.cenario
+      ? { inserir: { onde: ondeEntram(sessao), posicao: sessao.posicao ?? null, ...(sessao.cenario ? { cenario: sessao.cenario.nome } : {}) } }
+      : {}),
   };
 }
 
@@ -254,7 +299,7 @@ async function tratarPasso(s: Sessao, m: MensagemPasso): Promise<{ ok: boolean; 
     return { ok: false, mensagem: `Não consegui executar o passo, por isso não foi gravado: ${texto}` };
   }
 
-  s.bloco.passos.push(passo);
+  inserirPasso(s, passo);
   // O valor de exemplo de uma coluna serve às fórmulas seguintes (nunca o de uma password).
   if (m.valor?.tipo === 'variavel' && !passo.secreto && m.exemplo !== undefined) s.exemplos[m.valor.nome] = m.exemplo;
   if (m.valor?.tipo === 'variavel' && !s.colunas.includes(m.valor.nome)) s.colunas.push(m.valor.nome);
@@ -296,6 +341,13 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
   if (pedido.regravar && (indiceRegravar < 0 || !bloco.passos[indiceRegravar].alvo)) {
     throw new repo.ErroProjeto('Esse passo já não existe no bloco (ou não tem elemento).');
   }
+  const inserir = pedido.inserir;
+  if (inserir && (inserir.posicao < 0 || inserir.posicao > bloco.passos.length)) throw new repo.ErroProjeto('Essa posição já não existe no bloco.');
+  let cenario: Sessao['cenario'];
+  if (inserir?.cenario) {
+    const jornada = repo.ler(pasta, 'jornadas', inserir.cenario.id);
+    cenario = { id: jornada.id, nome: jornada.nome, posicao: inserir.cenario.posicao, ...(inserir.cenario.sessao ? { sessao: inserir.cenario.sessao } : {}) };
+  }
   if (pedido.abrirAplicacao && bloco.passos.length === 0) {
     bloco.passos.push({
       id: 'p1',
@@ -324,6 +376,9 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
       modo: 'gravar',
       colunas: [...colunas],
       exemplos: {},
+      // Num bloco que já existe, os passos novos entram na posição escolhida (num bloco novo, no fim).
+      ...(inserir && existente ? { posicao: inserir.posicao } : {}),
+      ...(cenario ? { cenario } : {}),
       ...(pedido.regravar ? { regravar: { passoId: pedido.regravar.passoId, valores: resolverSegredosDeTeste(pasta, { ...pedido.regravar.valores }), feito: false } } : {}),
     };
     await contexto.exposeBinding('__uatGravador', async (_origem, mensagem: { tipo: string; modo?: 'gravar' | 'livre' }) => {
@@ -356,6 +411,63 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
       await nova.pagina.evaluate(() => (window as unknown as { __uatPagina?: { definirModo(m: string): void } }).__uatPagina?.definirModo('gravar')).catch(() => undefined);
       const alvo = bloco.passos[indiceRegravar].alvo?.descricao ?? '';
       nova.mensagem = parou ?? `Pronto: aponta para "${alvo}" no browser e confirma o popup (a ação e o valor do passo ficam como estavam).`;
+    } else if (inserir) {
+      // "Gravar aqui": repete o que vem antes (blocos de UI anteriores do cenário e os passos do bloco até à
+      // posição), com os dados do caso, para o testador começar a gravar no ecrã certo.
+      const definirModo = (m: 'gravar' | 'livre'): Promise<unknown> =>
+        nova.pagina.evaluate((x) => (window as unknown as { __uatPagina?: { definirModo(m: string): void } }).__uatPagina?.definirModo(x), m).catch(() => undefined);
+      await definirModo('livre');
+      nova.modo = 'livre';
+      avisar('A repetir o que vem antes...');
+      const valores = resolverSegredosDeTeste(pasta, { ...inserir.valores });
+      const naoRepetidos: string[] = [];
+      let parou: string | null = null;
+      for (const item of inserir.antes ?? []) {
+        if (item.condicao?.trim()) {
+          let corre = true;
+          try {
+            corre = avaliarCondicao(item.condicao, contextoDosValores(valores));
+          } catch {
+            // Condição que não se consegue avaliar com estes dados: o bloco é repetido.
+          }
+          if (!corre) continue;
+        }
+        let anterior: Bloco;
+        try {
+          anterior = repo.ler(pasta, 'blocos', item.blocoId);
+        } catch {
+          continue;
+        }
+        if (anterior.tipo !== 'UI') {
+          naoRepetidos.push(anterior.nome);
+          continue;
+        }
+        let url = urlBase;
+        if (anterior.aplicacaoId && anterior.aplicacaoId !== aplicacao.id) {
+          try {
+            url = repo.ler(pasta, 'aplicacoes', anterior.aplicacaoId).urls[ambiente.id] ?? urlBase;
+          } catch {
+            // Aplicação apagada: fica o endereço desta.
+          }
+        }
+        const doBloco = comParametros(valores, item.parametros);
+        parou = await repetirPassosAte(nova.pagina, anterior, anterior.passos.length, doBloco, url);
+        juntarGuardadas(valores, doBloco, item.parametros);
+        if (parou) {
+          parou = `${parou.replace(/\.$/, '')} (bloco "${anterior.nome}").`;
+          break;
+        }
+      }
+      if (!parou && existente && inserir.posicao > 0) {
+        const doBloco = comParametros(valores, inserir.parametros);
+        parou = await repetirPassosAte(nova.pagina, bloco, inserir.posicao, doBloco, urlBase);
+        juntarGuardadas(valores, doBloco, inserir.parametros);
+      }
+      nova.valoresCaso = comParametros(valores, inserir.parametros);
+      nova.modo = 'gravar';
+      await definirModo('gravar');
+      const nota = naoRepetidos.length > 0 ? ` Não repeti os blocos que não são de ecrã (${naoRepetidos.join(', ')}): se forem precisos, faça esses passos à mão.` : '';
+      nova.mensagem = (parou ?? `Pronto: grava os passos novos no browser (entram ${ondeEntram(nova)}).`) + nota;
     }
   } catch (erro) {
     sessao = null;
@@ -363,7 +475,7 @@ export async function iniciarGravacao(pasta: string, pedido: PedidoGravacao): Pr
     const texto = erro instanceof Error ? erro.message.split('\n')[0] : String(erro);
     throw new repo.ErroProjeto(`Não foi possível abrir a aplicação: ${texto}`);
   }
-  if (!sessao?.regravar) avisar(undefined);
+  if (!sessao?.regravar && !inserir) avisar(undefined);
   else notificar(estadoGravador());
   return estadoGravador();
 }
@@ -410,7 +522,7 @@ export function gravarSobrePrint(pedido: PassoSobrePrint): EstadoGravador {
     ...(pedido.verificacao ? { verificacao: pedido.verificacao } : {}),
     ...(pedido.variavel ? { variavel: pedido.variavel.trim() } : {}),
   };
-  s.bloco.passos.push({
+  inserirPasso(s, {
     id: proximoId(s.bloco),
     acao: pedido.acao,
     descricao: `${descreverPasso(mensagem)} (gravado sobre o print)`,
@@ -427,6 +539,8 @@ export function gravarSobrePrint(pedido: PassoSobrePrint): EstadoGravador {
 
 export function removerPasso(passoId: string): EstadoGravador {
   if (sessao) {
+    const indice = sessao.bloco.passos.findIndex((p) => p.id === passoId);
+    if (sessao.posicao !== undefined && indice >= 0 && indice < sessao.posicao) sessao.posicao -= 1;
     sessao.bloco.passos = sessao.bloco.passos.filter((p) => p.id !== passoId);
     avisar(undefined);
   }
@@ -444,6 +558,14 @@ export async function terminarGravacao(guardar: boolean): Promise<Bloco | null> 
     const { id, ...resto } = s.bloco;
     guardado = repo.guardar(s.pasta, 'blocos', s.existente ? s.bloco : resto);
     void id;
+    // "Gravar um bloco novo aqui": o bloco entra no percurso do cenário na posição escolhida.
+    if (s.cenario && guardado) {
+      const jornada = repo.ler(s.pasta, 'jornadas', s.cenario.id);
+      const numeros = jornada.blocos.map((b) => Number(/^b(\d+)$/.exec(b.id)?.[1] ?? 0));
+      const item = { id: `b${Math.max(0, ...numeros) + 1}`, blocoId: guardado.id, ...(s.cenario.sessao ? { sessao: s.cenario.sessao } : {}) };
+      jornada.blocos.splice(Math.min(Math.max(0, s.cenario.posicao), jornada.blocos.length), 0, item);
+      repo.guardar(s.pasta, 'jornadas', jornada);
+    }
   }
   notificar(estadoGravador());
   return guardado;
